@@ -1,0 +1,17 @@
+<% if flash.present? %>
+  <% flash.each do |key, value| %>
+    <% if key == "error" %>
+      <div class="w-full p-5 bg-red-600 rounded-sm text-white">
+        <p><%= value %></p>
+      </div>
+    <% elsif key == "success" %>
+      <div class="w-full p-5 bg-green-600 rounded-sm text-white">
+        <p><%= value %></p>
+      </div>
+    <% else %>
+      <div class="w-full p-5 bg-sky-600 rounded-sm text-white">
+        <p><%= value %></p>
+      </div>
+    <% end %>
+  <% end %>
+<% end %>

@@ -12,6 +12,7 @@ class SessionsController < ApplicationController
 
       redirect_to me_users_path
     else
+      flash.now[:error] = t(".authentication_failed")
       render :new, status: :unauthorized
     end
   end

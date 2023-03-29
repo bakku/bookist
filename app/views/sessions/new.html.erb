@@ -6,6 +6,12 @@
 
     <h2 class="text-3xl mt-5 text-center"><%= t(".sign_in") %></h2>
 
+    <% if flash.present? %>
+      <div class="mt-10">
+        <%= render "shared/flash_messages" %>
+      </div>
+    <% end %>
+
     <div class="mt-10">
       <%= form_with url: login_path, method: :post do |form| %>
         <%= form.label :username, t(".username"), class: "block text-lg" %>

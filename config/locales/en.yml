@@ -4,6 +4,8 @@ en:
       sign_in: "Sign in"
       username: "Username"
       password: "Password"
+    create:
+      authentication_failed: "Invalid username or password"
   users:
     me:
       dashboard: "Dashboard"
