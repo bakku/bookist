@@ -1,0 +1,9 @@
+de:
+  sessions:
+    new:
+      sign_in: "Login"
+      username: "Benutzername"
+      password: "Passwort"
+  users:
+    me:
+      dashboard: "Dashboard"

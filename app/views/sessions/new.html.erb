@@ -1,0 +1,22 @@
+<% provide(:title, t(".sign_in")) %>
+
+<div class="flex justify-center">
+  <div class="max-w-lg w-[80%]">
+    <h1 class="text-5xl mt-16 text-center">📖 Bookist</h1>
+
+    <h2 class="text-3xl mt-5 text-center"><%= t(".sign_in") %></h2>
+
+    <div class="mt-10">
+      <%= form_with url: login_path, method: :post do |form| %>
+        <%= form.label :username, t(".username"), class: "block text-lg" %>
+        <%= form.text_field :username, class: "block w-full text-xl p-2 border-2 border-slate-200 focus-visible:outline-none focus-visible:border-slate-400 rounded-sm" %>
+        <%= form.label :password, t(".password"), class: "block mt-8 text-lg" %>
+        <%= form.password_field :password, class: "block w-full text-xl p-2 border-2 border-slate-200 focus-visible:outline-none focus-visible:border-slate-400 rounded-sm" %>
+
+        <div class="flex justify-center">
+          <%= form.button t(".sign_in"), class: "block mt-10 text-xl py-2 px-5 rounded-sm bg-slate-700 hover:bg-slate-600 text-white" %>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>
