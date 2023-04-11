@@ -14,3 +14,23 @@ jobs:
       - run: docker-compose run -e RAILS_ENV=test web bundle exec rails db:create
       - run: docker-compose run -e RAILS_ENV=test web bundle exec rails db:migrate
       - run: docker-compose run web bundle exec rspec --exclude-pattern spec/system/**/*_spec.rb
+  build:
+    needs: test
+    if: contains(github.ref, 'master')
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Build docker image
+      run: docker build -t bookist:latest --build-arg BUILD_ENV=production --build-arg BUILD_MASTER_KEY="$BUILD_MASTER_KEY" .
+      env:
+        BUILD_MASTER_KEY: ${{ secrets.MASTER_KEY }}
+    - name: Save docker image as tarball
+      run: docker save bookist:latest | gzip > bookist.tar.gz
+    - name: Copy docker image tarball to production
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        password: ${{ secrets.PASSWORD }}
+        source: bookist.tar.gz
+        target: ${{ secrets.TARGET_PATH }}
