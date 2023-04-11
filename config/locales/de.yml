@@ -4,8 +4,20 @@ de:
       sign_in: "Login"
       username: "Benutzername"
       password: "Passwort"
+      new_to_bookist: "Sie haben noch keinen Account?"
+      sign_up: "Zur Registrierung"
     create:
       authentication_failed: "Benutzername oder Passwort ungültig"
   users:
     me:
       dashboard: "Dashboard"
+    new:
+      sign_up: "Registrieren"
+      username: "Benutzername"
+      email: "Email"
+      password: "Passwort"
+      password_confirmation: "Passwort Wiederholung"
+      already_have_account: "Sie haben bereits ein Account?"
+      sign_in: "Zum Login"
+    create:
+      account_creation_success: "Ihr Account wurde erfolgreich erstellt. Sie können sich nun einloggen."

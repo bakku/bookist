@@ -4,8 +4,20 @@ en:
       sign_in: "Sign in"
       username: "Username"
       password: "Password"
+      new_to_bookist: "New to bookist?"
+      sign_up: "Sign up"
     create:
       authentication_failed: "Invalid username or password"
   users:
     me:
       dashboard: "Dashboard"
+    new:
+      sign_up: "Sign up"
+      username: "Username"
+      email: "Email"
+      password: "Password"
+      password_confirmation: "Password Confirmation"
+      already_have_account: "Already have an account?"
+      sign_in: "Sign in"
+    create:
+      account_creation_success: "Your account was successfully created. You can now sign in."

@@ -39,4 +39,29 @@ RSpec.describe "Session Flows" do
       expect(page).to have_selector("p", text: "Invalid username or password")
     end
   end
+
+  describe "Signup Flow" do
+    it "creates a user and redirects the user to the login page to sign in" do
+      visit root_path
+      expect(page).to have_selector("h2", text: "Sign in")
+
+      click_on "Sign up"
+      expect(page).to have_selector("h2", text: "Sign up")
+
+      fill_in "Username", with: "peter"
+      fill_in "Email", with: "peter@example.org"
+      fill_in "Password", with: "test1234"
+      fill_in "Password Confirmation", with: "test1234"
+      click_on "Sign up"
+
+      expect(page).to have_selector("h2", text: "Sign in")
+      expect(page).to have_selector("p", text: "Your account was successfully created. You can now sign in.")
+
+      fill_in "Username", with: "peter"
+      fill_in "Password", with: "test1234"
+      click_on "Sign in"
+
+      expect(page).to have_selector("h1", text: "Hi peter")
+    end
+  end
 end
