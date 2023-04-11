@@ -1,24 +1,32 @@
-# README
+# Bookist
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
+Bookist is a small web application from a book lover for other book lovers. It contains all the features which
+I myself want in a book management software and which I use myself. Use it at [bookist.bakku.dev](https://bookist.bakku.dev).
 
-Things you may want to cover:
+Current features:
 
-* Ruby version
+No features yet
 
-* System dependencies
+## Tech Stack
 
-* Configuration
+- Backend: Ruby on Rails 7 with Ruby 3.2
+- Database: PostgreSQL
+- Frontend: Hotwire, Stimulus, esbuild, and tailwindcss
 
-* Database creation
+## Setup
 
-* Database initialization
+It's possible to run `bookist` with Docker locally, but I like to develop on bare metal. I just spin up a necessary
+PostgreSQL database in Docker, so that's what the following instructions will describe.
 
-* How to run the test suite
+1. Clone the repository and make sure you have all local dependencies which are specified in `.tool-versions`
+2. Run `docker-compose up db` and wait until PostgreSQL has finished starting up
+3. Run `bin/setup`, it will install all required Ruby and Node dependencies and will setup your PostgreSQL database
 
-* Services (job queues, cache servers, search engines, etc.)
+## Development
 
-* Deployment instructions
+The `bin/dev` script starts up everything you need; afterwards the web app will run on
+[localhost:3000](http://localhost:3000).
 
-* ...
+## Test
+
+Run `bundle exec rspec` to run all the tests including e2e tests.
