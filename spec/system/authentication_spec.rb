@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "Session Flows" do
+RSpec.describe "Authentication Flows" do
   let(:user) { users(:joe) }
 
   describe "Login Flow" do
@@ -62,6 +62,21 @@ RSpec.describe "Session Flows" do
       click_on "Sign in"
 
       expect(page).to have_selector("h1", text: "Hi peter")
+    end
+
+    it "shows validation errors when creating a user" do
+      visit new_user_path
+      expect(page).to have_selector("h2", text: "Sign up")
+
+      fill_in "Username", with: "peter"
+      fill_in "Email", with: user.email.upcase
+      fill_in "Password", with: "test1234"
+      fill_in "Password Confirmation", with: "test1234"
+      click_on "Sign up"
+
+      expect(page).to have_selector("h2", text: "Sign up")
+      expect(page).to have_selector("p", text: "Your account could not be created.")
+      expect(page).to have_selector("span", text: "Email is already taken")
     end
   end
 end

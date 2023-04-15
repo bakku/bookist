@@ -2,6 +2,7 @@ class UsersController < ApplicationController
   skip_before_action :authenticate_user!, only: [:new, :create]
 
   def new
+    @user = User.new
   end
 
   def create
@@ -10,17 +11,17 @@ class UsersController < ApplicationController
     if @user.save
       redirect_to login_path, flash: { success: t(".account_creation_success") }
     else
+      flash.now[:error] = t(".creation_failed")
       render :new, status: :unprocessable_entity
     end
   end
 
   def me
-    
   end
 
   private
 
     def user_params
-      params.permit(:username, :email, :password, :password_confirmation)
+      params.require(:user).permit(:username, :email, :password, :password_confirmation)
     end
 end

@@ -1,4 +1,14 @@
 de:
+  activerecord:
+    errors:
+      models:
+        user:
+          attributes:
+            password_confirmation:
+              confirmation: "stimmt nicht mit dem angegebenen Passwort überein"
+      messages:
+        blank: "wurde nicht angegeben"
+        taken: "wird bereits verwendet"
   sessions:
     new:
       sign_in: "Login"
@@ -21,3 +31,4 @@ de:
       sign_in: "Zum Login"
     create:
       account_creation_success: "Ihr Account wurde erfolgreich erstellt. Sie können sich nun einloggen."
+      creation_failed: "Ihr Account konnte nicht erstellt werden."
