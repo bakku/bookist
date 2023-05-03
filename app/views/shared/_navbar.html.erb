@@ -1,0 +1,15 @@
+<div class="h-14 bg-white shadow flex justify-center" data-testid="navbar">
+  <div class="w-[90%] flex">
+    <div class="flex basis-6"></div>
+    <div class="grow flex justify-center items-center text-3xl">📖 Bookist</div>
+    <div class="flex basis-6">
+      <%= link_to menu_path(return_to: request.path, title: title), class: "w-full", data: { testid: "navbar-menu-open" } do %>
+        <div class="w-full h-full flex flex-col items-center justify-center">
+          <div class="block w-full h-0.5 bg-black"></div>
+          <div class="block w-full h-0.5 bg-black mt-1.5"></div>
+          <div class="block w-full h-0.5 bg-black mt-1.5"></div>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>

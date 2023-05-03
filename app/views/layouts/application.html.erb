@@ -6,11 +6,17 @@
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
 
+    <%= yield(:head) %>
+
     <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
     <%= javascript_include_tag "application", "data-turbo-track": "reload", defer: true %>
   </head>
 
   <body class="bg-slate-50 font-serif">
+    <% unless minimal_layout? %>
+      <%=  render partial: "shared/navbar", locals: { title: yield(:title) } %>
+    <% end %>
+
     <%= yield %>
   </body>
 </html>

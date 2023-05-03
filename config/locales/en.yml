@@ -18,9 +18,12 @@ en:
       sign_up: "Sign up"
     create:
       authentication_failed: "Invalid username or password"
+    destroy:
+      logout_success: "Logout successful. Looking forward to see you again."
   users:
     me:
       dashboard: "Dashboard"
+      greeting: "Welcome back %{username}."
     new:
       sign_up: "Sign up"
       username: "Username"
@@ -32,3 +35,10 @@ en:
     create:
       account_creation_success: "Your account was successfully created. You can now sign in."
       creation_failed: "Your account could not be created."
+  menu:
+    index:
+      dashboard: "Dashboard"
+      library: "Library"
+      wishlist: "Wishlist"
+      nightstand: "Nightstand"
+      logout: "Logout"

@@ -1,0 +1,43 @@
+<%= content_for :head do %>
+  <!-- so turbo drive does not show the cached version of the menu where the animations took place already -->
+  <meta name="turbo-cache-control" content="no-cache">
+<% end %>
+
+<% provide(:title, @title) %>
+
+<div class="h-14 bg-white shadow flex justify-center">
+  <div class="w-[90%] flex">
+    <div class="flex basis-6"></div>
+    <div class="grow flex justify-center items-center text-3xl">📖 Bookist</div>
+    <div class="flex basis-6">
+      <%= link_to @return_to, class: "w-full cursor-pointer", data: { testid: "navbar-menu-close", controller: "menu-button" } do %>
+        <div class="w-full h-full flex flex-col items-center justify-center">
+          <div data-menu-button-target="top" class="transition-all block w-full h-0.5 bg-black relative top-0"></div>
+          <div data-menu-button-target="middle" class="block w-full h-0.5 bg-black mt-1.5"></div>
+          <div data-menu-button-target="bottom" class="transition-all block w-full h-0.5 bg-black mt-1.5 relative top-0"></div>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>
+
+<div class="flex justify-center h-[calc(100vh-3.5rem)]">
+  <div class="flex flex-col w-[80%] items-center justify-center">
+    <%= link_to t(".dashboard"),
+                me_users_path,
+                class: "transition-all underline underline-offset-8 hover:underline-offset-[12px] text-3xl text-sky-900" %>
+    <%= link_to t(".nightstand"),
+                "#",
+                class: "transition-all underline underline-offset-8 hover:underline-offset-[12px] mt-14 text-3xl text-sky-900" %>
+    <%= link_to t(".wishlist"),
+                "#",
+                class: "transition-all underline underline-offset-8 hover:underline-offset-[12px] mt-14 text-3xl text-sky-900" %>
+    <%= link_to t(".library"),
+                "#",
+                class: "transition-all underline underline-offset-8 hover:underline-offset-[12px] mt-14 text-3xl text-sky-900" %>
+    <%= link_to t(".logout"),
+                logout_path,
+                data: { "turbo-method" => :delete },
+                class: "transition-all underline underline-offset-8 hover:underline-offset-[12px] mt-14 text-3xl text-sky-900" %>
+  </div>
+</div>

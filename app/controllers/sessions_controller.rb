@@ -1,5 +1,6 @@
 class SessionsController < ApplicationController
-  skip_before_action :authenticate_user!
+  skip_before_action :authenticate_user!, only: %i[new create]
+  minimal_layout :new
 
   def new
   end
@@ -15,6 +16,11 @@ class SessionsController < ApplicationController
       flash.now[:error] = t(".authentication_failed")
       render :new, status: :unauthorized
     end
+  end
+
+  def destroy
+    session.clear
+    redirect_to login_path, flash: { success: t(".logout_success") }
   end
 
   private

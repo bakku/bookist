@@ -12,7 +12,7 @@ RSpec.describe "Authentication Flows" do
       fill_in "Password", with: "test1234"
       click_on "Sign in"
 
-      expect(page).to have_selector("h1", text: "Hi #{user.username}")
+      expect(page).to have_selector("h1", text: "Welcome back #{user.username}.")
     end
 
     it "displays an alert in case the user does not exist" do
@@ -40,6 +40,23 @@ RSpec.describe "Authentication Flows" do
     end
   end
 
+  describe "Logout Flow" do
+    it "successfully logs out a logged in user" do
+      visit root_path
+      expect(page).to have_selector("h2", text: "Sign in")
+
+      fill_in "Username", with: user.username
+      fill_in "Password", with: "test1234"
+      click_on "Sign in"
+
+      find("[data-testid='navbar-menu-open']").click
+      expect(page).to have_selector("[data-testid='navbar-menu-close']")
+
+      click_on "Logout"
+      expect(page).to have_selector("p", text: "Logout successful. Looking forward to see you again.")
+    end
+  end
+
   describe "Signup Flow" do
     it "creates a user and redirects the user to the login page to sign in" do
       visit root_path
@@ -61,7 +78,7 @@ RSpec.describe "Authentication Flows" do
       fill_in "Password", with: "test1234"
       click_on "Sign in"
 
-      expect(page).to have_selector("h1", text: "Hi peter")
+      expect(page).to have_selector("h1", text: "Welcome back peter.")
     end
 
     it "shows validation errors when creating a user" do

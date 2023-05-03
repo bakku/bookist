@@ -18,9 +18,12 @@ de:
       sign_up: "Zur Registrierung"
     create:
       authentication_failed: "Benutzername oder Passwort ungültig"
+    destroy:
+      logout_success: "Logout erfolgreich. Bis zum nächsten mal."
   users:
     me:
       dashboard: "Dashboard"
+      greeting: "Willkommen zurück %{username}."
     new:
       sign_up: "Registrieren"
       username: "Benutzername"
@@ -32,3 +35,10 @@ de:
     create:
       account_creation_success: "Ihr Account wurde erfolgreich erstellt. Sie können sich nun einloggen."
       creation_failed: "Ihr Account konnte nicht erstellt werden."
+  menu:
+    index:
+      dashboard: "Dashboard"
+      library: "Bibliothek"
+      wishlist: "Wunschliste"
+      nightstand: "Nachttisch"
+      logout: "Logout"
