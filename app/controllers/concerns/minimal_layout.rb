@@ -1,4 +1,4 @@
-module MinimalLayoutable
+module MinimalLayout
   extend ActiveSupport::Concern
 
   included do

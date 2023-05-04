@@ -1,5 +1,6 @@
 class ApplicationController < ActionController::Base
   include HttpAcceptLanguage::AutoLocale
-  include UserAuthenticateable
-  include MinimalLayoutable
+  include UserAuthentication
+  include MinimalLayout
+  include MenuReferrer
 end
