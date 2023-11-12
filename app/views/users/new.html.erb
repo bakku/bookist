@@ -14,36 +14,33 @@
 
     <div class="mt-10">
       <%= form_with model: @user do |form| %>
-        <%= render partial: "shared/forms/form_field",
-                   locals: { model: @user,
-                             form: form,
-                             field: :username,
-                             translation: t(".username"),
-                             type: :text_field } %>
+        <%= form_field(model: @user,
+                       form: form,
+                       field: :username,
+                       translation: t(".username"),
+                       type: :text_field) %>
 
-        <%= render partial: "shared/forms/form_field",
-                   locals: { model: @user,
-                             form: form,
-                             field: :email,
-                             translation: t(".email"),
-                             margin: true,
-                             type: :email_field } %>
+        <%= form_field(model: @user,
+                       form: form,
+                       field: :email,
+                       translation: t(".email"),
+                       margin: true,
+                       type: :email_field,
+                       hint: t(".email_for_reset")) %>
 
-        <%= render partial: "shared/forms/form_field",
-                   locals: { model: @user,
-                             form: form,
-                             field: :password,
-                             translation: t(".password"),
-                             margin: true,
-                             type: :password_field } %>
+        <%= form_field(model: @user,
+                       form: form,
+                       field: :password,
+                       translation: t(".password"),
+                       margin: true,
+                       type: :password_field) %>
 
-        <%= render partial: "shared/forms/form_field",
-                   locals: { model: @user,
-                             form: form,
-                             field: :password_confirmation,
-                             translation: t(".password_confirmation"),
-                             margin: true,
-                             type: :password_field } %>
+        <%= form_field(model: @user,
+                       form: form,
+                       field: :password_confirmation,
+                       translation: t(".password_confirmation"),
+                       margin: true,
+                       type: :password_field) %>
 
         <div class="flex justify-center">
           <%= form.button t(".sign_up"), class: "block mt-10 text-xl py-2 px-5 rounded-sm bg-slate-700 hover:bg-slate-600 text-white" %>

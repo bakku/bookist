@@ -1,7 +1,7 @@
 default: &default
   adapter: postgresql
   pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
-  url: <%= ENV.fetch('DATABASE_URL', 'postgres://bookist:bookist@localhost:5433/bookist') %>
+  url: <%= ENV.fetch('DATABASE_URL', 'postgres://bookist:bookist@localhost:5432/bookist') %>
   timeout: 5000
 
 development:
@@ -9,7 +9,7 @@ development:
 
 test:
   <<: *default
-  url: <%= ENV.fetch('DATABASE_TEST_URL', 'postgres://bookist:bookist@localhost:5433/bookist_test') %>
+  url: <%= ENV.fetch('DATABASE_TEST_URL', 'postgres://bookist:bookist@localhost:5432/bookist_test') %>
 
 production:
   <<: *default

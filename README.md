@@ -10,16 +10,16 @@ No features yet
 ## Tech Stack
 
 - Backend: Ruby on Rails 7 with Ruby 3.2
-- Database: PostgreSQL
+- Database: PostgreSQL, Redis (for sidekiq)
 - Frontend: Hotwire, Stimulus, esbuild, and tailwindcss
 
 ## Setup
 
 It's possible to run `bookist` with Docker locally, but I like to develop on bare metal. I just spin up a necessary
-PostgreSQL database in Docker, so that's what the following instructions will describe.
+PostgreSQL and Redis database in Docker, so that's what the following instructions will describe.
 
 1. Clone the repository and make sure you have all local dependencies which are specified in `.tool-versions`
-2. Run `docker-compose up db` and wait until PostgreSQL has finished starting up
+2. Run `docker compose up db redis` and wait until PostgreSQL and Redis have finished starting up
 3. Run `bin/setup`, it will install all required Ruby and Node dependencies and will setup your PostgreSQL database
 
 ## Development

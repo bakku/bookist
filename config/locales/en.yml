@@ -5,7 +5,7 @@ en:
         user:
           attributes:
             password_confirmation:
-              confirmation: "stimmt nicht mit dem angegebenen Passwort überein"
+              confirmation: "does not match the given password"
       messages:
         blank: "was not provided"
         taken: "is already taken"
@@ -16,6 +16,8 @@ en:
       password: "Password"
       new_to_bookist: "New to bookist?"
       sign_up: "Sign up"
+      forgot_password: "Forgot your password?"
+      reset_password: "Reset it"
     create:
       authentication_failed: "Invalid username or password"
     destroy:
@@ -32,6 +34,7 @@ en:
       password_confirmation: "Password Confirmation"
       already_have_account: "Already have an account?"
       sign_in: "Sign in"
+      email_for_reset: "(Used for password reset)"
     create:
       account_creation_success: "Your account was successfully created. You can now sign in."
       creation_failed: "Your account could not be created."
@@ -42,3 +45,31 @@ en:
       wishlist: "Wishlist"
       nightstand: "Nightstand"
       logout: "Logout"
+  password_reset_request:
+    new:
+      reset_password: "Reset password"
+      email: "Email"
+      know_your_password: "Know your password after all?"
+      sign_in: "Sign in"
+    create:
+      reset_password_failure: "Your password could not be reset."
+      reset_password_success:
+        "We will send you instructions on how to reset your password in case your email exists in our database."
+  password_reset:
+    new:
+      reset_password: "Reset password"
+      invalid_token: "Your password reset link is invalid or has expired. Please restart the password reset process."
+      password: "New Password"
+      password_confirmation: "New Password Confirmation"
+    create:
+      reset_successful: "Your password was successfully reset. Please sign in again."
+      reset_unsuccessful: "Your password could not be reset. Please restart the password reset process."
+  user_mailer:
+    reset_password_instructions:
+      subject: "Reset your bookist password"
+      greeting: "Hi"
+      introduction: "We have received a request to reset your password."
+      reset_password: "Reset password"
+      security_hint: "You can ignore and delete this email in case you did not issue this request."
+      farewell: "Best regards,"
+      bookist_team: "Your bookist Team"

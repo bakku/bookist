@@ -16,6 +16,8 @@ de:
       password: "Passwort"
       new_to_bookist: "Sie haben noch keinen Account?"
       sign_up: "Zur Registrierung"
+      forgot_password: "Passwort vergessen?"
+      reset_password: "Setzen Sie es zurück"
     create:
       authentication_failed: "Benutzername oder Passwort ungültig"
     destroy:
@@ -32,6 +34,7 @@ de:
       password_confirmation: "Passwort Wiederholung"
       already_have_account: "Sie haben bereits ein Account?"
       sign_in: "Zum Login"
+      email_for_reset: "(Zum Passwort-Zurücksetzen)"
     create:
       account_creation_success: "Ihr Account wurde erfolgreich erstellt. Sie können sich nun einloggen."
       creation_failed: "Ihr Account konnte nicht erstellt werden."
@@ -42,3 +45,31 @@ de:
       wishlist: "Wunschliste"
       nightstand: "Nachttisch"
       logout: "Logout"
+  password_reset_request:
+    new:
+      reset_password: "Passwort Zurücksetzen"
+      email: "Email"
+      know_your_password: "Sie kennen doch Ihr Passwort?"
+      sign_in: "Login"
+    create:
+      reset_password_failure: "Ihr Passwort konnte nicht zurückgesetzt werden."
+      reset_password_success:
+        "Falls Ihre Email in unserem System existiert erhalten Sie in Kürze Informationen zum Zurücksetzen Ihres Passworts."
+  password_reset:
+    new:
+      reset_password: "Passwort Zurücksetzen"
+      invalid_token: "Ihr Link zum Zurücksetzen Ihres Passworts ist ungültig oder abgelaufen. Bitte wiederholen Sie das Zurücksetzen Ihres Passworts."
+      password: "Neues Passwort"
+      password_confirmation: "Neues Passwort Wiederholung"
+    create:
+      reset_successful: "Ihr Passwort wurde erfolgreich zurückgesetzt. Bitte melden Sie sich erneut an."
+      reset_unsuccessful: "Ihr Passwort konnte nicht zurückgesetzt werden. Bitte wiederholen Sie das Zurücksetzen Ihres Passworts."
+  user_mailer:
+    reset_password_instructions:
+      subject: "Setzen Sie Ihr bookist Passwort zurück"
+      greeting: "Hallo"
+      introduction: "Wir haben die Anfrage erhalten Ihr Passwort zurückzusetzen."
+      reset_password: "Passwort Zurücksetzen"
+      security_hint: "Falls Sie diese Anfrage nicht gestellt haben können Sie diese Email ignorieren und löschen."
+      farewell: "Liebe Grüße,"
+      bookist_team: "Ihr bookist Team"

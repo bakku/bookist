@@ -3,7 +3,7 @@ git_source(:github) { |repo| "https://github.com/#{repo}.git" }
 
 ruby "3.2.2"
 
-gem "rails", "~> 7.0.4"
+gem "rails", "7.0.5"
 gem "sprockets-rails"
 gem "pg"
 gem "puma", "~> 5.0"
@@ -15,6 +15,7 @@ gem "bcrypt", "~> 3.1.7"
 gem "tzinfo-data", platforms: %i[ mingw mswin x64_mingw jruby ]
 gem "bootsnap", require: false
 
+gem "sidekiq"
 gem "http_accept_language"
 
 group :development, :test do
@@ -28,6 +29,5 @@ end
 
 group :test do
   gem "capybara"
-  gem "selenium-webdriver", "4.8.1"
-  gem "webdrivers"
+  gem "selenium-webdriver"
 end

@@ -2,8 +2,10 @@ joe:
   username: joe
   email: joe@example.org
   password_digest: <%= BCrypt::Password.create('test1234') %>
+  password_reset_token: null
 
 paul:
   username: paul
   email: paul@example.org
   password_digest: <%= BCrypt::Password.create('test1234') %>
+  password_reset_token: null

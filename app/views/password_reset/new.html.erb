@@ -1,0 +1,38 @@
+<% provide(:title, t(".reset_password")) %>
+
+<div class="flex justify-center">
+  <div class="max-w-lg w-[80%]">
+    <h1 class="text-5xl mt-16 text-center">📖 Bookist</h1>
+
+    <h2 class="text-3xl mt-5 text-center"><%= t(".reset_password") %></h2>
+
+    <% if flash.present? %>
+      <div class="mt-10">
+        <% render "shared/flash_messages" %>
+      </div>
+    <% end %>
+
+    <div class="mt-10">
+      <%= form_with model: @user, url: password_reset_index_path, method: :post do |form| %>
+        <%= form.hidden_field(:password_reset_token) %>
+
+        <%= form_field(model: @user,
+                       form: form,
+                       field: :password,
+                       translation: t(".password"),
+                       type: :password_field) %>
+
+        <%= form_field(model: @user,
+                       form: form,
+                       field: :password_confirmation,
+                       translation: t(".password_confirmation"),
+                       margin: true,
+                       type: :password_field) %>
+
+        <div class="flex justify-center">
+          <%= form.button t(".reset_password"), class: "block mt-10 text-xl py-2 px-5 rounded-sm bg-slate-700 hover:bg-slate-600 text-white" %>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>

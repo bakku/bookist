@@ -7,13 +7,13 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - run: docker-compose build
-      - run: docker-compose up -d db
+      - run: docker-compose up -d db redis
       - run: sleep 5
       - run: docker-compose run -e RAILS_ENV=development web bundle exec rails db:create
       - run: docker-compose run -e RAILS_ENV=development web bundle exec rails db:migrate
       - run: docker-compose run -e RAILS_ENV=test web bundle exec rails db:create
       - run: docker-compose run -e RAILS_ENV=test web bundle exec rails db:migrate
-      - run: docker-compose run web bundle exec rspec --exclude-pattern spec/system/**/*_spec.rb
+      - run: docker-compose run -e RAILS_ENV=test web bundle exec rspec --exclude-pattern spec/system/**/*_spec.rb
   build:
     needs: test
     if: contains(github.ref, 'master')

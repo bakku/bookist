@@ -1,6 +1,9 @@
-<%= form.label field,
-               translation,
-               class: "block text-lg #{'text-red-500' if model.errors.key?(field)} #{'mt-8' if margin ||= false}" %>
+<%= form.label field, class: "block text-lg #{'text-red-500' if model.errors.key?(field)} #{'mt-8' if margin}" do %>
+  <%= translation %>
+  <% if hint.present? %>
+    <span class="text-sm"><%= hint %></span>
+  <% end %>
+<% end %>
 
 <%= form.send(type,
               field,
