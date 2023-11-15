@@ -12,7 +12,7 @@ gem "bcrypt", "~> 3.1.7"
 gem "bootsnap", require: false
 gem "http_accept_language"
 gem "pg"
-gem "puma", "~> 5.0"
+gem "puma", ">= 5.0"
 gem "sidekiq"
 gem "tzinfo-data", platforms: %i[windows jruby]
 
