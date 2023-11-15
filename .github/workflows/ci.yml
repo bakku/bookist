@@ -13,7 +13,7 @@ jobs:
       - run: docker-compose run -e RAILS_ENV=development web bundle exec rails db:migrate
       - run: docker-compose run -e RAILS_ENV=test web bundle exec rails db:create
       - run: docker-compose run -e RAILS_ENV=test web bundle exec rails db:migrate
-      - run: docker-compose run -e RAILS_ENV=test web bundle exec rspec --exclude-pattern spec/system/**/*_spec.rb
+      - run: docker-compose run -e RAILS_ENV=test -e CI=true web bundle exec rspec --exclude-pattern spec/system/**/*_spec.rb
       - run: docker-compose run web bundle exec rubocop
   build:
     needs: test
