@@ -33,6 +33,9 @@ Style/EmptyMethod:
 Metrics/AbcSize:
   Enabled: no
 
+Metrics/BlockLength:
+  Enabled: no
+
 Naming/MemoizedInstanceVariableName:
   EnforcedStyleForLeadingUnderscores: required
 

@@ -5,7 +5,7 @@ git_source(:github) { |repo| "https://github.com/#{repo}.git" }
 
 ruby "3.2.2"
 
-gem "rails", "7.0.5"
+gem "rails", "7.1.2"
 
 # Backend
 gem "bcrypt", "~> 3.1.7"
@@ -14,7 +14,7 @@ gem "http_accept_language"
 gem "pg"
 gem "puma", "~> 5.0"
 gem "sidekiq"
-gem "tzinfo-data", platforms: %i[mingw mswin x64_mingw jruby]
+gem "tzinfo-data", platforms: %i[windows jruby]
 
 # Frontend
 gem "cssbundling-rails"
@@ -24,7 +24,7 @@ gem "stimulus-rails"
 gem "turbo-rails"
 
 group :development, :test do
-  gem "debug", platforms: %i[mri mingw x64_mingw]
+  gem "debug", platforms: %i[mri windows]
   gem "rspec-rails", "~> 6.0.0"
 end
 
