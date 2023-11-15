@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class SessionsController < ApplicationController
   skip_before_action :authenticate_user!, only: %i[new create]
   minimal_layout :new, :create
@@ -8,7 +10,7 @@ class SessionsController < ApplicationController
   def create
     user = User.find_by(username: login_params[:username])
 
-    if user && user.authenticate(login_params[:password])
+    if user.present? && user.authenticate(login_params[:password])
       session[:user_id] = user.id
 
       redirect_to me_users_path
@@ -25,7 +27,7 @@ class SessionsController < ApplicationController
 
   private
 
-    def login_params
-      params.permit(:username, :password)
-    end
+  def login_params
+    params.permit(:username, :password)
+  end
 end

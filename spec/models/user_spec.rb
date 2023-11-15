@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "rails_helper"
 
 RSpec.describe User do
@@ -28,7 +30,7 @@ RSpec.describe User do
     end
 
     it "requires the email to be present" do
-      user.username = nil
+      user.email = nil
       expect(user.valid?).to be_falsey
     end
 

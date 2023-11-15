@@ -1,7 +1,9 @@
+# frozen_string_literal: true
+
 Rails.application.routes.draw do
   root "users#me"
 
-  resources :users, only: [:show, :new, :create] do
+  resources :users, only: %i[show new create] do
     get :me, on: :collection
   end
 

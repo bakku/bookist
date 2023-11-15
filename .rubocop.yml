@@ -1,0 +1,58 @@
+require:
+  - rubocop-capybara
+  - rubocop-rails
+  - rubocop-rspec
+
+AllCops:
+  NewCops: enable
+
+Layout/MultilineMethodCallIndentation:
+  EnforcedStyle: indented
+
+Layout/FirstArrayElementIndentation:
+  EnforcedStyle: consistent
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Style/IfUnlessModifier:
+  Enabled: no
+
+Style/GuardClause:
+  Enabled: no
+
+Style/RedundantSelf:
+  Enabled: no
+
+Style/Documentation:
+  Enabled: no
+
+Style/EmptyMethod:
+  EnforcedStyle: expanded
+
+Metrics/AbcSize:
+  Enabled: no
+
+Naming/MemoizedInstanceVariableName:
+  EnforcedStyleForLeadingUnderscores: required
+
+RSpec/MultipleExpectations:
+  Enabled: no
+
+RSpec/ExampleLength:
+  Enabled: no
+
+RSpec/NotToNot:
+  EnforcedStyle: to_not
+
+RSpec/PredicateMatcher:
+  Enabled: no
+
+RSpec/HookArgument:
+  EnforcedStyle: each
+
+Capybara/RSpec/HaveSelector:
+  Enabled: no
+
+Capybara/ClickLinkOrButtonStyle:
+  Enabled: no

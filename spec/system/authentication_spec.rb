@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "rails_helper"
 
 RSpec.describe "Authentication Flows" do
@@ -102,7 +104,9 @@ RSpec.describe "Authentication Flows" do
       visit new_password_reset_path
 
       expect(page).to have_selector("h2", text: "Sign in")
-      expect(page).to have_selector("p", text: "Your password reset link is invalid or has expired. Please restart the password reset process.")
+      expect(page).to have_selector(
+        "p", text: "Your password reset link is invalid or has expired. Please restart the password reset process."
+      )
     end
 
     it "displays an error in case the password reset token is not valid anymore when clicking on the email link" do
@@ -116,14 +120,15 @@ RSpec.describe "Authentication Flows" do
       click_on "Reset"
 
       expect(page).to have_selector("h2", text: "Sign in")
-      expect(page).to(
-        have_selector("p", text: "We will send you instructions on how to reset your password in case your email exists in our database.")
+      expect(page).to have_selector(
+        "p",
+        text: "We will send you instructions on how to reset your password in case your email exists in our database."
       )
       expect(PreparePasswordResetJob.jobs.size).to be(1)
 
       PreparePasswordResetJob.drain
       expect(ApplicationMailer.deliveries.count).to be(1)
-      expect(user.reload.password_reset_token).not_to be(nil)
+      expect(user.reload.password_reset_token).to_not be_nil
 
       mail = ApplicationMailer.deliveries.first
 
@@ -138,7 +143,9 @@ RSpec.describe "Authentication Flows" do
       visit new_password_reset_path(token: user.password_reset_token)
 
       expect(page).to have_selector("h2", text: "Sign in")
-      expect(page).to have_selector("p", text: "Your password reset link is invalid or has expired. Please restart the password reset process.")
+      expect(page).to have_selector(
+        "p", text: "Your password reset link is invalid or has expired. Please restart the password reset process."
+      )
     end
 
     it "displays an error in case the password reset token is not valid anymore when submitting the reset form" do
@@ -152,14 +159,15 @@ RSpec.describe "Authentication Flows" do
       click_on "Reset"
 
       expect(page).to have_selector("h2", text: "Sign in")
-      expect(page).to(
-        have_selector("p", text: "We will send you instructions on how to reset your password in case your email exists in our database.")
+      expect(page).to have_selector(
+        "p",
+        text: "We will send you instructions on how to reset your password in case your email exists in our database."
       )
       expect(PreparePasswordResetJob.jobs.size).to be(1)
 
       PreparePasswordResetJob.drain
       expect(ApplicationMailer.deliveries.count).to be(1)
-      expect(user.reload.password_reset_token).not_to be(nil)
+      expect(user.reload.password_reset_token).to_not be_nil
 
       mail = ApplicationMailer.deliveries.first
 
@@ -179,7 +187,10 @@ RSpec.describe "Authentication Flows" do
       click_on "Reset password"
 
       expect(page).to have_selector("h2", text: "Sign in")
-      expect(page).to have_selector("p", text: "Your password could not be reset. Please restart the password reset process.")
+      expect(page).to have_selector(
+        "p",
+        text: "Your password could not be reset. Please restart the password reset process."
+      )
     end
 
     it "successfully resets the password of a user" do
@@ -193,14 +204,15 @@ RSpec.describe "Authentication Flows" do
       click_on "Reset"
 
       expect(page).to have_selector("h2", text: "Sign in")
-      expect(page).to(
-        have_selector("p", text: "We will send you instructions on how to reset your password in case your email exists in our database.")
+      expect(page).to have_selector(
+        "p",
+        text: "We will send you instructions on how to reset your password in case your email exists in our database."
       )
       expect(PreparePasswordResetJob.jobs.size).to be(1)
 
       PreparePasswordResetJob.drain
       expect(ApplicationMailer.deliveries.count).to be(1)
-      expect(user.reload.password_reset_token).not_to be(nil)
+      expect(user.reload.password_reset_token).to_not be_nil
 
       mail = ApplicationMailer.deliveries.first
 

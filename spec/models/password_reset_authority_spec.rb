@@ -1,7 +1,9 @@
+# frozen_string_literal: true
+
 require "rails_helper"
 
 RSpec.describe PasswordResetAuthority do
-  context "#resettable?" do
+  describe "#resettable?" do
     it "returns true if #password_reset_token_created_at is not older than the default token validity duration" do
       authority = described_class.new
       resettable_record = User.new(password_reset_token_created_at: 30.minutes.ago)
@@ -27,7 +29,7 @@ RSpec.describe PasswordResetAuthority do
     end
   end
 
-  context "#prepare_reset!" do
+  describe "#prepare_reset!" do
     it "assigns a new password_reset_token and sets the password_reset_token_created_at timestamp" do
       joe = users(:joe)
 
@@ -41,7 +43,7 @@ RSpec.describe PasswordResetAuthority do
     end
   end
 
-  context "#complete_reset!" do
+  describe "#complete_reset!" do
     it "returns false if token has expired" do
       joe = users(:joe)
       joe.update!(password_reset_token: SecureRandom.uuid, password_reset_token_created_at: 2.hours.ago)

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module UserAuthentication
   extend ActiveSupport::Concern
 
@@ -17,7 +19,7 @@ module UserAuthentication
     #
     # @return [User] the user that is currently logged in.
     def current_user
-      @current_user ||= User.find(session[:user_id])
+      @_current_user ||= User.find(session[:user_id])
     end
     helper_method :current_user
   end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Represents a request for a password reset which is used
 # in the PasswordResetRequestController.
 class PasswordResetRequest

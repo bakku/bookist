@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require_relative "boot"
 
 require "rails"
@@ -24,7 +26,7 @@ module Bookist
     config.load_defaults 7.0
 
     config.i18n.default_locale = :en
-    I18n.available_locales = [:en, :de]
+    I18n.available_locales = %i[en de]
 
     config.generators do |g|
       g.test_framework nil

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 class PasswordResetRequestController < ApplicationController
   skip_before_action :authenticate_user!, only: %i[new create]
   minimal_layout :new, :create
@@ -20,7 +22,7 @@ class PasswordResetRequestController < ApplicationController
 
   private
 
-    def password_reset_request_params
-      params.require(:password_reset_request).permit(:email)
-    end
+  def password_reset_request_params
+    params.require(:password_reset_request).permit(:email)
+  end
 end

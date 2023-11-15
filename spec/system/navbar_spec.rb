@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "rails_helper"
 
 RSpec.describe "Navbar" do
@@ -6,7 +8,7 @@ RSpec.describe "Navbar" do
   it "does not show the navbar on pages like the login page" do
     visit login_path
 
-    expect(page).not_to have_selector("[data-testid='navbar']")
+    expect(page).to_not have_selector("[data-testid='navbar']")
   end
 
   it "shows the navbar on pages like the dashboard page" do

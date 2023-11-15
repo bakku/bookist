@@ -1,17 +1,21 @@
+# frozen_string_literal: true
+
 # PasswordResetAuthority defines the logic for resetting passwords of resettable records, e.g. users.
 class PasswordResetAuthority
   DEFAULT_TOKEN_VALIDITY_DURATION = 1.hour
 
   # Configure the authority you want to use.
   #
-  # @param token_validity_duration [ActiveSupport::Duration] the validity duration of the password_reset_token, by default 1 hour
+  # @param token_validity_duration [ActiveSupport::Duration] the validity duration of the password_reset_token,
+  #   by default 1 hour
   def initialize(token_validity_duration = DEFAULT_TOKEN_VALIDITY_DURATION)
     @token_validity_duration = token_validity_duration
   end
 
   # Returns true in case the password_reset_token is not older than the validity duration, otherwise false.
   #
-  # @param resettable_record [ApplicationRecord] the record which should be checked regarding the possibility of resetting its password
+  # @param resettable_record [ApplicationRecord] the record which should be checked regarding the possibility of
+  #   resetting its password
   def resettable?(resettable_record)
     Time.current - @token_validity_duration < resettable_record.password_reset_token_created_at
   end

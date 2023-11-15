@@ -1,29 +1,39 @@
+# frozen_string_literal: true
+
 source "https://rubygems.org"
 git_source(:github) { |repo| "https://github.com/#{repo}.git" }
 
 ruby "3.2.2"
 
 gem "rails", "7.0.5"
-gem "sprockets-rails"
+
+# Backend
+gem "bcrypt", "~> 3.1.7"
+gem "bootsnap", require: false
+gem "http_accept_language"
 gem "pg"
 gem "puma", "~> 5.0"
-gem "jsbundling-rails"
-gem "turbo-rails"
-gem "stimulus-rails"
-gem "cssbundling-rails"
-gem "bcrypt", "~> 3.1.7"
-gem "tzinfo-data", platforms: %i[ mingw mswin x64_mingw jruby ]
-gem "bootsnap", require: false
-
 gem "sidekiq"
-gem "http_accept_language"
+gem "tzinfo-data", platforms: %i[mingw mswin x64_mingw jruby]
+
+# Frontend
+gem "cssbundling-rails"
+gem "jsbundling-rails"
+gem "sprockets-rails"
+gem "stimulus-rails"
+gem "turbo-rails"
 
 group :development, :test do
-  gem "debug", platforms: %i[ mri mingw x64_mingw ]
-  gem "rspec-rails", '~> 6.0.0'
+  gem "debug", platforms: %i[mri mingw x64_mingw]
+  gem "rspec-rails", "~> 6.0.0"
 end
 
 group :development do
+  gem "rubocop", require: false
+  gem "rubocop-capybara", require: false
+  gem "rubocop-rails", require: false
+  gem "rubocop-rspec", require: false
+
   gem "web-console"
 end
 

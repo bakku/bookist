@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module NavbarHelper
   # Returns a hash of attributes which are supposed to be used
   # in the HTML data attribute of the hamburger menu button in
