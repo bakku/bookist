@@ -1,0 +1,56 @@
+.page-header {
+  margin-block: clamp(2rem, 8vw, 4rem) 2rem;
+}
+
+.eyebrow {
+  color: var(--pico-muted-color);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+}
+
+.book-list {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+}
+
+.book-card {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
+}
+
+.book-card h3,
+.book-card p,
+.book-card dl {
+  margin: 0;
+}
+
+.book-id {
+  color: var(--pico-muted-color);
+  font-size: 0.85rem;
+}
+
+.book-card dl {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.book-card dt {
+  color: var(--pico-muted-color);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.book-card dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.empty-state {
+  color: var(--pico-muted-color);
+}

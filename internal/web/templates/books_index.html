@@ -1,0 +1,37 @@
+{{define "title"}}Bookist Library{{end}}
+
+{{define "content"}}
+<header class="page-header">
+  <p class="eyebrow">Home library</p>
+  <h1>Bookist</h1>
+  <p>Browse the books in your personal library.</p>
+</header>
+
+<section>
+  <h2>Books</h2>
+  {{if .Books}}
+    <div class="book-list">
+      {{range .Books}}
+        <article class="book-card">
+          <div>
+            <p class="book-id">#{{.ID}}</p>
+            <h3>{{.Title}}</h3>
+          </div>
+          <dl>
+            <div>
+              <dt>ISBN</dt>
+              <dd>{{with .ISBN}}{{.}}{{else}}Not set{{end}}</dd>
+            </div>
+            <div>
+              <dt>Added</dt>
+              <dd>{{.CreatedAt.Format "2006-01-02"}}</dd>
+            </div>
+          </dl>
+        </article>
+      {{end}}
+    </div>
+  {{else}}
+    <p class="empty-state">No books yet. Add one with the JSON API or CLI.</p>
+  {{end}}
+</section>
+{{end}}
