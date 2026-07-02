@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 )
 
+// ── Create ────────────────────────────────────────────────────────────────────
+
 func TestSQLiteRepositoryCreatePersistsAuthor(t *testing.T) {
 	ctx := context.Background()
 	db := testsupport.OpenMigratedDB(t)
@@ -27,6 +29,8 @@ func TestSQLiteRepositoryCreatePersistsAuthor(t *testing.T) {
 
 	testsupport.AssertAuthorRow(t, db, created.ID, "Jane Austen")
 }
+
+// ── List ──────────────────────────────────────────────────────────────────────
 
 func TestSQLiteRepositoryListReadsPersistedAuthors(t *testing.T) {
 	ctx := context.Background()
@@ -49,6 +53,22 @@ func TestSQLiteRepositoryListReadsPersistedAuthors(t *testing.T) {
 	}
 }
 
+// ── GetByIDs ──────────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryGetByIDsEmptyInputReturnsNil(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := authors.NewSQLiteRepository(db)
+
+	found, err := repository.GetByIDs(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found != nil {
+		t.Fatalf("expected nil, got %d", len(found))
+	}
+}
+
 func TestSQLiteRepositoryGetByIDsReturnsMatchingAuthors(t *testing.T) {
 	ctx := context.Background()
 	db := testsupport.OpenMigratedDB(t)
@@ -65,17 +85,22 @@ func TestSQLiteRepositoryGetByIDsReturnsMatchingAuthors(t *testing.T) {
 	}
 }
 
-func TestSQLiteRepositoryGetByIDsEmptyInputReturnsNil(t *testing.T) {
+// ── ListByBookIDs ──────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryListByBookIDsEmptyInputReturnsEmptyMap(t *testing.T) {
 	ctx := context.Background()
 	db := testsupport.OpenMigratedDB(t)
 	repository := authors.NewSQLiteRepository(db)
 
-	found, err := repository.GetByIDs(ctx, nil)
+	result, err := repository.ListByBookIDs(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if found != nil {
-		t.Fatalf("expected nil, got %d", len(found))
+	if result == nil {
+		t.Fatal("expected non-nil map")
+	}
+	if len(result) != 0 {
+		t.Fatalf("expected empty map, got %d entries", len(result))
 	}
 }
 
@@ -103,22 +128,5 @@ func TestSQLiteRepositoryListByBookIDsReturnsAuthorsGroupedByBook(t *testing.T) 
 	}
 	if len(result[bookID2]) != 1 {
 		t.Fatalf("expected 1 author for book2, got %d", len(result[bookID2]))
-	}
-}
-
-func TestSQLiteRepositoryListByBookIDsEmptyInputReturnsEmptyMap(t *testing.T) {
-	ctx := context.Background()
-	db := testsupport.OpenMigratedDB(t)
-	repository := authors.NewSQLiteRepository(db)
-
-	result, err := repository.ListByBookIDs(ctx, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result == nil {
-		t.Fatal("expected non-nil map")
-	}
-	if len(result) != 0 {
-		t.Fatalf("expected empty map, got %d entries", len(result))
 	}
 }

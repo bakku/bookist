@@ -11,6 +11,8 @@ import (
 	"bakku.dev/bookist/internal/cli"
 )
 
+// ── Authors Add ────────────────────────────────────────────────────────────────
+
 func TestAuthorsAddPrintsIDAndName(t *testing.T) {
 	var capturedBody string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -37,6 +39,8 @@ func TestAuthorsAddPrintsIDAndName(t *testing.T) {
 		t.Fatalf("expected stdout to contain 'new-uuid\\tTest Author', got %q", stdout.String())
 	}
 }
+
+// ── Authors List ───────────────────────────────────────────────────────────────
 
 func TestAuthorsListPrintsIDAndName(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

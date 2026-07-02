@@ -9,6 +9,19 @@ import (
 	"bakku.dev/bookist/internal/testsupport"
 )
 
+// ── Create ────────────────────────────────────────────────────────────────────
+
+func TestServiceCreateRequiresName(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	service := authors.NewService(authors.NewSQLiteRepository(db))
+
+	_, err := service.Create(context.Background(), authors.CreateAuthorRequest{Name: " "})
+	if !errors.Is(err, authors.ErrNameRequired) {
+		t.Fatalf("expected ErrNameRequired, got %v", err)
+	}
+	testsupport.AssertAuthorCount(t, db, 0)
+}
+
 func TestServiceCreateTrimsAndPersistsName(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	service := authors.NewService(authors.NewSQLiteRepository(db))
@@ -23,16 +36,7 @@ func TestServiceCreateTrimsAndPersistsName(t *testing.T) {
 	testsupport.AssertAuthorRow(t, db, created.ID, "Jane Austen")
 }
 
-func TestServiceCreateRequiresName(t *testing.T) {
-	db := testsupport.OpenMigratedDB(t)
-	service := authors.NewService(authors.NewSQLiteRepository(db))
-
-	_, err := service.Create(context.Background(), authors.CreateAuthorRequest{Name: " "})
-	if !errors.Is(err, authors.ErrNameRequired) {
-		t.Fatalf("expected ErrNameRequired, got %v", err)
-	}
-	testsupport.AssertAuthorCount(t, db, 0)
-}
+// ── List ──────────────────────────────────────────────────────────────────────
 
 func TestServiceListDelegates(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
