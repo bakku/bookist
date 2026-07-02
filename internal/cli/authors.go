@@ -77,8 +77,10 @@ func runAuthors(args []string, stdout io.Writer, stderr io.Writer) int {
 	switch args[0] {
 	case "list":
 		return runAuthorsList(args[1:], stdout, stderr)
+
 	case "add":
 		return runAuthorsAdd(args[1:], stdout, stderr)
+
 	default:
 		fmt.Fprintf(stderr, "unknown authors command %q\n", args[0])
 		return 2
@@ -87,8 +89,10 @@ func runAuthors(args []string, stdout io.Writer, stderr io.Writer) int {
 
 func runAuthorsList(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("authors list", flag.ContinueOnError)
-	flags.SetOutput(stderr)
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+
+	flags.SetOutput(stderr)
+
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -108,9 +112,11 @@ func runAuthorsList(args []string, stdout io.Writer, stderr io.Writer) int {
 
 func runAuthorsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("authors add", flag.ContinueOnError)
-	flags.SetOutput(stderr)
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
 	name := flags.String("name", "", "Author name")
+
+	flags.SetOutput(stderr)
+
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}

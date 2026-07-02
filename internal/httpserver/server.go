@@ -30,11 +30,14 @@ func New(books *books.Service, authors *authors.Service) (*Server, error) {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+
 	mux.HandleFunc("GET /", s.handleIndex)
 	mux.HandleFunc("GET /api/books", s.handleAPIListBooks)
 	mux.HandleFunc("POST /api/books", s.handleAPICreateBook)
 	mux.HandleFunc("GET /api/authors", s.handleAPIListAuthors)
 	mux.HandleFunc("POST /api/authors", s.handleAPICreateAuthor)
+
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(web.StaticFS()))))
+
 	return mux
 }

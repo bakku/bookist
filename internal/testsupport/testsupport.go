@@ -58,6 +58,21 @@ func InsertBookRow(t testing.TB, db *sql.DB, title string, isbn *string) string 
 	return id
 }
 
+type BookRowAssertion struct {
+	Title          string
+	ISBN           *string
+	Language       *string
+	Publisher      *string
+	Edition        *string
+	Format         *string
+	PurchasedAt    *string
+	Pages          *int
+	Notes          *string
+	PublishedYear  *int
+	PublishedMonth *int
+	PublishedDay   *int
+}
+
 func AssertBookRow(t testing.TB, db *sql.DB, id string, wantTitle string, wantISBN *string) {
 	t.Helper()
 
@@ -88,6 +103,86 @@ func AssertBookRow(t testing.TB, db *sql.DB, id string, wantTitle string, wantIS
 	}
 	if _, err := time.Parse(time.RFC3339, updatedAt); err != nil {
 		t.Fatalf("expected RFC3339 updated_at, got %q", updatedAt)
+	}
+}
+
+func AssertBookRowFields(t testing.TB, db *sql.DB, id string, want BookRowAssertion) {
+	t.Helper()
+
+	var title string
+	var isbn sql.NullString
+	var language sql.NullString
+	var publisher sql.NullString
+	var edition sql.NullString
+	var format sql.NullString
+	var purchasedAt sql.NullString
+	var notes sql.NullString
+	var pages sql.NullInt64
+	var publishedYear sql.NullInt64
+	var publishedMonth sql.NullInt64
+	var publishedDay sql.NullInt64
+	var createdAt string
+	var updatedAt string
+
+	err := db.QueryRowContext(context.Background(), `
+		SELECT title, isbn, language, publisher, edition, format, purchased_at,
+		    pages, notes, published_year, published_month, published_day,
+		    created_at, updated_at
+		FROM books
+		WHERE id = ?
+	`, id).Scan(&title, &isbn, &language, &publisher, &edition,
+		&format, &purchasedAt, &pages, &notes, &publishedYear,
+		&publishedMonth, &publishedDay, &createdAt, &updatedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if title != want.Title {
+		t.Fatalf("expected title %q, got %q", want.Title, title)
+	}
+
+	assertNullString(t, "isbn", isbn, want.ISBN)
+	assertNullString(t, "language", language, want.Language)
+	assertNullString(t, "publisher", publisher, want.Publisher)
+	assertNullString(t, "edition", edition, want.Edition)
+	assertNullString(t, "format", format, want.Format)
+	assertNullString(t, "purchased_at", purchasedAt, want.PurchasedAt)
+	assertNullInt(t, "pages", pages, want.Pages)
+	assertNullInt(t, "published_year", publishedYear, want.PublishedYear)
+	assertNullInt(t, "published_month", publishedMonth, want.PublishedMonth)
+	assertNullInt(t, "published_day", publishedDay, want.PublishedDay)
+	assertNullString(t, "notes", notes, want.Notes)
+
+	if _, err := time.Parse(time.RFC3339, createdAt); err != nil {
+		t.Fatalf("expected RFC3339 created_at, got %q", createdAt)
+	}
+
+	if _, err := time.Parse(time.RFC3339, updatedAt); err != nil {
+		t.Fatalf("expected RFC3339 updated_at, got %q", updatedAt)
+	}
+}
+
+func assertNullString(t testing.TB, name string, got sql.NullString, want *string) {
+	t.Helper()
+
+	if want == nil && got.Valid {
+		t.Fatalf("expected %s to be NULL, got %q", name, got.String)
+	}
+
+	if want != nil && (!got.Valid || got.String != *want) {
+		t.Fatalf("expected %s %q, got %#v", name, *want, got)
+	}
+}
+
+func assertNullInt(t testing.TB, name string, got sql.NullInt64, want *int) {
+	t.Helper()
+
+	if want == nil && got.Valid {
+		t.Fatalf("expected %s to be NULL, got %d", name, got.Int64)
+	}
+
+	if want != nil && (!got.Valid || int(got.Int64) != *want) {
+		t.Fatalf("expected %s %d, got %#v", name, *want, got)
 	}
 }
 
@@ -137,9 +232,11 @@ func AssertAuthorRow(t testing.TB, db *sql.DB, id string, wantName string) {
 	if name != wantName {
 		t.Fatalf("expected persisted name %q, got %q", wantName, name)
 	}
+
 	if _, err := time.Parse(time.RFC3339, createdAt); err != nil {
 		t.Fatalf("expected RFC3339 created_at, got %q", createdAt)
 	}
+
 	if _, err := time.Parse(time.RFC3339, updatedAt); err != nil {
 		t.Fatalf("expected RFC3339 updated_at, got %q", updatedAt)
 	}
@@ -152,6 +249,7 @@ func AssertAuthorCount(t testing.TB, db *sql.DB, want int) {
 	if err := db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM authors`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
+
 	if count != want {
 		t.Fatalf("expected %d persisted authors, got %d", want, count)
 	}
@@ -209,8 +307,4 @@ func AssertBookAuthors(t testing.TB, db *sql.DB, bookID string, wantAuthorIDs ..
 			t.Fatalf("expected author_id %q not found in book_authors", want)
 		}
 	}
-}
-
-func StringPtr(value string) *string {
-	return &value
 }

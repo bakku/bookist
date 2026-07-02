@@ -52,10 +52,30 @@ func TestServiceCreateRejectsUnknownAuthorIDs(t *testing.T) {
 func TestServiceCreateTrimsAndPersistsInput(t *testing.T) {
 	service, db := testsupport.NewBookService(t)
 	isbn := " 9783161484100 "
+	lang := " EN "
+	pub := " O'Reilly "
+	ed := " 2nd "
+	format := books.FormatPaperback
+	purchased := " 2025-06-15 "
+	pages := 400
+	notes := " Great "
+	year := 2024
+	month := 6
+	day := 15
 
 	created, err := service.Create(context.Background(), books.CreateBookRequest{
-		Title: " The Go Programming Language ",
-		ISBN:  &isbn,
+		Title:          " The Go Programming Language ",
+		ISBN:           &isbn,
+		Language:       &lang,
+		Publisher:      &pub,
+		Edition:        &ed,
+		Format:         &format,
+		PurchasedAt:    &purchased,
+		Pages:          &pages,
+		Notes:          &notes,
+		PublishedYear:  &year,
+		PublishedMonth: &month,
+		PublishedDay:   &day,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -64,10 +84,66 @@ func TestServiceCreateTrimsAndPersistsInput(t *testing.T) {
 	if created.Title != "The Go Programming Language" {
 		t.Fatalf("expected trimmed title, got %q", created.Title)
 	}
+
 	if created.ISBN == nil || *created.ISBN != "9783161484100" {
 		t.Fatalf("expected trimmed ISBN, got %#v", created.ISBN)
 	}
-	testsupport.AssertBookRow(t, db, created.ID, "The Go Programming Language", testsupport.StringPtr("9783161484100"))
+
+	if created.Language == nil || *created.Language != "EN" {
+		t.Fatalf("expected trimmed Language 'EN', got %#v", created.Language)
+	}
+
+	if created.Publisher == nil || *created.Publisher != "O'Reilly" {
+		t.Fatalf("expected trimmed Publisher 'O\\'Reilly', got %#v", created.Publisher)
+	}
+
+	if created.Edition == nil || *created.Edition != "2nd" {
+		t.Fatalf("expected trimmed Edition '2nd', got %#v", created.Edition)
+	}
+
+	if created.Format == nil || *created.Format != books.FormatPaperback {
+		t.Fatalf("expected Format paperback, got %#v", created.Format)
+	}
+
+	if created.PurchasedAt == nil || *created.PurchasedAt != "2025-06-15" {
+		t.Fatalf("expected trimmed PurchasedAt '2025-06-15', got %#v", created.PurchasedAt)
+	}
+
+	if created.Pages == nil || *created.Pages != 400 {
+		t.Fatalf("expected Pages 400, got %#v", created.Pages)
+	}
+
+	if created.Notes == nil || *created.Notes != "Great" {
+		t.Fatalf("expected trimmed Notes 'Great', got %#v", created.Notes)
+	}
+
+	if created.PublishedYear == nil || *created.PublishedYear != 2024 {
+		t.Fatalf("expected PublishedYear 2024, got %#v", created.PublishedYear)
+	}
+
+	if created.PublishedMonth == nil || *created.PublishedMonth != 6 {
+		t.Fatalf("expected PublishedMonth 6, got %#v", created.PublishedMonth)
+	}
+
+	if created.PublishedDay == nil || *created.PublishedDay != 15 {
+		t.Fatalf("expected PublishedDay 15, got %#v", created.PublishedDay)
+	}
+
+	f := string(books.FormatPaperback)
+	testsupport.AssertBookRowFields(t, db, created.ID, testsupport.BookRowAssertion{
+		Title:          "The Go Programming Language",
+		ISBN:           new("9783161484100"),
+		Language:       new("EN"),
+		Publisher:      new("O'Reilly"),
+		Edition:        new("2nd"),
+		Format:         &f,
+		PurchasedAt:    new("2025-06-15"),
+		Pages:          new(400),
+		Notes:          new("Great"),
+		PublishedYear:  new(2024),
+		PublishedMonth: new(6),
+		PublishedDay:   new(15),
+	})
 }
 
 func TestServiceCreateWithNoAuthorsReturnsEmptyNonNilSlice(t *testing.T) {
@@ -105,6 +181,89 @@ func TestServiceCreateWithValidAuthorIDsReturnsHydratedAuthors(t *testing.T) {
 	testsupport.AssertBookAuthors(t, db, created.ID, author)
 }
 
+func TestServiceCreateAcceptsValidFormat(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+
+	format := books.FormatPaperback
+	created, err := service.Create(context.Background(), books.CreateBookRequest{
+		Title:  "Paperback Book",
+		Format: &format,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Format == nil || *created.Format != books.FormatPaperback {
+		t.Fatalf("expected Format paperback, got %#v", created.Format)
+	}
+	f := string(books.FormatPaperback)
+	testsupport.AssertBookRowFields(t, db, created.ID, testsupport.BookRowAssertion{
+		Title:  "Paperback Book",
+		Format: &f,
+	})
+}
+
+func TestServiceCreateRejectsInvalidFormat(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+
+	format := books.Format("invalid")
+	_, err := service.Create(context.Background(), books.CreateBookRequest{
+		Title:  "Bad Format",
+		Format: &format,
+	})
+	if !errors.Is(err, books.ErrInvalidFormat) {
+		t.Fatalf("expected ErrInvalidFormat, got %v", err)
+	}
+	testsupport.AssertBookCount(t, db, 0)
+}
+
+func TestServiceCreateConvertsBlankStringFieldsToNull(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+
+	lang := " "
+	pub := " "
+	ed := " "
+	notes := " "
+	purchased := " "
+
+	created, err := service.Create(context.Background(), books.CreateBookRequest{
+		Title:       "Blank Fields",
+		Language:    &lang,
+		Publisher:   &pub,
+		Edition:     &ed,
+		Notes:       &notes,
+		PurchasedAt: &purchased,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testsupport.AssertBookRowFields(t, db, created.ID, testsupport.BookRowAssertion{
+		Title: "Blank Fields",
+	})
+}
+
+func TestServiceCreateConvertsZeroIntFieldsToNull(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+
+	zero := 0
+	neg := -1
+
+	created, err := service.Create(context.Background(), books.CreateBookRequest{
+		Title:          "Zero Ints",
+		Pages:          &zero,
+		PublishedYear:  &zero,
+		PublishedMonth: &neg,
+		PublishedDay:   &zero,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testsupport.AssertBookRowFields(t, db, created.ID, testsupport.BookRowAssertion{
+		Title: "Zero Ints",
+	})
+}
+
 // ── List ──────────────────────────────────────────────────────────────────────
 
 func TestServiceListHydratesAuthors(t *testing.T) {
@@ -131,19 +290,98 @@ func TestServiceListHydratesAuthors(t *testing.T) {
 
 func TestServiceListReturnsPersistedBooks(t *testing.T) {
 	service, db := testsupport.NewBookService(t)
-	id := testsupport.InsertBookRow(t, db, "Kindred", nil)
+	repository := books.NewSQLiteRepository(db)
+
+	isbn := "9783161484100"
+	lang := "en"
+	pub := "O'Reilly"
+	ed := "2nd"
+	format := books.FormatPaperback
+	purchased := "2025-06-15"
+	pages := 400
+	notes := "Great book"
+	year := 2024
+	month := 6
+	day := 15
+
+	created, err := repository.Create(context.Background(), books.CreateBookRequest{
+		Title:          "Kindred",
+		ISBN:           &isbn,
+		Language:       &lang,
+		Publisher:      &pub,
+		Edition:        &ed,
+		Format:         &format,
+		PurchasedAt:    &purchased,
+		Pages:          &pages,
+		Notes:          &notes,
+		PublishedYear:  &year,
+		PublishedMonth: &month,
+		PublishedDay:   &day,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	listed, err := service.List(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(listed) != 1 {
 		t.Fatalf("expected 1 book, got %d", len(listed))
 	}
-	if listed[0].ID != id {
-		t.Fatalf("expected listed ID %s, got %s", id, listed[0].ID)
+
+	got := listed[0]
+
+	if got.ID != created.ID {
+		t.Fatalf("expected ID %s, got %s", created.ID, got.ID)
 	}
-	if listed[0].Title != "Kindred" {
-		t.Fatalf("expected Kindred, got %q", listed[0].Title)
+
+	if got.Title != "Kindred" {
+		t.Fatalf("expected Kindred, got %q", got.Title)
+	}
+
+	if got.ISBN == nil || *got.ISBN != isbn {
+		t.Fatalf("expected ISBN %q, got %#v", isbn, got.ISBN)
+	}
+
+	if got.Language == nil || *got.Language != lang {
+		t.Fatalf("expected Language %q, got %#v", lang, got.Language)
+	}
+
+	if got.Publisher == nil || *got.Publisher != pub {
+		t.Fatalf("expected Publisher %q, got %#v", pub, got.Publisher)
+	}
+
+	if got.Edition == nil || *got.Edition != ed {
+		t.Fatalf("expected Edition %q, got %#v", ed, got.Edition)
+	}
+
+	if got.Format == nil || *got.Format != format {
+		t.Fatalf("expected Format %q, got %#v", format, got.Format)
+	}
+
+	if got.PurchasedAt == nil || *got.PurchasedAt != purchased {
+		t.Fatalf("expected PurchasedAt %q, got %#v", purchased, got.PurchasedAt)
+	}
+
+	if got.Pages == nil || *got.Pages != pages {
+		t.Fatalf("expected Pages %d, got %#v", pages, got.Pages)
+	}
+
+	if got.Notes == nil || *got.Notes != notes {
+		t.Fatalf("expected Notes %q, got %#v", notes, got.Notes)
+	}
+
+	if got.PublishedYear == nil || *got.PublishedYear != year {
+		t.Fatalf("expected PublishedYear %d, got %#v", year, got.PublishedYear)
+	}
+
+	if got.PublishedMonth == nil || *got.PublishedMonth != month {
+		t.Fatalf("expected PublishedMonth %d, got %#v", month, got.PublishedMonth)
+	}
+
+	if got.PublishedDay == nil || *got.PublishedDay != day {
+		t.Fatalf("expected PublishedDay %d, got %#v", day, got.PublishedDay)
 	}
 }

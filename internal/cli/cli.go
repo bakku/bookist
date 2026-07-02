@@ -30,15 +30,20 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 	switch args[0] {
 	case "serve":
 		return runServe(args[1:], stdout, stderr)
+
 	case "migrate":
 		return runMigrate(args[1:], stderr)
+
 	case "books":
 		return runBooks(args[1:], stdout, stderr)
+
 	case "authors":
 		return runAuthors(args[1:], stdout, stderr)
+
 	case "help", "-h", "--help":
 		printUsage(stdout)
 		return 0
+
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n", args[0])
 		printUsage(stderr)

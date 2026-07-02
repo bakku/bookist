@@ -10,34 +10,75 @@ import (
 
 // ── Create ────────────────────────────────────────────────────────────────────
 
-func TestSQLiteRepositoryCreatePersistsBook(t *testing.T) {
+func TestSQLiteRepositoryCreatePersistsAllFields(t *testing.T) {
 	ctx := context.Background()
 	db := testsupport.OpenMigratedDB(t)
 	repository := books.NewSQLiteRepository(db)
-	isbn := "9783161484100"
 
-	created, err := repository.Create(ctx, books.CreateBookRequest{Title: "The Go Programming Language", ISBN: &isbn})
+	isbn := "9783161484100"
+	lang := "en"
+	pub := "O'Reilly"
+	ed := "2nd"
+	format := books.FormatPaperback
+	purchased := "2025-06-15"
+	pages := 400
+	notes := "Great book"
+	year := 2024
+	month := 6
+	day := 15
+
+	created, err := repository.Create(ctx, books.CreateBookRequest{
+		Title:          "The Go Programming Language",
+		ISBN:           &isbn,
+		Language:       &lang,
+		Publisher:      &pub,
+		Edition:        &ed,
+		Format:         &format,
+		PurchasedAt:    &purchased,
+		Pages:          &pages,
+		Notes:          &notes,
+		PublishedYear:  &year,
+		PublishedMonth: &month,
+		PublishedDay:   &day,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if created.ID == "" {
 		t.Fatal("expected created book to have an ID")
 	}
 
-	testsupport.AssertBookRow(t, db, created.ID, "The Go Programming Language", &isbn)
+	f := string(format)
+	testsupport.AssertBookRowFields(t, db, created.ID, testsupport.BookRowAssertion{
+		Title:          "The Go Programming Language",
+		ISBN:           &isbn,
+		Language:       &lang,
+		Publisher:      &pub,
+		Edition:        &ed,
+		Format:         &f,
+		PurchasedAt:    &purchased,
+		Pages:          &pages,
+		Notes:          &notes,
+		PublishedYear:  &year,
+		PublishedMonth: &month,
+		PublishedDay:   &day,
+	})
 }
 
-func TestSQLiteRepositoryCreatePersistsNullISBN(t *testing.T) {
+func TestSQLiteRepositoryCreatePersistsNullDefaults(t *testing.T) {
 	ctx := context.Background()
 	db := testsupport.OpenMigratedDB(t)
 	repository := books.NewSQLiteRepository(db)
 
-	created, err := repository.Create(ctx, books.CreateBookRequest{Title: "Kindred"})
+	created, err := repository.Create(ctx, books.CreateBookRequest{Title: "Minimal Book"})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	testsupport.AssertBookRow(t, db, created.ID, "Kindred", nil)
+	testsupport.AssertBookRowFields(t, db, created.ID, testsupport.BookRowAssertion{
+		Title: "Minimal Book",
+	})
 }
 
 func TestSQLiteRepositoryCreateWithAuthorIDsPersistsBookAuthors(t *testing.T) {
@@ -79,7 +120,36 @@ func TestSQLiteRepositoryListReadsPersistedBooks(t *testing.T) {
 	ctx := context.Background()
 	db := testsupport.OpenMigratedDB(t)
 	repository := books.NewSQLiteRepository(db)
-	id := testsupport.InsertBookRow(t, db, "The Go Programming Language", testsupport.StringPtr("9783161484100"))
+
+	isbn := "9783161484100"
+	lang := "en"
+	pub := "O'Reilly"
+	ed := "2nd"
+	format := books.FormatPaperback
+	purchased := "2025-06-15"
+	pages := 400
+	notes := "Great book"
+	year := 2024
+	month := 6
+	day := 15
+
+	created, err := repository.Create(ctx, books.CreateBookRequest{
+		Title:          "The Go Programming Language",
+		ISBN:           &isbn,
+		Language:       &lang,
+		Publisher:      &pub,
+		Edition:        &ed,
+		Format:         &format,
+		PurchasedAt:    &purchased,
+		Pages:          &pages,
+		Notes:          &notes,
+		PublishedYear:  &year,
+		PublishedMonth: &month,
+		PublishedDay:   &day,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	listed, err := repository.List(ctx)
 	if err != nil {
@@ -88,13 +158,58 @@ func TestSQLiteRepositoryListReadsPersistedBooks(t *testing.T) {
 	if len(listed) != 1 {
 		t.Fatalf("expected 1 book, got %d", len(listed))
 	}
-	if listed[0].ID != id {
-		t.Fatalf("expected listed ID %s, got %s", id, listed[0].ID)
+
+	got := listed[0]
+
+	if got.ID != created.ID {
+		t.Fatalf("expected ID %s, got %s", created.ID, got.ID)
 	}
-	if listed[0].Title != "The Go Programming Language" {
-		t.Fatalf("expected listed title, got %q", listed[0].Title)
+
+	if got.Title != "The Go Programming Language" {
+		t.Fatalf("expected title %q, got %q", "The Go Programming Language", got.Title)
 	}
-	if listed[0].ISBN == nil || *listed[0].ISBN != "9783161484100" {
-		t.Fatalf("expected listed ISBN, got %#v", listed[0].ISBN)
+
+	if got.ISBN == nil || *got.ISBN != isbn {
+		t.Fatalf("expected ISBN %q, got %#v", isbn, got.ISBN)
+	}
+
+	if got.Language == nil || *got.Language != lang {
+		t.Fatalf("expected Language %q, got %#v", lang, got.Language)
+	}
+
+	if got.Publisher == nil || *got.Publisher != pub {
+		t.Fatalf("expected Publisher %q, got %#v", pub, got.Publisher)
+	}
+
+	if got.Edition == nil || *got.Edition != ed {
+		t.Fatalf("expected Edition %q, got %#v", ed, got.Edition)
+	}
+
+	if got.Format == nil || *got.Format != format {
+		t.Fatalf("expected Format %q, got %#v", format, got.Format)
+	}
+
+	if got.PurchasedAt == nil || *got.PurchasedAt != purchased {
+		t.Fatalf("expected PurchasedAt %q, got %#v", purchased, got.PurchasedAt)
+	}
+
+	if got.Pages == nil || *got.Pages != pages {
+		t.Fatalf("expected Pages %d, got %#v", pages, got.Pages)
+	}
+
+	if got.Notes == nil || *got.Notes != notes {
+		t.Fatalf("expected Notes %q, got %#v", notes, got.Notes)
+	}
+
+	if got.PublishedYear == nil || *got.PublishedYear != year {
+		t.Fatalf("expected PublishedYear %d, got %#v", year, got.PublishedYear)
+	}
+
+	if got.PublishedMonth == nil || *got.PublishedMonth != month {
+		t.Fatalf("expected PublishedMonth %d, got %#v", month, got.PublishedMonth)
+	}
+
+	if got.PublishedDay == nil || *got.PublishedDay != day {
+		t.Fatalf("expected PublishedDay %d, got %#v", day, got.PublishedDay)
 	}
 }

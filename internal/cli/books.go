@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -36,8 +37,10 @@ func runBooks(args []string, stdout io.Writer, stderr io.Writer) int {
 	switch args[0] {
 	case "list":
 		return runBooksList(args[1:], stdout, stderr)
+
 	case "add":
 		return runBooksAdd(args[1:], stdout, stderr)
+
 	default:
 		fmt.Fprintf(stderr, "unknown books command %q\n", args[0])
 		return 2
@@ -90,12 +93,26 @@ func runBooksList(args []string, stdout io.Writer, stderr io.Writer) int {
 
 func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("books add", flag.ContinueOnError)
-	flags.SetOutput(stderr)
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
 	title := flags.String("title", "", "Book title")
 	isbn := flags.String("isbn", "", "Book ISBN")
+
 	var authorFlags stringSliceFlag
 	flags.Var(&authorFlags, "author", "Author name or ID (repeatable)")
+
+	language := flags.String("language", "", "Book language")
+	publisher := flags.String("publisher", "", "Book publisher")
+	edition := flags.String("edition", "", "Book edition")
+	format := flags.String("format", "", "Book format (hardback|paperback|epub)")
+	purchasedAt := flags.String("purchased-at", "", "Date purchased (ISO 8601)")
+	pages := flags.String("pages", "", "Number of pages")
+	notes := flags.String("notes", "", "Personal notes")
+	publishedYear := flags.String("published-year", "", "Publication year")
+	publishedMonth := flags.String("published-month", "", "Publication month (1-12)")
+	publishedDay := flags.String("published-day", "", "Publication day (1-31)")
+
+	flags.SetOutput(stderr)
+
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -103,6 +120,67 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	input := books.CreateBookRequest{Title: *title}
 	if strings.TrimSpace(*isbn) != "" {
 		input.ISBN = isbn
+	}
+
+	if strings.TrimSpace(*language) != "" {
+		input.Language = language
+	}
+
+	if strings.TrimSpace(*publisher) != "" {
+		input.Publisher = publisher
+	}
+
+	if strings.TrimSpace(*edition) != "" {
+		input.Edition = edition
+	}
+
+	if strings.TrimSpace(*format) != "" {
+		f := books.Format(*format)
+		input.Format = &f
+	}
+
+	if strings.TrimSpace(*purchasedAt) != "" {
+		input.PurchasedAt = purchasedAt
+	}
+
+	if strings.TrimSpace(*notes) != "" {
+		input.Notes = notes
+	}
+
+	if strings.TrimSpace(*pages) != "" {
+		p, err := strconv.Atoi(*pages)
+		if err != nil {
+			fmt.Fprintf(stderr, "invalid pages: %v\n", err)
+			return 2
+		}
+		input.Pages = &p
+	}
+
+	if strings.TrimSpace(*publishedYear) != "" {
+		y, err := strconv.Atoi(*publishedYear)
+		if err != nil {
+			fmt.Fprintf(stderr, "invalid published-year: %v\n", err)
+			return 2
+		}
+		input.PublishedYear = &y
+	}
+
+	if strings.TrimSpace(*publishedMonth) != "" {
+		m, err := strconv.Atoi(*publishedMonth)
+		if err != nil {
+			fmt.Fprintf(stderr, "invalid published-month: %v\n", err)
+			return 2
+		}
+		input.PublishedMonth = &m
+	}
+
+	if strings.TrimSpace(*publishedDay) != "" {
+		d, err := strconv.Atoi(*publishedDay)
+		if err != nil {
+			fmt.Fprintf(stderr, "invalid published-day: %v\n", err)
+			return 2
+		}
+		input.PublishedDay = &d
 	}
 
 	if len(authorFlags) > 0 {

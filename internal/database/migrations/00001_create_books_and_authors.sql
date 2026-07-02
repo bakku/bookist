@@ -3,6 +3,16 @@ CREATE TABLE books (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     isbn TEXT NULL,
+    language TEXT NULL,
+    publisher TEXT NULL,
+    edition TEXT NULL,
+    format TEXT NULL,
+    purchased_at TEXT NULL,
+    pages INTEGER NULL,
+    notes TEXT NULL,
+    published_year INTEGER NULL,
+    published_month INTEGER NULL,
+    published_day INTEGER NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );

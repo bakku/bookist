@@ -20,7 +20,9 @@ func NewSQLiteRepository(db *sql.DB) *SQLiteRepository {
 
 func (r *SQLiteRepository) List(ctx context.Context) ([]Book, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, title, isbn, created_at, updated_at
+		SELECT id, title, isbn, language, publisher, edition, format, 
+		    purchased_at, pages, notes, published_year, published_month, 
+		    published_day, created_at, updated_at
 		FROM books
 		ORDER BY id ASC
 	`)
@@ -60,13 +62,68 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 		isbn = sql.NullString{String: *input.ISBN, Valid: true}
 	}
 
+	language := sql.NullString{}
+	if input.Language != nil {
+		language = sql.NullString{String: *input.Language, Valid: true}
+	}
+
+	publisher := sql.NullString{}
+	if input.Publisher != nil {
+		publisher = sql.NullString{String: *input.Publisher, Valid: true}
+	}
+
+	edition := sql.NullString{}
+	if input.Edition != nil {
+		edition = sql.NullString{String: *input.Edition, Valid: true}
+	}
+
+	var format sql.NullString
+	if input.Format != nil {
+		format = sql.NullString{String: string(*input.Format), Valid: true}
+	}
+
+	purchasedAt := sql.NullString{}
+	if input.PurchasedAt != nil {
+		purchasedAt = sql.NullString{String: *input.PurchasedAt, Valid: true}
+	}
+
+	notes := sql.NullString{}
+	if input.Notes != nil {
+		notes = sql.NullString{String: *input.Notes, Valid: true}
+	}
+
+	pages := sql.NullInt64{}
+	if input.Pages != nil {
+		pages = sql.NullInt64{Int64: int64(*input.Pages), Valid: true}
+	}
+
+	publishedYear := sql.NullInt64{}
+	if input.PublishedYear != nil {
+		publishedYear = sql.NullInt64{Int64: int64(*input.PublishedYear), Valid: true}
+	}
+
+	publishedMonth := sql.NullInt64{}
+	if input.PublishedMonth != nil {
+		publishedMonth = sql.NullInt64{Int64: int64(*input.PublishedMonth), Valid: true}
+	}
+
+	publishedDay := sql.NullInt64{}
+	if input.PublishedDay != nil {
+		publishedDay = sql.NullInt64{Int64: int64(*input.PublishedDay), Valid: true}
+	}
+
 	bookID := uuid.NewString()
 
 	row := tx.QueryRowContext(ctx, `
-		INSERT INTO books (id, title, isbn, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?)
-		RETURNING id, title, isbn, created_at, updated_at
-	`, bookID, input.Title, isbn, createdAt, updatedAt)
+		INSERT INTO books (id, title, isbn, language, publisher, edition, format, 
+		                   purchased_at, pages, notes, published_year, published_month, 
+		                   published_day, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		RETURNING id, title, isbn, language, publisher, edition, format, purchased_at, 
+			pages, notes, published_year, published_month, published_day, 
+			created_at, updated_at
+	`, bookID, input.Title, isbn, language, publisher, edition, format, purchasedAt,
+		pages, notes, publishedYear, publishedMonth, publishedDay, createdAt, updatedAt)
 
 	book, err := scanBook(row)
 	if err != nil {
@@ -99,10 +156,20 @@ type bookScanner interface {
 func scanBook(scanner bookScanner) (Book, error) {
 	var book Book
 	var isbn sql.NullString
+	var language sql.NullString
+	var publisher sql.NullString
+	var edition sql.NullString
+	var format sql.NullString
+	var purchasedAt sql.NullString
+	var pages sql.NullInt64
+	var notes sql.NullString
+	var publishedYear sql.NullInt64
+	var publishedMonth sql.NullInt64
+	var publishedDay sql.NullInt64
 	var createdAt string
 	var updatedAt string
 
-	if err := scanner.Scan(&book.ID, &book.Title, &isbn, &createdAt, &updatedAt); err != nil {
+	if err := scanner.Scan(&book.ID, &book.Title, &isbn, &language, &publisher, &edition, &format, &purchasedAt, &pages, &notes, &publishedYear, &publishedMonth, &publishedDay, &createdAt, &updatedAt); err != nil {
 		return Book{}, err
 	}
 
@@ -110,11 +177,58 @@ func scanBook(scanner bookScanner) (Book, error) {
 		book.ISBN = &isbn.String
 	}
 
+	if language.Valid {
+		book.Language = &language.String
+	}
+
+	if publisher.Valid {
+		book.Publisher = &publisher.String
+	}
+
+	if edition.Valid {
+		book.Edition = &edition.String
+	}
+
+	if format.Valid {
+		f := Format(format.String)
+		book.Format = &f
+	}
+
+	if purchasedAt.Valid {
+		book.PurchasedAt = &purchasedAt.String
+	}
+
+	if pages.Valid {
+		p := int(pages.Int64)
+		book.Pages = &p
+	}
+
+	if notes.Valid {
+		book.Notes = &notes.String
+	}
+
+	if publishedYear.Valid {
+		y := int(publishedYear.Int64)
+		book.PublishedYear = &y
+	}
+
+	if publishedMonth.Valid {
+		m := int(publishedMonth.Int64)
+		book.PublishedMonth = &m
+	}
+
+	if publishedDay.Valid {
+		d := int(publishedDay.Int64)
+		book.PublishedDay = &d
+	}
+
 	var err error
+
 	book.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
 	if err != nil {
 		return Book{}, fmt.Errorf("parse created_at: %w", err)
 	}
+
 	book.UpdatedAt, err = time.Parse(time.RFC3339, updatedAt)
 	if err != nil {
 		return Book{}, fmt.Errorf("parse updated_at: %w", err)

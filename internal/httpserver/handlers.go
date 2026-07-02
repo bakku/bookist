@@ -92,10 +92,17 @@ func writeCreateBookError(w http.ResponseWriter, err error) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
 	if errors.Is(err, books.ErrAuthorNotFound) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	if errors.Is(err, books.ErrInvalidFormat) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	http.Error(w, "failed to create book", http.StatusInternalServerError)
 }
 
@@ -104,6 +111,7 @@ func writeCreateAuthorError(w http.ResponseWriter, err error) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
 	http.Error(w, "failed to create author", http.StatusInternalServerError)
 }
 

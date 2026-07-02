@@ -127,20 +127,26 @@ func (r *SQLiteRepository) ListByBookIDs(ctx context.Context, bookIDs []string) 
 		var bookID string
 		var author Author
 		var name, createdAt, updatedAt string
+
 		if err := rows.Scan(&bookID, &author.ID, &name, &createdAt, &updatedAt); err != nil {
 			return nil, err
 		}
+
 		author.Name = name
+
 		author.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
 		if err != nil {
 			return nil, fmt.Errorf("parse created_at: %w", err)
 		}
+
 		author.UpdatedAt, err = time.Parse(time.RFC3339, updatedAt)
 		if err != nil {
 			return nil, fmt.Errorf("parse updated_at: %w", err)
 		}
+
 		result[bookID] = append(result[bookID], author)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -162,10 +168,12 @@ func scanAuthor(scanner authorScanner) (Author, error) {
 	}
 
 	var err error
+
 	author.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
 	if err != nil {
 		return Author{}, fmt.Errorf("parse created_at: %w", err)
 	}
+
 	author.UpdatedAt, err = time.Parse(time.RFC3339, updatedAt)
 	if err != nil {
 		return Author{}, fmt.Errorf("parse updated_at: %w", err)
