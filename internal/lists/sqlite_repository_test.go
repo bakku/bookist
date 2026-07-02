@@ -1,0 +1,237 @@
+package lists_test
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"bakku.dev/bookist/internal/lists"
+	"bakku.dev/bookist/internal/testsupport"
+	"github.com/google/uuid"
+)
+
+// ── Create ────────────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryCreatePersistsList(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+
+	created, err := repository.Create(ctx, lists.CreateListRequest{Name: "Want to Buy"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.ID == "" {
+		t.Fatal("expected created list to have an ID")
+	}
+	if _, err := uuid.Parse(created.ID); err != nil {
+		t.Fatalf("expected valid UUID, got %q: %v", created.ID, err)
+	}
+
+	testsupport.AssertListRow(t, db, created.ID, "Want to Buy")
+}
+
+func TestSQLiteRepositoryCreateWithDescription(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+
+	desc := "Books I want to purchase"
+	created, err := repository.Create(ctx, lists.CreateListRequest{Name: "Want to Buy", Description: &desc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Description == nil || *created.Description != "Books I want to purchase" {
+		t.Fatalf("expected description 'Books I want to purchase', got %#v", created.Description)
+	}
+}
+
+func TestSQLiteRepositoryCreateWithNilDescription(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+
+	created, err := repository.Create(ctx, lists.CreateListRequest{Name: "Want to Buy"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Description != nil {
+		t.Fatalf("expected nil description, got %q", *created.Description)
+	}
+}
+
+// ── List ──────────────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryListReadsPersistedLists(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+	id1 := testsupport.InsertListRow(t, db, "Nightstand")
+	id2 := testsupport.InsertListRow(t, db, "Want to Buy")
+
+	listed, err := repository.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 2 {
+		t.Fatalf("expected 2 lists, got %d", len(listed))
+	}
+	if listed[0].ID != id1 {
+		t.Fatalf("expected first list ID %s, got %s", id1, listed[0].ID)
+	}
+	if listed[0].Name != "Nightstand" {
+		t.Fatalf("expected Nightstand, got %q", listed[0].Name)
+	}
+	if listed[1].ID != id2 {
+		t.Fatalf("expected second list ID %s, got %s", id2, listed[1].ID)
+	}
+	if listed[1].Name != "Want to Buy" {
+		t.Fatalf("expected Want to Buy, got %q", listed[1].Name)
+	}
+}
+
+// ── GetByID ───────────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryGetByIDReturnsList(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+	id := testsupport.InsertListRow(t, db, "Want to Buy")
+
+	got, err := repository.GetByID(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != id {
+		t.Fatalf("expected ID %s, got %s", id, got.ID)
+	}
+	if got.Name != "Want to Buy" {
+		t.Fatalf("expected Want to Buy, got %q", got.Name)
+	}
+}
+
+func TestSQLiteRepositoryGetByIDReturnsErrListNotFound(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+
+	_, err := repository.GetByID(ctx, uuid.NewString())
+	if !errors.Is(err, lists.ErrListNotFound) {
+		t.Fatalf("expected ErrListNotFound, got %v", err)
+	}
+}
+
+// ── AddBookToList ─────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryAddBookToListPersistsRow(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+
+	listID := testsupport.InsertListRow(t, db, "Want to Buy")
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+
+	err := repository.AddBookToList(ctx, listID, bookID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testsupport.AssertBookListRow(t, db, listID, bookID)
+}
+
+func TestSQLiteRepositoryAddBookToListReturnsErrBookAlreadyInList(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+
+	listID := testsupport.InsertListRow(t, db, "Want to Buy")
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+
+	err := repository.AddBookToList(ctx, listID, bookID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = repository.AddBookToList(ctx, listID, bookID)
+	if !errors.Is(err, lists.ErrBookAlreadyInList) {
+		t.Fatalf("expected ErrBookAlreadyInList, got %v", err)
+	}
+}
+
+func TestSQLiteRepositoryAddBookToListReturnsErrListNotFound(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+
+	err := repository.AddBookToList(ctx, uuid.NewString(), bookID)
+	if !errors.Is(err, lists.ErrListNotFound) {
+		t.Fatalf("expected ErrListNotFound, got %v", err)
+	}
+}
+
+func TestSQLiteRepositoryAddBookToListReturnsErrBookNotFound(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+
+	listID := testsupport.InsertListRow(t, db, "Want to Buy")
+
+	err := repository.AddBookToList(ctx, listID, uuid.NewString())
+	if !errors.Is(err, lists.ErrBookNotFound) {
+		t.Fatalf("expected ErrBookNotFound, got %v", err)
+	}
+}
+
+// ── ListBooks ─────────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryListBooksReturnsBooksInList(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+
+	listID := testsupport.InsertListRow(t, db, "Want to Buy")
+	bookID1 := testsupport.InsertBookRow(t, db, "Dune", nil)
+	bookID2 := testsupport.InsertBookRow(t, db, "Foundation", nil)
+
+	if err := repository.AddBookToList(ctx, listID, bookID1); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.AddBookToList(ctx, listID, bookID2); err != nil {
+		t.Fatal(err)
+	}
+
+	bookList, err := repository.ListBooks(ctx, listID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bookList) != 2 {
+		t.Fatalf("expected 2 books, got %d", len(bookList))
+	}
+	if bookList[0].Title != "Dune" {
+		t.Fatalf("expected Dune, got %q", bookList[0].Title)
+	}
+	if bookList[1].Title != "Foundation" {
+		t.Fatalf("expected Foundation, got %q", bookList[1].Title)
+	}
+}
+
+func TestSQLiteRepositoryListBooksReturnsEmptySliceForEmptyList(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+
+	listID := testsupport.InsertListRow(t, db, "Want to Buy")
+
+	bookList, err := repository.ListBooks(ctx, listID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bookList == nil {
+		t.Fatal("expected non-nil slice")
+	}
+	if len(bookList) != 0 {
+		t.Fatalf("expected empty slice, got %d books", len(bookList))
+	}
+}
