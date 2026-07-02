@@ -1,16 +1,22 @@
 package books
 
-import "time"
+import (
+	"time"
+
+	"bakku.dev/bookist/internal/authors"
+)
 
 type Book struct {
-	ID        int       `json:"id"`
-	Title     string    `json:"title"`
-	ISBN      *string   `json:"isbn"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID        string           `json:"id"`
+	Title     string           `json:"title"`
+	ISBN      *string          `json:"isbn"`
+	Authors   []authors.Author `json:"authors"`
+	CreatedAt time.Time        `json:"created_at"`
+	UpdatedAt time.Time        `json:"updated_at"`
 }
 
-type CreateBookInput struct {
-	Title string  `json:"title"`
-	ISBN  *string `json:"isbn"`
+type CreateBookRequest struct {
+	Title     string   `json:"title"`
+	ISBN      *string  `json:"isbn"`
+	AuthorIDs []string `json:"author_ids"`
 }

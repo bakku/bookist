@@ -4,16 +4,18 @@ import (
 	"html/template"
 	"net/http"
 
+	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
 	"bakku.dev/bookist/internal/web"
 )
 
 type Server struct {
 	books     *books.Service
+	authors   *authors.Service
 	templates *template.Template
 }
 
-func New(books *books.Service) (*Server, error) {
+func New(books *books.Service, authors *authors.Service) (*Server, error) {
 	templates, err := web.Templates()
 	if err != nil {
 		return nil, err
@@ -21,6 +23,7 @@ func New(books *books.Service) (*Server, error) {
 
 	return &Server{
 		books:     books,
+		authors:   authors,
 		templates: templates,
 	}, nil
 }
@@ -30,6 +33,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /", s.handleIndex)
 	mux.HandleFunc("GET /api/books", s.handleAPIListBooks)
 	mux.HandleFunc("POST /api/books", s.handleAPICreateBook)
+	mux.HandleFunc("GET /api/authors", s.handleAPIListAuthors)
+	mux.HandleFunc("POST /api/authors", s.handleAPICreateAuthor)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(web.StaticFS()))))
 	return mux
 }

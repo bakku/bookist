@@ -14,11 +14,11 @@ func TestSQLiteRepositoryCreatePersistsBook(t *testing.T) {
 	repository := books.NewSQLiteRepository(db)
 	isbn := "9783161484100"
 
-	created, err := repository.Create(ctx, books.CreateBookInput{Title: "The Go Programming Language", ISBN: &isbn})
+	created, err := repository.Create(ctx, books.CreateBookRequest{Title: "The Go Programming Language", ISBN: &isbn})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if created.ID == 0 {
+	if created.ID == "" {
 		t.Fatal("expected created book to have an ID")
 	}
 
@@ -30,7 +30,7 @@ func TestSQLiteRepositoryCreatePersistsNullISBN(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	repository := books.NewSQLiteRepository(db)
 
-	created, err := repository.Create(ctx, books.CreateBookInput{Title: "Kindred"})
+	created, err := repository.Create(ctx, books.CreateBookRequest{Title: "Kindred"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestSQLiteRepositoryListReadsPersistedBooks(t *testing.T) {
 		t.Fatalf("expected 1 book, got %d", len(listed))
 	}
 	if listed[0].ID != id {
-		t.Fatalf("expected listed ID %d, got %d", id, listed[0].ID)
+		t.Fatalf("expected listed ID %s, got %s", id, listed[0].ID)
 	}
 	if listed[0].Title != "The Go Programming Language" {
 		t.Fatalf("expected listed title, got %q", listed[0].Title)
@@ -60,4 +60,37 @@ func TestSQLiteRepositoryListReadsPersistedBooks(t *testing.T) {
 	if listed[0].ISBN == nil || *listed[0].ISBN != "9783161484100" {
 		t.Fatalf("expected listed ISBN, got %#v", listed[0].ISBN)
 	}
+}
+
+func TestSQLiteRepositoryCreateWithAuthorIDsPersistsBookAuthors(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+
+	authorID := testsupport.InsertAuthorRow(t, db, "Test Author")
+
+	created, err := repository.Create(ctx, books.CreateBookRequest{
+		Title:     "Book With Authors",
+		AuthorIDs: []string{authorID},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testsupport.AssertBookRow(t, db, created.ID, "Book With Authors", nil)
+	testsupport.AssertBookAuthors(t, db, created.ID, authorID)
+}
+
+func TestSQLiteRepositoryCreateWithNoAuthorIDsPersistsBookOnly(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+
+	created, err := repository.Create(ctx, books.CreateBookRequest{Title: "Solo Book"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testsupport.AssertBookRow(t, db, created.ID, "Solo Book", nil)
+	testsupport.AssertBookAuthors(t, db, created.ID)
 }

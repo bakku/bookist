@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"bakku.dev/bookist/internal/authors"
+	"github.com/google/uuid"
 )
 
 type SQLiteRepository struct {
@@ -41,23 +44,52 @@ func (r *SQLiteRepository) List(ctx context.Context) ([]Book, error) {
 	return books, nil
 }
 
-func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookInput) (Book, error) {
+func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) (Book, error) {
 	now := time.Now().UTC()
 	createdAt := now.Format(time.RFC3339)
 	updatedAt := createdAt
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Book{}, err
+	}
+	defer tx.Rollback()
 
 	isbn := sql.NullString{}
 	if input.ISBN != nil {
 		isbn = sql.NullString{String: *input.ISBN, Valid: true}
 	}
 
-	row := r.db.QueryRowContext(ctx, `
-		INSERT INTO books (title, isbn, created_at, updated_at)
-		VALUES (?, ?, ?, ?)
-		RETURNING id, title, isbn, created_at, updated_at
-	`, input.Title, isbn, createdAt, updatedAt)
+	bookID := uuid.NewString()
 
-	return scanBook(row)
+	row := tx.QueryRowContext(ctx, `
+		INSERT INTO books (id, title, isbn, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		RETURNING id, title, isbn, created_at, updated_at
+	`, bookID, input.Title, isbn, createdAt, updatedAt)
+
+	book, err := scanBook(row)
+	if err != nil {
+		return Book{}, err
+	}
+
+	for _, authorID := range input.AuthorIDs {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO book_authors (book_id, author_id)
+			VALUES (?, ?)
+		`, book.ID, authorID)
+		if err != nil {
+			return Book{}, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return Book{}, err
+	}
+
+	book.Authors = []authors.Author{}
+
+	return book, nil
 }
 
 type bookScanner interface {

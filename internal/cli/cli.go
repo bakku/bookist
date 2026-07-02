@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
 	"bakku.dev/bookist/internal/database"
 	"bakku.dev/bookist/internal/httpserver"
@@ -33,6 +34,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 		return runMigrate(args[1:], stderr)
 	case "books":
 		return runBooks(args[1:], stdout, stderr)
+	case "authors":
+		return runAuthors(args[1:], stdout, stderr)
 	case "help", "-h", "--help":
 		printUsage(stdout)
 		return 0
@@ -65,8 +68,10 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 
-	bookService := books.NewService(books.NewSQLiteRepository(db))
-	server, err := httpserver.New(bookService)
+	authorRepo := authors.NewSQLiteRepository(db)
+	authorService := authors.NewService(authorRepo)
+	bookService := books.NewService(books.NewSQLiteRepository(db), authorRepo)
+	server, err := httpserver.New(bookService, authorService)
 	if err != nil {
 		fmt.Fprintf(stderr, "create server: %v\n", err)
 		return 1
@@ -120,6 +125,8 @@ func printUsage(w io.Writer) {
   %[1]s serve [--addr :8080] [--db bookist.db]
   %[1]s migrate [--db bookist.db]
   %[1]s books list [--server http://localhost:8080]
-  %[1]s books add --title TITLE [--isbn ISBN] [--server http://localhost:8080]
+  %[1]s books add --title TITLE [--isbn ISBN] [--author NAME_OR_ID ...] [--server http://localhost:8080]
+  %[1]s authors list [--server http://localhost:8080]
+  %[1]s authors add --name NAME [--server http://localhost:8080]
 `, program)
 }

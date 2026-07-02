@@ -1,0 +1,8 @@
+# IDE
+.idea
+
+# binary
+cmd/bookist/bookist
+
+# SQLite
+*.db*
