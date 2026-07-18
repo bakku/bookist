@@ -74,7 +74,9 @@ func createAuthor(serverURL, name string) (authors.Author, error) {
 
 func runAuthors(args []string, stdout io.Writer, stderr io.Writer) int {
 	if len(args) == 0 {
-		_, _ = fmt.Fprintln(stderr, "missing authors command")
+		_, _ = fmt.Fprintln(stderr, "Error: missing authors command")
+		_, _ = fmt.Fprintln(stderr)
+		printAuthorsHelp(stderr)
 		return 2
 	}
 
@@ -85,10 +87,27 @@ func runAuthors(args []string, stdout io.Writer, stderr io.Writer) int {
 	case "add":
 		return runAuthorsAdd(args[1:], stdout, stderr)
 
+	case "help", "-h", "--help":
+		printAuthorsHelp(stdout)
+		return 0
+
 	default:
-		_, _ = fmt.Fprintf(stderr, "unknown authors command %q\n", args[0])
+		_, _ = fmt.Fprintf(stderr, "Error: unknown authors command %q\n\n", args[0])
+		printAuthorsHelp(stderr)
 		return 2
 	}
+}
+
+func printAuthorsHelp(w io.Writer) {
+	printCommandHelp(w, commandHelp{
+		name:        "bookist authors",
+		usage:       "bookist authors [command [command options]]",
+		description: "Manage authors",
+		commands: []helpCommand{
+			{name: "list", description: "List authors"},
+			{name: "add", description: "Add an author"},
+		},
+	}, nil)
 }
 
 func runAuthorsList(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -96,10 +115,13 @@ func runAuthorsList(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
 
-	flags.SetOutput(stderr)
-
-	if err := flags.Parse(args); err != nil {
-		return 2
+	help := commandHelp{
+		name:        "bookist authors list",
+		usage:       "bookist authors list [options]",
+		description: "List authors",
+	}
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
 	}
 
 	listed, err := fetchAuthors(*serverURL)
@@ -121,10 +143,13 @@ func runAuthorsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
 	name := flags.String("name", "", "Author name")
 
-	flags.SetOutput(stderr)
-
-	if err := flags.Parse(args); err != nil {
-		return 2
+	help := commandHelp{
+		name:        "bookist authors add",
+		usage:       "bookist authors add [options]",
+		description: "Add an author",
+	}
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
 	}
 
 	author, err := createAuthor(*serverURL, *name)
