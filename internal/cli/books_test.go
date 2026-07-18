@@ -14,28 +14,83 @@ import (
 
 // ── Books List ─────────────────────────────────────────────────────────────────
 
-func TestBooksListPrintsBooks(t *testing.T) {
+func TestBooksListTableFormats(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode([]books.Book{
+		_ = json.NewEncoder(w).Encode([]books.Book{
 			{ID: "id-1", Title: "Dune", ISBN: new("9780441172719")},
 			{ID: "id-2", Title: "Kindred", ISBN: nil},
 		})
 	}))
 	defer server.Close()
 
-	var stdout, stderr strings.Builder
-	exitCode := cli.Run([]string{"books", "list", "--server", server.URL}, &stdout, &stderr)
+	tests := []struct {
+		name     string
+		format   string
+		expected string
+	}{
+		{name: "default TSV", expected: "id-1\tDune\t9780441172719\nid-2\tKindred\t\n"},
+		{name: "explicit TSV", format: "tsv", expected: "id-1\tDune\t9780441172719\nid-2\tKindred\t\n"},
+		{name: "pretty", format: "pretty", expected: "ID    TITLE    ISBN\nid-1  Dune     9780441172719\nid-2  Kindred\n"},
+	}
 
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			args := []string{"books", "list", "--server", server.URL}
+			if test.format != "" {
+				args = append(args, "--format", test.format)
+			}
+
+			exitCode, stdout, stderr := runCLI(args)
+			if exitCode != 0 {
+				t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
+			}
+			if stderr != "" {
+				t.Fatalf("expected empty stderr, got %q", stderr)
+			}
+			if stdout != test.expected {
+				t.Fatalf("expected stdout %q, got %q", test.expected, stdout)
+			}
+		})
+	}
+}
+
+func TestBooksListJSONPreservesNullableFields(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]books.Book{
+			{
+				ID:      "id-1",
+				Title:   "Dune",
+				ISBN:    new("9780441172719"),
+				Authors: []authors.Author{{ID: "author-1", Name: "Frank Herbert"}},
+			},
+			{ID: "id-2", Title: "Kindred", ISBN: nil},
+		})
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"books", "list", "--server", server.URL, "--format", "json"})
 	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr.String())
+		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr)
 	}
 
-	output := strings.TrimSpace(stdout.String())
-	if !strings.Contains(output, "id-1\tDune\t9780441172719") {
-		t.Fatalf("expected output to contain book with ISBN, got %q", output)
+	var listed []books.Book
+	if err := json.Unmarshal([]byte(stdout), &listed); err != nil {
+		t.Fatalf("expected valid JSON, got %q: %v", stdout, err)
 	}
-	if !strings.Contains(output, "id-2\tKindred") {
-		t.Fatalf("expected output to contain book without ISBN, got %q", output)
+	if len(listed) != 2 {
+		t.Fatalf("expected 2 books, got %d", len(listed))
+	}
+	if listed[0].ISBN == nil || *listed[0].ISBN != "9780441172719" {
+		t.Fatalf("expected populated ISBN, got %#v", listed[0].ISBN)
+	}
+	if len(listed[0].Authors) != 1 || listed[0].Authors[0].Name != "Frank Herbert" {
+		t.Fatalf("expected complete book JSON with authors, got %#v", listed[0])
+	}
+	if listed[1].ISBN != nil || listed[1].Publisher != nil {
+		t.Fatalf("expected nullable fields to remain nil, got %#v", listed[1])
 	}
 }
 

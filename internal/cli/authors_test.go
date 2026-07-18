@@ -42,10 +42,10 @@ func TestAuthorsAddPrintsIDAndName(t *testing.T) {
 
 // ── Authors List ───────────────────────────────────────────────────────────────
 
-func TestAuthorsListPrintsIDAndName(t *testing.T) {
+func TestAuthorsListTableFormats(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/api/authors" {
-			json.NewEncoder(w).Encode([]authors.Author{
+			_ = json.NewEncoder(w).Encode([]authors.Author{
 				{ID: "id-1", Name: "Author One"},
 				{ID: "id-2", Name: "Author Two"},
 			})
@@ -53,16 +53,56 @@ func TestAuthorsListPrintsIDAndName(t *testing.T) {
 	}))
 	defer server.Close()
 
-	var stdout, stderr strings.Builder
-	exitCode := cli.Run([]string{"authors", "list", "--server", server.URL}, &stdout, &stderr)
+	tests := []struct {
+		name     string
+		format   string
+		expected string
+	}{
+		{name: "default TSV", expected: "id-1\tAuthor One\nid-2\tAuthor Two\n"},
+		{name: "explicit TSV", format: "tsv", expected: "id-1\tAuthor One\nid-2\tAuthor Two\n"},
+		{name: "pretty", format: "pretty", expected: "ID    NAME\nid-1  Author One\nid-2  Author Two\n"},
+	}
 
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			args := []string{"authors", "list", "--server", server.URL}
+			if test.format != "" {
+				args = append(args, "--format", test.format)
+			}
+
+			exitCode, stdout, stderr := runCLI(args)
+			if exitCode != 0 {
+				t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
+			}
+			if stderr != "" {
+				t.Fatalf("expected empty stderr, got %q", stderr)
+			}
+			if stdout != test.expected {
+				t.Fatalf("expected stdout %q, got %q", test.expected, stdout)
+			}
+		})
+	}
+}
+
+func TestAuthorsListJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]authors.Author{{ID: "id-1", Name: "Author One"}})
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"authors", "list", "--server", server.URL, "--format", "json"})
 	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr.String())
+		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
 	}
-	if !strings.Contains(stdout.String(), "id-1\tAuthor One") {
-		t.Fatalf("expected stdout to contain 'id-1\\tAuthor One', got %q", stdout.String())
+	if stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr)
 	}
-	if !strings.Contains(stdout.String(), "id-2\tAuthor Two") {
-		t.Fatalf("expected stdout to contain 'id-2\\tAuthor Two', got %q", stdout.String())
+
+	var listed []authors.Author
+	if err := json.Unmarshal([]byte(stdout), &listed); err != nil {
+		t.Fatalf("expected valid JSON, got %q: %v", stdout, err)
+	}
+	if len(listed) != 1 || listed[0].ID != "id-1" || listed[0].Name != "Author One" {
+		t.Fatalf("expected complete author JSON, got %#v", listed)
 	}
 }

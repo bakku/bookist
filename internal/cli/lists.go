@@ -60,6 +60,7 @@ func runListsList(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("lists list", flag.ContinueOnError)
 
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	formatValue := flags.String("format", string(outputFormatTSV), "Output format (tsv|pretty|json)")
 
 	help := commandHelp{
 		name:        "bookist lists list",
@@ -70,36 +71,26 @@ func runListsList(args []string, stdout io.Writer, stderr io.Writer) int {
 		return exitCode
 	}
 
-	endpoint, err := joinURL(*serverURL, "/api/lists")
+	format, err := parseOutputFormat(*formatValue)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}
 
-	client := http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(endpoint)
+	listed, err := fetchLists(*serverURL)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "list lists: %v\n", err)
 		return 1
 	}
 
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		_, _ = fmt.Fprintf(stderr, "list lists: server returned %s\n", resp.Status)
-		return 1
-	}
-
-	var listed []lists.List
-	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
-		_, _ = fmt.Fprintf(stderr, "decode lists: %v\n", err)
-		return 1
-	}
-
+	rows := make([][]string, 0, len(listed))
 	for _, list := range listed {
-		_, _ = fmt.Fprintf(stdout, "%s\t%s\n", list.ID, list.Name)
+		rows = append(rows, []string{list.ID, list.Name})
+	}
+
+	if err := writeListOutput(stdout, format, listed, []string{"ID", "NAME"}, rows); err != nil {
+		_, _ = fmt.Fprintf(stderr, "list lists: write output: %v\n", err)
+		return 1
 	}
 
 	return 0
