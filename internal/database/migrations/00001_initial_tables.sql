@@ -27,8 +27,22 @@ CREATE TABLE book_authors (
     author_id TEXT NOT NULL REFERENCES authors(id) ON DELETE CASCADE,
     PRIMARY KEY (book_id, author_id)
 );
+CREATE TABLE lists (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE book_lists (
+    list_id TEXT NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+    book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    PRIMARY KEY (list_id, book_id)
+);
 
 -- +goose Down
+DROP TABLE book_lists;
+DROP TABLE lists;
 DROP TABLE book_authors;
 DROP TABLE authors;
 DROP TABLE books;

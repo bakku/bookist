@@ -23,7 +23,9 @@ func fetchAuthors(serverURL string) ([]authors.Author, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetch authors: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("fetch authors: server returned %s", resp.Status)
@@ -54,7 +56,9 @@ func createAuthor(serverURL, name string) (authors.Author, error) {
 	if err != nil {
 		return authors.Author{}, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusCreated {
 		return authors.Author{}, fmt.Errorf("server returned %s", resp.Status)
@@ -70,7 +74,7 @@ func createAuthor(serverURL, name string) (authors.Author, error) {
 
 func runAuthors(args []string, stdout io.Writer, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "missing authors command")
+		_, _ = fmt.Fprintln(stderr, "missing authors command")
 		return 2
 	}
 
@@ -82,13 +86,14 @@ func runAuthors(args []string, stdout io.Writer, stderr io.Writer) int {
 		return runAuthorsAdd(args[1:], stdout, stderr)
 
 	default:
-		fmt.Fprintf(stderr, "unknown authors command %q\n", args[0])
+		_, _ = fmt.Fprintf(stderr, "unknown authors command %q\n", args[0])
 		return 2
 	}
 }
 
 func runAuthorsList(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("authors list", flag.ContinueOnError)
+
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
 
 	flags.SetOutput(stderr)
@@ -99,12 +104,12 @@ func runAuthorsList(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	listed, err := fetchAuthors(*serverURL)
 	if err != nil {
-		fmt.Fprintf(stderr, "list authors: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "list authors: %v\n", err)
 		return 1
 	}
 
 	for _, author := range listed {
-		fmt.Fprintf(stdout, "%s\t%s\n", author.ID, author.Name)
+		_, _ = fmt.Fprintf(stdout, "%s\t%s\n", author.ID, author.Name)
 	}
 
 	return 0
@@ -112,6 +117,7 @@ func runAuthorsList(args []string, stdout io.Writer, stderr io.Writer) int {
 
 func runAuthorsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("authors add", flag.ContinueOnError)
+
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
 	name := flags.String("name", "", "Author name")
 
@@ -123,10 +129,10 @@ func runAuthorsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	author, err := createAuthor(*serverURL, *name)
 	if err != nil {
-		fmt.Fprintf(stderr, "add author: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "add author: %v\n", err)
 		return 1
 	}
 
-	fmt.Fprintf(stdout, "%s\t%s\n", author.ID, author.Name)
+	_, _ = fmt.Fprintf(stdout, "%s\t%s\n", author.ID, author.Name)
 	return 0
 }

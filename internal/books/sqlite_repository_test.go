@@ -213,3 +213,74 @@ func TestSQLiteRepositoryListReadsPersistedBooks(t *testing.T) {
 		t.Fatalf("expected PublishedDay %d, got %#v", day, got.PublishedDay)
 	}
 }
+
+// ── ListByListID ──────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryListByListIDReturnsBooksInList(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+
+	listID := testsupport.InsertListRow(t, db, "Want to Buy")
+	bookID1 := testsupport.InsertBookRow(t, db, "Dune", nil)
+	bookID2 := testsupport.InsertBookRow(t, db, "Foundation", nil)
+	testsupport.InsertBookListRow(t, db, listID, bookID1)
+	testsupport.InsertBookListRow(t, db, listID, bookID2)
+
+	bookList, err := repository.ListByListID(ctx, listID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bookList) != 2 {
+		t.Fatalf("expected 2 books, got %d", len(bookList))
+	}
+	if bookList[0].Title != "Dune" {
+		t.Fatalf("expected Dune, got %q", bookList[0].Title)
+	}
+	if bookList[1].Title != "Foundation" {
+		t.Fatalf("expected Foundation, got %q", bookList[1].Title)
+	}
+}
+
+func TestSQLiteRepositoryListByListIDReturnsEmptySliceForEmptyList(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+
+	listID := testsupport.InsertListRow(t, db, "Want to Buy")
+
+	bookList, err := repository.ListByListID(ctx, listID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bookList == nil {
+		t.Fatal("expected non-nil slice")
+	}
+	if len(bookList) != 0 {
+		t.Fatalf("expected empty slice, got %d books", len(bookList))
+	}
+}
+
+func TestSQLiteRepositoryListByListIDDoesNotReturnBooksFromOtherLists(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+
+	listID1 := testsupport.InsertListRow(t, db, "Want to Buy")
+	listID2 := testsupport.InsertListRow(t, db, "Nightstand")
+	bookID1 := testsupport.InsertBookRow(t, db, "Dune", nil)
+	bookID2 := testsupport.InsertBookRow(t, db, "Foundation", nil)
+	testsupport.InsertBookListRow(t, db, listID1, bookID1)
+	testsupport.InsertBookListRow(t, db, listID2, bookID2)
+
+	bookList, err := repository.ListByListID(ctx, listID1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bookList) != 1 {
+		t.Fatalf("expected 1 book, got %d", len(bookList))
+	}
+	if bookList[0].Title != "Dune" {
+		t.Fatalf("expected Dune, got %q", bookList[0].Title)
+	}
+}

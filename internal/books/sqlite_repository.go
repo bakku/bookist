@@ -46,6 +46,42 @@ func (r *SQLiteRepository) List(ctx context.Context) ([]Book, error) {
 	return books, nil
 }
 
+func (r *SQLiteRepository) ListByListID(ctx context.Context, listID string) ([]Book, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT b.id, b.title, b.isbn, b.language, b.publisher, b.edition, b.format,
+		       b.purchased_at, b.pages, b.notes, b.published_year, b.published_month,
+		       b.published_day, b.created_at, b.updated_at
+		FROM books b
+		JOIN book_lists bl ON bl.book_id = b.id
+		WHERE bl.list_id = ?
+		ORDER BY b.title ASC
+	`, listID)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	bookList := make([]Book, 0)
+
+	for rows.Next() {
+		book, err := scanBook(rows)
+		if err != nil {
+			return nil, err
+		}
+
+		bookList = append(bookList, book)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return bookList, nil
+}
+
 func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) (Book, error) {
 	now := time.Now().UTC()
 	createdAt := now.Format(time.RFC3339)
@@ -55,7 +91,10 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 	if err != nil {
 		return Book{}, err
 	}
-	defer tx.Rollback()
+
+	defer func() {
+		_ = tx.Rollback()
+	}()
 
 	isbn := sql.NullString{}
 	if input.ISBN != nil {

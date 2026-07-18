@@ -3,24 +3,24 @@ package database
 import (
 	"context"
 	"database/sql"
-	"fmt"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
 
 func Open(ctx context.Context, path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", path)
+	separator := "?"
+	if strings.Contains(path, "?") {
+		separator = "&"
+	}
+
+	db, err := sql.Open("sqlite", path+separator+"_pragma=foreign_keys(1)")
 	if err != nil {
 		return nil, err
 	}
 
-	if _, err := db.ExecContext(ctx, "PRAGMA foreign_keys = ON"); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("enable foreign keys: %w", err)
-	}
-
 	if err := db.PingContext(ctx); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 
