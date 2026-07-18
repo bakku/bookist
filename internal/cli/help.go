@@ -71,6 +71,8 @@ func flagPlaceholder(f *flag.Flag) string {
 		return " string"
 	case *optionalIntFlag:
 		return " int"
+	case *optionalFloatFlag:
+		return " float"
 	}
 
 	getter, ok := f.Value.(flag.Getter)

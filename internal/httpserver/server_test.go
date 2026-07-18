@@ -9,6 +9,7 @@ import (
 	"bakku.dev/bookist/internal/books"
 	"bakku.dev/bookist/internal/httpserver"
 	"bakku.dev/bookist/internal/lists"
+	"bakku.dev/bookist/internal/reads"
 	"bakku.dev/bookist/internal/testsupport"
 )
 
@@ -31,7 +32,10 @@ func newTestApp(t *testing.T) testApp {
 	bookRepo := books.NewSQLiteRepository(db)
 	bookService := books.NewService(bookRepo, authorRepo)
 
-	server, err := httpserver.New(bookService, authorService, listService)
+	readRepo := reads.NewSQLiteRepository(db)
+	readService := reads.NewService(readRepo)
+
+	server, err := httpserver.New(bookService, authorService, listService, readService)
 	if err != nil {
 		t.Fatal(err)
 	}

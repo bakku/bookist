@@ -41,6 +41,7 @@ Bookist is intended to be a Go application for managing a home library.
 - For list/read behavior, seed SQLite directly and then verify the unit under test reads it correctly.
 - HTTP endpoint tests should not depend on another endpoint, the service, or the repository for setup/assertions. Seed and assert database state directly with test helpers.
 - Keep endpoint tests focused on one route/behavior at a time; avoid combined create-then-list endpoint tests.
+- Group related tests with labeled section markers such as `// ── Reads List ────────────────────────────────────────────────────────────────`.
 
 ## Operational Notes
 

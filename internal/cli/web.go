@@ -14,6 +14,7 @@ import (
 	"bakku.dev/bookist/internal/books"
 	"bakku.dev/bookist/internal/httpserver"
 	"bakku.dev/bookist/internal/lists"
+	"bakku.dev/bookist/internal/reads"
 )
 
 func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -50,7 +51,10 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	bookRepo := books.NewSQLiteRepository(db)
 	bookService := books.NewService(bookRepo, authorRepo)
 
-	server, err := httpserver.New(bookService, authorService, listService)
+	readRepo := reads.NewSQLiteRepository(db)
+	readService := reads.NewService(readRepo)
+
+	server, err := httpserver.New(bookService, authorService, listService, readService)
 
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "create server: %v\n", err)

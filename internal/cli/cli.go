@@ -32,6 +32,9 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 	case "lists":
 		return runLists(args[1:], stdout, stderr)
 
+	case "reads":
+		return runReads(args[1:], stdout, stderr)
+
 	case "help", "h":
 		if len(args) == 1 {
 			printRootHelp(stdout)
@@ -61,6 +64,7 @@ func printRootHelp(w io.Writer) {
 			{name: "books", description: "Manage books"},
 			{name: "authors", description: "Manage authors"},
 			{name: "lists", description: "Manage book lists"},
+			{name: "reads", description: "Manage book reads"},
 			{name: "help, h", description: "Show help for a command"},
 		},
 	}, nil)
