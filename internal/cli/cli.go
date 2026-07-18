@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"io"
-	"os"
 )
 
 const (
@@ -22,7 +21,7 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 		return runServe(args[1:], stdout, stderr)
 
 	case "migrate":
-		return runMigrate(args[1:], stderr)
+		return runMigrate(args[1:], stdout, stderr)
 
 	case "books":
 		return runBooks(args[1:], stdout, stderr)
@@ -33,32 +32,36 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 	case "lists":
 		return runLists(args[1:], stdout, stderr)
 
-	case "help", "-h", "--help":
-		printUsage(stdout)
+	case "help", "h":
+		if len(args) == 1 {
+			printRootHelp(stdout)
+			return 0
+		}
+		return Run(append(args[1:], "--help"), stdout, stderr)
+
+	case "-h", "--help":
+		printRootHelp(stdout)
 		return 0
 
 	default:
-		_, _ = fmt.Fprintf(stderr, "unknown command %q\n\n", args[0])
-		printUsage(stderr)
+		_, _ = fmt.Fprintf(stderr, "Error: unknown command %q\n\n", args[0])
+		printRootHelp(stderr)
 		return 2
 	}
 }
 
-func printUsage(w io.Writer) {
-	program := "bookist"
-
-	if len(os.Args) > 0 {
-		program = os.Args[0]
-	}
-	_, _ = fmt.Fprintf(w, `Usage:
-  %[1]s serve [--addr :8080] [--db bookist.db]
-  %[1]s migrate [--db bookist.db]
-  %[1]s books list [--server http://localhost:8080]
-  %[1]s books add --title TITLE [--isbn ISBN] [--author NAME_OR_ID ...] [--server http://localhost:8080]
-  %[1]s authors list [--server http://localhost:8080]
-  %[1]s authors add --name NAME [--server http://localhost:8080]
-  %[1]s lists list [--server http://localhost:8080]
-  %[1]s lists add --name NAME [--description DESC] [--server http://localhost:8080]
-  %[1]s lists add-book --list NAME_OR_ID --book TITLE_OR_ID [--server http://localhost:8080]
-`, program)
+func printRootHelp(w io.Writer) {
+	printCommandHelp(w, commandHelp{
+		name:        "bookist",
+		usage:       "bookist [command [command options]]",
+		description: "Manage a home library",
+		commands: []helpCommand{
+			{name: "serve", description: "Start the Bookist server"},
+			{name: "migrate", description: "Run database migrations"},
+			{name: "books", description: "Manage books"},
+			{name: "authors", description: "Manage authors"},
+			{name: "lists", description: "Manage book lists"},
+			{name: "help, h", description: "Show help for a command"},
+		},
+	}, nil)
 }

@@ -16,7 +16,9 @@ import (
 
 func runLists(args []string, stdout io.Writer, stderr io.Writer) int {
 	if len(args) == 0 {
-		_, _ = fmt.Fprintln(stderr, "missing lists command")
+		_, _ = fmt.Fprintln(stderr, "Error: missing lists command")
+		_, _ = fmt.Fprintln(stderr)
+		printListsHelp(stderr)
 		return 2
 	}
 
@@ -30,21 +32,42 @@ func runLists(args []string, stdout io.Writer, stderr io.Writer) int {
 	case "add-book":
 		return runListsAddBook(args[1:], stdout, stderr)
 
+	case "help", "-h", "--help":
+		printListsHelp(stdout)
+		return 0
+
 	default:
-		_, _ = fmt.Fprintf(stderr, "unknown lists command %q\n", args[0])
+		_, _ = fmt.Fprintf(stderr, "Error: unknown lists command %q\n\n", args[0])
+		printListsHelp(stderr)
 		return 2
 	}
+}
+
+func printListsHelp(w io.Writer) {
+	printCommandHelp(w, commandHelp{
+		name:        "bookist lists",
+		usage:       "bookist lists [command [command options]]",
+		description: "Manage book lists",
+		commands: []helpCommand{
+			{name: "list", description: "List book lists"},
+			{name: "add", description: "Add a book list"},
+			{name: "add-book", description: "Add a book to a list"},
+		},
+	}, nil)
 }
 
 func runListsList(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("lists list", flag.ContinueOnError)
 
-	flags.SetOutput(stderr)
-
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
 
-	if err := flags.Parse(args); err != nil {
-		return 2
+	help := commandHelp{
+		name:        "bookist lists list",
+		usage:       "bookist lists list [options]",
+		description: "List book lists",
+	}
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
 	}
 
 	endpoint, err := joinURL(*serverURL, "/api/lists")
@@ -85,14 +108,17 @@ func runListsList(args []string, stdout io.Writer, stderr io.Writer) int {
 func runListsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("lists add", flag.ContinueOnError)
 
-	flags.SetOutput(stderr)
-
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
 	name := flags.String("name", "", "List name")
 	description := flags.String("description", "", "List description")
 
-	if err := flags.Parse(args); err != nil {
-		return 2
+	help := commandHelp{
+		name:        "bookist lists add",
+		usage:       "bookist lists add [options]",
+		description: "Add a book list",
+	}
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
 	}
 
 	trimmedName := strings.TrimSpace(*name)
@@ -144,14 +170,17 @@ func runListsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 func runListsAddBook(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("lists add-book", flag.ContinueOnError)
 
-	flags.SetOutput(stderr)
-
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
 	listRef := flags.String("list", "", "List name or ID")
 	bookRef := flags.String("book", "", "Book title or ID")
 
-	if err := flags.Parse(args); err != nil {
-		return 2
+	help := commandHelp{
+		name:        "bookist lists add-book",
+		usage:       "bookist lists add-book [options]",
+		description: "Add a book to a list",
+	}
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
 	}
 
 	if strings.TrimSpace(*listRef) == "" {

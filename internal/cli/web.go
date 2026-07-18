@@ -18,13 +18,17 @@ import (
 
 func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
-	flags.SetOutput(stderr)
 
 	addr := flags.String("addr", defaultAddr, "HTTP address to listen on")
 	dbPath := flags.String("db", defaultDBPath, "SQLite database path")
 
-	if err := flags.Parse(args); err != nil {
-		return 2
+	help := commandHelp{
+		name:        "bookist serve",
+		usage:       "bookist serve [options]",
+		description: "Start the Bookist server",
+	}
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
 	}
 
 	db, err := openAndMigrate(context.Background(), *dbPath)

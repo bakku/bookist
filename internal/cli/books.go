@@ -18,7 +18,9 @@ import (
 
 func runBooks(args []string, stdout io.Writer, stderr io.Writer) int {
 	if len(args) == 0 {
-		_, _ = fmt.Fprintln(stderr, "missing books command")
+		_, _ = fmt.Fprintln(stderr, "Error: missing books command")
+		_, _ = fmt.Fprintln(stderr)
+		printBooksHelp(stderr)
 		return 2
 	}
 
@@ -29,10 +31,27 @@ func runBooks(args []string, stdout io.Writer, stderr io.Writer) int {
 	case "add":
 		return runBooksAdd(args[1:], stdout, stderr)
 
+	case "help", "-h", "--help":
+		printBooksHelp(stdout)
+		return 0
+
 	default:
-		_, _ = fmt.Fprintf(stderr, "unknown books command %q\n", args[0])
+		_, _ = fmt.Fprintf(stderr, "Error: unknown books command %q\n\n", args[0])
+		printBooksHelp(stderr)
 		return 2
 	}
+}
+
+func printBooksHelp(w io.Writer) {
+	printCommandHelp(w, commandHelp{
+		name:        "bookist books",
+		usage:       "bookist books [command [command options]]",
+		description: "Manage books",
+		commands: []helpCommand{
+			{name: "list", description: "List books"},
+			{name: "add", description: "Add a book"},
+		},
+	}, nil)
 }
 
 func runBooksList(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -41,8 +60,13 @@ func runBooksList(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
 
-	if err := flags.Parse(args); err != nil {
-		return 2
+	help := commandHelp{
+		name:        "bookist books list",
+		usage:       "bookist books list [options]",
+		description: "List books",
+	}
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
 	}
 
 	listedBooks, err := fetchBooks(*serverURL)
@@ -122,10 +146,13 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags.Var(&publishedMonth, "published-month", "Publication month (1-12)")
 	flags.Var(&publishedDay, "published-day", "Publication day (1-31)")
 
-	flags.SetOutput(stderr)
-
-	if err := flags.Parse(args); err != nil {
-		return 2
+	help := commandHelp{
+		name:        "bookist books add",
+		usage:       "bookist books add [options]",
+		description: "Add a book",
+	}
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
 	}
 
 	input := books.CreateBookRequest{

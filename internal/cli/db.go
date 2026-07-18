@@ -10,14 +10,18 @@ import (
 	"bakku.dev/bookist/internal/database"
 )
 
-func runMigrate(args []string, stderr io.Writer) int {
+func runMigrate(args []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("migrate", flag.ContinueOnError)
-	flags.SetOutput(stderr)
 
 	dbPath := flags.String("db", defaultDBPath, "SQLite database path")
 
-	if err := flags.Parse(args); err != nil {
-		return 2
+	help := commandHelp{
+		name:        "bookist migrate",
+		usage:       "bookist migrate [options]",
+		description: "Run database migrations",
+	}
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
 	}
 
 	db, err := openAndMigrate(context.Background(), *dbPath)
