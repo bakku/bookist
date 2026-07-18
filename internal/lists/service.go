@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"strings"
-
-	"bakku.dev/bookist/internal/books"
 )
 
 var ErrNameRequired = errors.New("name is required")
@@ -18,7 +16,6 @@ type Repository interface {
 	List(ctx context.Context) ([]List, error)
 	GetByID(ctx context.Context, id string) (List, error)
 	AddBookToList(ctx context.Context, listID, bookID string) error
-	ListBooks(ctx context.Context, listID string) ([]books.Book, error)
 }
 
 type Service struct {
@@ -57,8 +54,4 @@ func (s *Service) GetByID(ctx context.Context, id string) (List, error) {
 
 func (s *Service) AddBookToList(ctx context.Context, listID, bookID string) error {
 	return s.repository.AddBookToList(ctx, listID, bookID)
-}
-
-func (s *Service) ListBooks(ctx context.Context, listID string) ([]books.Book, error) {
-	return s.repository.ListBooks(ctx, listID)
 }

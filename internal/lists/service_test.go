@@ -115,28 +115,3 @@ func TestServiceAddBookToListDelegates(t *testing.T) {
 
 	testsupport.AssertBookListRow(t, db, listID, bookID)
 }
-
-// ── ListBooks ─────────────────────────────────────────────────────────────────
-
-func TestServiceListBooksReturnsBooks(t *testing.T) {
-	db := testsupport.OpenMigratedDB(t)
-	service := lists.NewService(lists.NewSQLiteRepository(db))
-
-	listID := testsupport.InsertListRow(t, db, "Want to Buy")
-	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
-
-	if err := service.AddBookToList(context.Background(), listID, bookID); err != nil {
-		t.Fatal(err)
-	}
-
-	bookList, err := service.ListBooks(context.Background(), listID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(bookList) != 1 {
-		t.Fatalf("expected 1 book, got %d", len(bookList))
-	}
-	if bookList[0].Title != "Dune" {
-		t.Fatalf("expected Dune, got %q", bookList[0].Title)
-	}
-}

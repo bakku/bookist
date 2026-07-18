@@ -3,10 +3,10 @@ package lists
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
-	"bakku.dev/bookist/internal/books"
 	"github.com/google/uuid"
 )
 
@@ -46,9 +46,13 @@ func (r *SQLiteRepository) List(ctx context.Context) ([]List, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	lists := make([]List, 0)
+
 	for rows.Next() {
 		list, err := scanList(rows)
 		if err != nil {
@@ -56,6 +60,7 @@ func (r *SQLiteRepository) List(ctx context.Context) ([]List, error) {
 		}
 		lists = append(lists, list)
 	}
+
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -72,7 +77,7 @@ func (r *SQLiteRepository) GetByID(ctx context.Context, id string) (List, error)
 
 	list, err := scanList(row)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return List{}, ErrListNotFound
 		}
 		return List{}, err
@@ -86,52 +91,26 @@ func (r *SQLiteRepository) AddBookToList(ctx context.Context, listID, bookID str
 		INSERT INTO book_lists (list_id, book_id)
 		VALUES (?, ?)
 	`, listID, bookID)
+
 	if err != nil {
 		if isFKViolation(err) {
 			list, listErr := r.GetByID(ctx, listID)
+
 			if listErr != nil {
 				return ErrListNotFound
 			}
 			_ = list
 			return ErrBookNotFound
 		}
+
 		if isUniqueViolation(err) {
 			return ErrBookAlreadyInList
 		}
+
 		return err
 	}
 
 	return nil
-}
-
-func (r *SQLiteRepository) ListBooks(ctx context.Context, listID string) ([]books.Book, error) {
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT b.id, b.title, b.isbn, b.language, b.publisher, b.edition, b.format,
-		       b.purchased_at, b.pages, b.notes, b.published_year, b.published_month,
-		       b.published_day, b.created_at, b.updated_at
-		FROM books b
-		JOIN book_lists bl ON bl.book_id = b.id
-		WHERE bl.list_id = ?
-		ORDER BY b.title ASC
-	`, listID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	bookList := make([]books.Book, 0)
-	for rows.Next() {
-		book, err := scanBook(rows)
-		if err != nil {
-			return nil, err
-		}
-		bookList = append(bookList, book)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return bookList, nil
 }
 
 type listScanner interface {
@@ -164,82 +143,6 @@ func scanList(scanner listScanner) (List, error) {
 	}
 
 	return list, nil
-}
-
-type bookScanner interface {
-	Scan(dest ...any) error
-}
-
-func scanBook(scanner bookScanner) (books.Book, error) {
-	var book books.Book
-	var isbn sql.NullString
-	var language sql.NullString
-	var publisher sql.NullString
-	var edition sql.NullString
-	var format sql.NullString
-	var purchasedAt sql.NullString
-	var pages sql.NullInt64
-	var notes sql.NullString
-	var publishedYear sql.NullInt64
-	var publishedMonth sql.NullInt64
-	var publishedDay sql.NullInt64
-	var createdAt string
-	var updatedAt string
-
-	if err := scanner.Scan(&book.ID, &book.Title, &isbn, &language, &publisher, &edition, &format, &purchasedAt, &pages, &notes, &publishedYear, &publishedMonth, &publishedDay, &createdAt, &updatedAt); err != nil {
-		return books.Book{}, err
-	}
-
-	if isbn.Valid {
-		book.ISBN = &isbn.String
-	}
-	if language.Valid {
-		book.Language = &language.String
-	}
-	if publisher.Valid {
-		book.Publisher = &publisher.String
-	}
-	if edition.Valid {
-		book.Edition = &edition.String
-	}
-	if format.Valid {
-		f := books.Format(format.String)
-		book.Format = &f
-	}
-	if purchasedAt.Valid {
-		book.PurchasedAt = &purchasedAt.String
-	}
-	if pages.Valid {
-		p := int(pages.Int64)
-		book.Pages = &p
-	}
-	if notes.Valid {
-		book.Notes = &notes.String
-	}
-	if publishedYear.Valid {
-		y := int(publishedYear.Int64)
-		book.PublishedYear = &y
-	}
-	if publishedMonth.Valid {
-		m := int(publishedMonth.Int64)
-		book.PublishedMonth = &m
-	}
-	if publishedDay.Valid {
-		d := int(publishedDay.Int64)
-		book.PublishedDay = &d
-	}
-
-	var err error
-	book.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
-	if err != nil {
-		return books.Book{}, fmt.Errorf("parse created_at: %w", err)
-	}
-	book.UpdatedAt, err = time.Parse(time.RFC3339, updatedAt)
-	if err != nil {
-		return books.Book{}, fmt.Errorf("parse updated_at: %w", err)
-	}
-
-	return book, nil
 }
 
 func isFKViolation(err error) bool {

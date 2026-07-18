@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -17,20 +16,9 @@ import (
 	"github.com/google/uuid"
 )
 
-type stringSliceFlag []string
-
-func (s *stringSliceFlag) String() string {
-	return strings.Join(*s, ",")
-}
-
-func (s *stringSliceFlag) Set(value string) error {
-	*s = append(*s, value)
-	return nil
-}
-
 func runBooks(args []string, stdout io.Writer, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "missing books command")
+		_, _ = fmt.Fprintln(stderr, "missing books command")
 		return 2
 	}
 
@@ -42,7 +30,7 @@ func runBooks(args []string, stdout io.Writer, stderr io.Writer) int {
 		return runBooksAdd(args[1:], stdout, stderr)
 
 	default:
-		fmt.Fprintf(stderr, "unknown books command %q\n", args[0])
+		_, _ = fmt.Fprintf(stderr, "unknown books command %q\n", args[0])
 		return 2
 	}
 }
@@ -50,33 +38,16 @@ func runBooks(args []string, stdout io.Writer, stderr io.Writer) int {
 func runBooksList(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("books list", flag.ContinueOnError)
 	flags.SetOutput(stderr)
+
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
 
-	endpoint, err := joinURL(*serverURL, "/api/books")
+	listedBooks, err := fetchBooks(*serverURL)
 	if err != nil {
-		fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
-		return 2
-	}
-
-	client := http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(endpoint)
-	if err != nil {
-		fmt.Fprintf(stderr, "list books: %v\n", err)
-		return 1
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		fmt.Fprintf(stderr, "list books: server returned %s\n", resp.Status)
-		return 1
-	}
-
-	var listedBooks []books.Book
-	if err := json.NewDecoder(resp.Body).Decode(&listedBooks); err != nil {
-		fmt.Fprintf(stderr, "decode books: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "list books: %v\n", err)
 		return 1
 	}
 
@@ -85,31 +56,71 @@ func runBooksList(args []string, stdout io.Writer, stderr io.Writer) int {
 		if book.ISBN != nil {
 			isbn = *book.ISBN
 		}
-		fmt.Fprintf(stdout, "%s\t%s\t%s\n", book.ID, book.Title, isbn)
+		_, _ = fmt.Fprintf(stdout, "%s\t%s\t%s\n", book.ID, book.Title, isbn)
 	}
 
 	return 0
 }
 
+func fetchBooks(serverURL string) ([]books.Book, error) {
+	endpoint, err := joinURL(serverURL, "/api/books")
+	if err != nil {
+		return nil, fmt.Errorf("invalid server URL: %v", err)
+	}
+
+	client := http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("fetch books: %v", err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetch books: server returned %s", resp.Status)
+	}
+
+	var listed []books.Book
+	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
+		return nil, fmt.Errorf("decode books: %v", err)
+	}
+
+	return listed, nil
+}
+
 func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("books add", flag.ContinueOnError)
+
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
 	title := flags.String("title", "", "Book title")
-	isbn := flags.String("isbn", "", "Book ISBN")
 
 	var authorFlags stringSliceFlag
 	flags.Var(&authorFlags, "author", "Author name or ID (repeatable)")
 
-	language := flags.String("language", "", "Book language")
-	publisher := flags.String("publisher", "", "Book publisher")
-	edition := flags.String("edition", "", "Book edition")
-	format := flags.String("format", "", "Book format (hardback|paperback|epub)")
-	purchasedAt := flags.String("purchased-at", "", "Date purchased (ISO 8601)")
-	pages := flags.String("pages", "", "Number of pages")
-	notes := flags.String("notes", "", "Personal notes")
-	publishedYear := flags.String("published-year", "", "Publication year")
-	publishedMonth := flags.String("published-month", "", "Publication month (1-12)")
-	publishedDay := flags.String("published-day", "", "Publication day (1-31)")
+	var isbn optionalStringFlag
+	var language optionalStringFlag
+	var publisher optionalStringFlag
+	var edition optionalStringFlag
+	var format optionalStringFlag
+	var purchasedAt optionalStringFlag
+	var notes optionalStringFlag
+	var pages optionalIntFlag
+	var publishedYear optionalIntFlag
+	var publishedMonth optionalIntFlag
+	var publishedDay optionalIntFlag
+
+	flags.Var(&isbn, "isbn", "Book ISBN")
+	flags.Var(&language, "language", "Book language")
+	flags.Var(&publisher, "publisher", "Book publisher")
+	flags.Var(&edition, "edition", "Book edition")
+	flags.Var(&format, "format", "Book format (hardback|paperback|epub)")
+	flags.Var(&purchasedAt, "purchased-at", "Date purchased (ISO 8601)")
+	flags.Var(&notes, "notes", "Personal notes")
+	flags.Var(&pages, "pages", "Number of pages")
+	flags.Var(&publishedYear, "published-year", "Publication year")
+	flags.Var(&publishedMonth, "published-month", "Publication month (1-12)")
+	flags.Var(&publishedDay, "published-day", "Publication day (1-31)")
 
 	flags.SetOutput(stderr)
 
@@ -117,70 +128,23 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
-	input := books.CreateBookRequest{Title: *title}
-	if strings.TrimSpace(*isbn) != "" {
-		input.ISBN = isbn
+	input := books.CreateBookRequest{
+		Title:          *title,
+		ISBN:           isbn.value,
+		Language:       language.value,
+		Publisher:      publisher.value,
+		Edition:        edition.value,
+		PurchasedAt:    purchasedAt.value,
+		Pages:          pages.value,
+		Notes:          notes.value,
+		PublishedYear:  publishedYear.value,
+		PublishedMonth: publishedMonth.value,
+		PublishedDay:   publishedDay.value,
 	}
 
-	if strings.TrimSpace(*language) != "" {
-		input.Language = language
-	}
-
-	if strings.TrimSpace(*publisher) != "" {
-		input.Publisher = publisher
-	}
-
-	if strings.TrimSpace(*edition) != "" {
-		input.Edition = edition
-	}
-
-	if strings.TrimSpace(*format) != "" {
-		f := books.Format(*format)
+	if format.value != nil {
+		f := books.Format(*format.value)
 		input.Format = &f
-	}
-
-	if strings.TrimSpace(*purchasedAt) != "" {
-		input.PurchasedAt = purchasedAt
-	}
-
-	if strings.TrimSpace(*notes) != "" {
-		input.Notes = notes
-	}
-
-	if strings.TrimSpace(*pages) != "" {
-		p, err := strconv.Atoi(*pages)
-		if err != nil {
-			fmt.Fprintf(stderr, "invalid pages: %v\n", err)
-			return 2
-		}
-		input.Pages = &p
-	}
-
-	if strings.TrimSpace(*publishedYear) != "" {
-		y, err := strconv.Atoi(*publishedYear)
-		if err != nil {
-			fmt.Fprintf(stderr, "invalid published-year: %v\n", err)
-			return 2
-		}
-		input.PublishedYear = &y
-	}
-
-	if strings.TrimSpace(*publishedMonth) != "" {
-		m, err := strconv.Atoi(*publishedMonth)
-		if err != nil {
-			fmt.Fprintf(stderr, "invalid published-month: %v\n", err)
-			return 2
-		}
-		input.PublishedMonth = &m
-	}
-
-	if strings.TrimSpace(*publishedDay) != "" {
-		d, err := strconv.Atoi(*publishedDay)
-		if err != nil {
-			fmt.Fprintf(stderr, "invalid published-day: %v\n", err)
-			return 2
-		}
-		input.PublishedDay = &d
 	}
 
 	if len(authorFlags) > 0 {
@@ -194,36 +158,38 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	body, err := json.Marshal(input)
 	if err != nil {
-		fmt.Fprintf(stderr, "encode book: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "encode book: %v\n", err)
 		return 1
 	}
 
 	endpoint, err := joinURL(*serverURL, "/api/books")
 	if err != nil {
-		fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
 		return 2
 	}
 
 	client := http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Post(endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
-		fmt.Fprintf(stderr, "add book: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "add book: %v\n", err)
 		return 1
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusCreated {
-		fmt.Fprintf(stderr, "add book: server returned %s\n", resp.Status)
+		_, _ = fmt.Fprintf(stderr, "add book: server returned %s\n", resp.Status)
 		return 1
 	}
 
 	var book books.Book
 	if err := json.NewDecoder(resp.Body).Decode(&book); err != nil {
-		fmt.Fprintf(stderr, "decode book: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "decode book: %v\n", err)
 		return 1
 	}
 
-	fmt.Fprintf(stdout, "%s\t%s\n", book.ID, book.Title)
+	_, _ = fmt.Fprintf(stdout, "%s\t%s\n", book.ID, book.Title)
 	return 0
 }
 
@@ -239,22 +205,27 @@ func resolveAuthorIDs(serverURL string, values []string) ([]string, error) {
 
 	byID := make(map[string]authors.Author)
 	byName := make(map[string]authors.Author)
+
 	for _, a := range existingAuthors {
 		byID[a.ID] = a
+
 		if _, exists := byName[a.Name]; !exists {
 			byName[a.Name] = a
 		}
 	}
 
 	var result []string
+
 	for _, val := range values {
 		val = strings.TrimSpace(val)
 		if val == "" {
 			continue
 		}
+
 		parsed, err := uuid.Parse(val)
 		if err == nil {
 			id := parsed.String()
+
 			if _, ok := byID[id]; ok {
 				result = append(result, id)
 			} else {
@@ -281,6 +252,8 @@ func joinURL(base string, path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	parsed.Path = strings.TrimRight(parsed.Path, "/") + path
+
 	return parsed.String(), nil
 }

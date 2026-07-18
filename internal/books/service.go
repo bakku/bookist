@@ -14,6 +14,7 @@ var ErrInvalidFormat = errors.New("format must be one of: hardback, paperback, e
 
 type Repository interface {
 	List(ctx context.Context) ([]Book, error)
+	ListByListID(ctx context.Context, listID string) ([]Book, error)
 	Create(ctx context.Context, input CreateBookRequest) (Book, error)
 }
 
@@ -28,6 +29,37 @@ func NewService(repository Repository, authorRepo authors.Repository) *Service {
 
 func (s *Service) List(ctx context.Context) ([]Book, error) {
 	books, err := s.repository.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(books) == 0 {
+		return books, nil
+	}
+
+	ids := make([]string, len(books))
+	for i, b := range books {
+		ids[i] = b.ID
+	}
+
+	authorsByBook, err := s.authorRepo.ListByBookIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	for i, b := range books {
+		if aa, ok := authorsByBook[b.ID]; ok {
+			books[i].Authors = aa
+		} else {
+			books[i].Authors = []authors.Author{}
+		}
+	}
+
+	return books, nil
+}
+
+func (s *Service) ListByListID(ctx context.Context, listID string) ([]Book, error) {
+	books, err := s.repository.ListByListID(ctx, listID)
 	if err != nil {
 		return nil, err
 	}

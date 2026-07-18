@@ -123,6 +123,43 @@ func TestBooksAddWithNewFields(t *testing.T) {
 	}
 }
 
+func TestBooksAddSendsNullForOmittedOptionalFields(t *testing.T) {
+	var posted books.CreateBookRequest
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
+			t.Fatal(err)
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(books.Book{ID: "new-book-id", Title: posted.Title})
+	}))
+	defer server.Close()
+
+	var stdout, stderr strings.Builder
+	exitCode := cli.Run([]string{"books", "add", "--title", "Minimal", "--server", server.URL}, &stdout, &stderr)
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr.String())
+	}
+	if posted.ISBN != nil || posted.Language != nil || posted.Publisher != nil || posted.Edition != nil ||
+		posted.Format != nil || posted.PurchasedAt != nil || posted.Pages != nil || posted.Notes != nil ||
+		posted.PublishedYear != nil || posted.PublishedMonth != nil || posted.PublishedDay != nil {
+		t.Fatalf("expected omitted optional fields to be nil, got %#v", posted)
+	}
+}
+
+func TestBooksAddRejectsInvalidIntegerFlag(t *testing.T) {
+	var stdout, stderr strings.Builder
+	exitCode := cli.Run([]string{"books", "add", "--title", "Invalid", "--pages", "many"}, &stdout, &stderr)
+
+	if exitCode != 2 {
+		t.Fatalf("expected exit code 2, got %d", exitCode)
+	}
+	if !strings.Contains(stderr.String(), "invalid value \"many\" for flag -pages") {
+		t.Fatalf("expected invalid pages error, got %q", stderr.String())
+	}
+}
+
 func TestBooksAddWithAuthorNameExistsLinksAuthor(t *testing.T) {
 	var postedBooks []books.CreateBookRequest
 

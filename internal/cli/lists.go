@@ -10,14 +10,13 @@ import (
 	"strings"
 	"time"
 
-	"bakku.dev/bookist/internal/books"
 	"bakku.dev/bookist/internal/lists"
 	"github.com/google/uuid"
 )
 
 func runLists(args []string, stdout io.Writer, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "missing lists command")
+		_, _ = fmt.Fprintln(stderr, "missing lists command")
 		return 2
 	}
 
@@ -32,46 +31,52 @@ func runLists(args []string, stdout io.Writer, stderr io.Writer) int {
 		return runListsAddBook(args[1:], stdout, stderr)
 
 	default:
-		fmt.Fprintf(stderr, "unknown lists command %q\n", args[0])
+		_, _ = fmt.Fprintf(stderr, "unknown lists command %q\n", args[0])
 		return 2
 	}
 }
 
 func runListsList(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("lists list", flag.ContinueOnError)
+
 	flags.SetOutput(stderr)
+
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
 
 	endpoint, err := joinURL(*serverURL, "/api/lists")
 	if err != nil {
-		fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
 		return 2
 	}
 
 	client := http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(endpoint)
 	if err != nil {
-		fmt.Fprintf(stderr, "list lists: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "list lists: %v\n", err)
 		return 1
 	}
-	defer resp.Body.Close()
+
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
-		fmt.Fprintf(stderr, "list lists: server returned %s\n", resp.Status)
+		_, _ = fmt.Fprintf(stderr, "list lists: server returned %s\n", resp.Status)
 		return 1
 	}
 
 	var listed []lists.List
 	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
-		fmt.Fprintf(stderr, "decode lists: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "decode lists: %v\n", err)
 		return 1
 	}
 
 	for _, list := range listed {
-		fmt.Fprintf(stdout, "%s\t%s\n", list.ID, list.Name)
+		_, _ = fmt.Fprintf(stdout, "%s\t%s\n", list.ID, list.Name)
 	}
 
 	return 0
@@ -79,112 +84,128 @@ func runListsList(args []string, stdout io.Writer, stderr io.Writer) int {
 
 func runListsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("lists add", flag.ContinueOnError)
+
 	flags.SetOutput(stderr)
+
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
 	name := flags.String("name", "", "List name")
 	description := flags.String("description", "", "List description")
+
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
 
-	input := lists.CreateListRequest{Name: *name}
+	trimmedName := strings.TrimSpace(*name)
+
+	input := lists.CreateListRequest{Name: trimmedName}
+
 	if strings.TrimSpace(*description) != "" {
 		input.Description = description
 	}
 
 	body, err := json.Marshal(input)
 	if err != nil {
-		fmt.Fprintf(stderr, "encode list: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "encode list: %v\n", err)
 		return 1
 	}
 
 	endpoint, err := joinURL(*serverURL, "/api/lists")
 	if err != nil {
-		fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
 		return 2
 	}
 
 	client := http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Post(endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
-		fmt.Fprintf(stderr, "add list: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "add list: %v\n", err)
 		return 1
 	}
-	defer resp.Body.Close()
+
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusCreated {
-		fmt.Fprintf(stderr, "add list: server returned %s\n", resp.Status)
+		_, _ = fmt.Fprintf(stderr, "add list: server returned %s\n", resp.Status)
 		return 1
 	}
 
 	var created lists.List
 	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
-		fmt.Fprintf(stderr, "decode list: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "decode list: %v\n", err)
 		return 1
 	}
 
-	fmt.Fprintf(stdout, "%s\t%s\n", created.ID, created.Name)
+	_, _ = fmt.Fprintf(stdout, "%s\t%s\n", created.ID, created.Name)
 	return 0
 }
 
 func runListsAddBook(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("lists add-book", flag.ContinueOnError)
+
 	flags.SetOutput(stderr)
+
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
 	listRef := flags.String("list", "", "List name or ID")
 	bookRef := flags.String("book", "", "Book title or ID")
+
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
 
 	if strings.TrimSpace(*listRef) == "" {
-		fmt.Fprintln(stderr, "--list is required")
+		_, _ = fmt.Fprintln(stderr, "--list is required")
 		return 2
 	}
+
 	if strings.TrimSpace(*bookRef) == "" {
-		fmt.Fprintln(stderr, "--book is required")
+		_, _ = fmt.Fprintln(stderr, "--book is required")
 		return 2
 	}
 
 	listID, err := resolveListID(*serverURL, *listRef)
 	if err != nil {
-		fmt.Fprintf(stderr, "%v\n", err)
+		_, _ = fmt.Fprintf(stderr, "%v\n", err)
 		return 1
 	}
 
 	bookID, err := resolveBookID(*serverURL, *bookRef)
 	if err != nil {
-		fmt.Fprintf(stderr, "%v\n", err)
+		_, _ = fmt.Fprintf(stderr, "%v\n", err)
 		return 1
 	}
 
 	endpoint, err := joinURL(*serverURL, "/api/lists/"+listID+"/books")
 	if err != nil {
-		fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
 		return 2
 	}
 
 	input := lists.AddBookToListRequest{BookID: bookID}
 	body, err := json.Marshal(input)
 	if err != nil {
-		fmt.Fprintf(stderr, "encode request: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "encode request: %v\n", err)
 		return 1
 	}
 
 	client := http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Post(endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
-		fmt.Fprintf(stderr, "add book to list: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "add book to list: %v\n", err)
 		return 1
 	}
-	defer resp.Body.Close()
+
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusNoContent {
-		fmt.Fprintf(stderr, "add book to list: server returned %s\n", resp.Status)
+		_, _ = fmt.Fprintf(stderr, "add book to list: server returned %s\n", resp.Status)
 		return 1
 	}
 
-	fmt.Fprintf(stdout, "added book %s to list %s\n", bookID, listID)
+	_, _ = fmt.Fprintf(stdout, "added book %s to list %s\n", bookID, listID)
 	return 0
 }
 
@@ -253,7 +274,10 @@ func fetchLists(serverURL string) ([]lists.List, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetch lists: %v", err)
 	}
-	defer resp.Body.Close()
+
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("fetch lists: server returned %s", resp.Status)
@@ -262,31 +286,6 @@ func fetchLists(serverURL string) ([]lists.List, error) {
 	var listed []lists.List
 	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
 		return nil, fmt.Errorf("decode lists: %v", err)
-	}
-
-	return listed, nil
-}
-
-func fetchBooks(serverURL string) ([]books.Book, error) {
-	endpoint, err := joinURL(serverURL, "/api/books")
-	if err != nil {
-		return nil, fmt.Errorf("invalid server URL: %v", err)
-	}
-
-	client := http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("fetch books: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetch books: server returned %s", resp.Status)
-	}
-
-	var listed []books.Book
-	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
-		return nil, fmt.Errorf("decode books: %v", err)
 	}
 
 	return listed, nil
