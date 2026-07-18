@@ -114,6 +114,7 @@ func runAuthorsList(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("authors list", flag.ContinueOnError)
 
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	formatValue := flags.String("format", string(outputFormatTSV), "Output format (tsv|pretty|json)")
 
 	help := commandHelp{
 		name:        "bookist authors list",
@@ -124,14 +125,26 @@ func runAuthorsList(args []string, stdout io.Writer, stderr io.Writer) int {
 		return exitCode
 	}
 
+	format, err := parseOutputFormat(*formatValue)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+
 	listed, err := fetchAuthors(*serverURL)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "list authors: %v\n", err)
 		return 1
 	}
 
+	rows := make([][]string, 0, len(listed))
 	for _, author := range listed {
-		_, _ = fmt.Fprintf(stdout, "%s\t%s\n", author.ID, author.Name)
+		rows = append(rows, []string{author.ID, author.Name})
+	}
+
+	if err := writeListOutput(stdout, format, listed, []string{"ID", "NAME"}, rows); err != nil {
+		_, _ = fmt.Fprintf(stderr, "list authors: write output: %v\n", err)
+		return 1
 	}
 
 	return 0

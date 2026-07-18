@@ -59,6 +59,7 @@ func runBooksList(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	formatValue := flags.String("format", string(outputFormatTSV), "Output format (tsv|pretty|json)")
 
 	help := commandHelp{
 		name:        "bookist books list",
@@ -69,18 +70,30 @@ func runBooksList(args []string, stdout io.Writer, stderr io.Writer) int {
 		return exitCode
 	}
 
+	format, err := parseOutputFormat(*formatValue)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+
 	listedBooks, err := fetchBooks(*serverURL)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "list books: %v\n", err)
 		return 1
 	}
 
+	rows := make([][]string, 0, len(listedBooks))
 	for _, book := range listedBooks {
 		isbn := ""
 		if book.ISBN != nil {
 			isbn = *book.ISBN
 		}
-		_, _ = fmt.Fprintf(stdout, "%s\t%s\t%s\n", book.ID, book.Title, isbn)
+		rows = append(rows, []string{book.ID, book.Title, isbn})
+	}
+
+	if err := writeListOutput(stdout, format, listedBooks, []string{"ID", "TITLE", "ISBN"}, rows); err != nil {
+		_, _ = fmt.Fprintf(stderr, "list books: write output: %v\n", err)
+		return 1
 	}
 
 	return 0

@@ -1,6 +1,8 @@
 package cli_test
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -100,10 +102,12 @@ func TestLeafHelpShowsCommandOptionsAndExitsSuccessfully(t *testing.T) {
 	}{
 		{name: "serve", args: []string{"serve", "--help"}, expected: []string{"bookist serve - Start the Bookist server", "--addr string", "--db string"}},
 		{name: "migrate", args: []string{"migrate", "--help"}, expected: []string{"bookist migrate - Run database migrations", "--db string"}},
-		{name: "books list", args: []string{"books", "list", "--help"}, expected: []string{"bookist books list - List books", "--server string"}},
+		{name: "books list", args: []string{"books", "list", "--help"}, expected: []string{"bookist books list - List books", "--format string", "Output format (tsv|pretty|json) (default: tsv)", "--server string"}},
 		{name: "books add", args: []string{"books", "add", "-h"}, expected: []string{"bookist books add - Add a book", "--author string", "--title string"}},
 		{name: "books add long single dash", args: []string{"books", "add", "-help"}, expected: []string{"bookist books add - Add a book", "--author string", "--title string"}},
+		{name: "authors list", args: []string{"authors", "list", "--help"}, expected: []string{"bookist authors list - List authors", "--format string", "Output format (tsv|pretty|json) (default: tsv)", "--server string"}},
 		{name: "authors add", args: []string{"authors", "add", "--help"}, expected: []string{"bookist authors add - Add an author", "--name string"}},
+		{name: "lists list", args: []string{"lists", "list", "--help"}, expected: []string{"bookist lists list - List book lists", "--format string", "Output format (tsv|pretty|json) (default: tsv)", "--server string"}},
 		{name: "lists add-book", args: []string{"lists", "add-book", "--help"}, expected: []string{"bookist lists add-book - Add a book to a list", "--book string", "--list string"}},
 	}
 
@@ -121,6 +125,33 @@ func TestLeafHelpShowsCommandOptionsAndExitsSuccessfully(t *testing.T) {
 				if !strings.Contains(stdout, expected) {
 					t.Errorf("expected stdout to contain %q, got:\n%s", expected, stdout)
 				}
+			}
+		})
+	}
+}
+
+func TestListCommandsRejectUnsupportedFormat(t *testing.T) {
+	for _, resource := range []string{"books", "authors", "lists"} {
+		t.Run(resource, func(t *testing.T) {
+			requestCount := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requestCount++
+			}))
+			defer server.Close()
+
+			exitCode, stdout, stderr := runCLI([]string{resource, "list", "--server", server.URL, "--format", "xml"})
+			if exitCode != 2 {
+				t.Fatalf("expected exit code 2, got %d", exitCode)
+			}
+			if stdout != "" {
+				t.Fatalf("expected empty stdout, got %q", stdout)
+			}
+			expected := `Error: unsupported output format "xml": must be one of tsv, pretty, json`
+			if !strings.Contains(stderr, expected) {
+				t.Fatalf("expected stderr to contain %q, got %q", expected, stderr)
+			}
+			if requestCount != 0 {
+				t.Fatalf("expected format validation before HTTP request, got %d requests", requestCount)
 			}
 		})
 	}

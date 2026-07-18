@@ -13,10 +13,10 @@ import (
 
 // ── Lists List ────────────────────────────────────────────────────────────────
 
-func TestListsListPrintsIDAndName(t *testing.T) {
+func TestListsListTableFormats(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/api/lists" {
-			json.NewEncoder(w).Encode([]lists.List{
+			_ = json.NewEncoder(w).Encode([]lists.List{
 				{ID: "id-1", Name: "Want to Buy"},
 				{ID: "id-2", Name: "Nightstand"},
 			})
@@ -24,17 +24,67 @@ func TestListsListPrintsIDAndName(t *testing.T) {
 	}))
 	defer server.Close()
 
-	var stdout, stderr strings.Builder
-	exitCode := cli.Run([]string{"lists", "list", "--server", server.URL}, &stdout, &stderr)
+	tests := []struct {
+		name     string
+		format   string
+		expected string
+	}{
+		{name: "default TSV", expected: "id-1\tWant to Buy\nid-2\tNightstand\n"},
+		{name: "explicit TSV", format: "tsv", expected: "id-1\tWant to Buy\nid-2\tNightstand\n"},
+		{name: "pretty", format: "pretty", expected: "ID    NAME\nid-1  Want to Buy\nid-2  Nightstand\n"},
+	}
 
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			args := []string{"lists", "list", "--server", server.URL}
+			if test.format != "" {
+				args = append(args, "--format", test.format)
+			}
+
+			exitCode, stdout, stderr := runCLI(args)
+			if exitCode != 0 {
+				t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
+			}
+			if stderr != "" {
+				t.Fatalf("expected empty stderr, got %q", stderr)
+			}
+			if stdout != test.expected {
+				t.Fatalf("expected stdout %q, got %q", test.expected, stdout)
+			}
+		})
+	}
+}
+
+func TestListsListJSONPreservesNullableDescription(t *testing.T) {
+	description := "Books to purchase"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]lists.List{
+			{ID: "id-1", Name: "Want to Buy", Description: &description},
+			{ID: "id-2", Name: "Nightstand", Description: nil},
+		})
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"lists", "list", "--server", server.URL, "--format", "json"})
 	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr.String())
+		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
 	}
-	if !strings.Contains(stdout.String(), "id-1\tWant to Buy") {
-		t.Fatalf("expected stdout to contain 'id-1\\tWant to Buy', got %q", stdout.String())
+	if stderr != "" {
+		t.Fatalf("expected empty stderr, got %q", stderr)
 	}
-	if !strings.Contains(stdout.String(), "id-2\tNightstand") {
-		t.Fatalf("expected stdout to contain 'id-2\\tNightstand', got %q", stdout.String())
+
+	var listed []lists.List
+	if err := json.Unmarshal([]byte(stdout), &listed); err != nil {
+		t.Fatalf("expected valid JSON, got %q: %v", stdout, err)
+	}
+	if len(listed) != 2 {
+		t.Fatalf("expected 2 lists, got %d", len(listed))
+	}
+	if listed[0].Description == nil || *listed[0].Description != description {
+		t.Fatalf("expected populated description, got %#v", listed[0].Description)
+	}
+	if listed[1].Description != nil {
+		t.Fatalf("expected null description, got %#v", listed[1].Description)
 	}
 }
 
