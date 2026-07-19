@@ -23,10 +23,10 @@ func TestReadsListResolvesBookAndPrintsTableFormats(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/books":
-			_ = json.NewEncoder(w).Encode([]books.Book{{ID: "book-1", Title: "Dune"}})
-		case "/api/books/book-1/reads":
+			_ = json.NewEncoder(w).Encode([]books.Book{{ID: 1, Title: "Dune"}})
+		case "/api/books/1/reads":
 			_ = json.NewEncoder(w).Encode([]reads.Read{{
-				ID: "read-1", BookID: "book-1", StartedAt: &startedAt,
+				ID: 10, BookID: 1, StartedAt: &startedAt,
 				AbandonedAt: &abandonedAt, Rating: &rating, Notes: &notes,
 			}})
 		default:
@@ -41,9 +41,9 @@ func TestReadsListResolvesBookAndPrintsTableFormats(t *testing.T) {
 		format   string
 		expected string
 	}{
-		{name: "default pretty", expected: "ID      STARTED_AT  FINISHED_AT  ABANDONED_AT  RATING  NOTES\nread-1  2026-01-01               2026-01-03    4.5     Excellent\n"},
-		{name: "explicit TSV", format: "tsv", expected: "read-1\t2026-01-01\t\t2026-01-03\t4.5\tExcellent\n"},
-		{name: "pretty", format: "pretty", expected: "ID      STARTED_AT  FINISHED_AT  ABANDONED_AT  RATING  NOTES\nread-1  2026-01-01               2026-01-03    4.5     Excellent\n"},
+		{name: "default pretty", expected: "ID  STARTED_AT  FINISHED_AT  ABANDONED_AT  RATING  NOTES\n10  2026-01-01               2026-01-03    4.5     Excellent\n"},
+		{name: "explicit TSV", format: "tsv", expected: "10\t2026-01-01\t\t2026-01-03\t4.5\tExcellent\n"},
+		{name: "pretty", format: "pretty", expected: "ID  STARTED_AT  FINISHED_AT  ABANDONED_AT  RATING  NOTES\n10  2026-01-01               2026-01-03    4.5     Excellent\n"},
 	}
 
 	for _, test := range tests {
@@ -61,21 +61,21 @@ func TestReadsListResolvesBookAndPrintsTableFormats(t *testing.T) {
 }
 
 func TestReadsListJSONUsesFullReadRepresentation(t *testing.T) {
-	const bookID = "550e8400-e29b-41d4-a716-446655440000"
+	const bookID = int64(1)
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode([]reads.Read{{ID: "read-1", BookID: bookID, CreatedAt: now, UpdatedAt: now}})
+		_ = json.NewEncoder(w).Encode([]reads.Read{{ID: 10, BookID: bookID, CreatedAt: now, UpdatedAt: now}})
 	}))
 
 	defer server.Close()
 
-	exitCode, stdout, stderr := runCLI([]string{"reads", "list", "--book", bookID, "--server", server.URL, "--format", "json"})
+	exitCode, stdout, stderr := runCLI([]string{"reads", "list", "--book", "1", "--server", server.URL, "--format", "json"})
 
 	if exitCode != 0 || stderr != "" {
 		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
 	}
-	if !strings.Contains(stdout, `"started_at":null`) || !strings.Contains(stdout, `"abandoned_at":null`) || !strings.Contains(stdout, `"book_id":"`+bookID+`"`) ||
+	if !strings.Contains(stdout, `"started_at":null`) || !strings.Contains(stdout, `"abandoned_at":null`) || !strings.Contains(stdout, `"book_id":1`) ||
 		!strings.Contains(stdout, `"created_at":"2026-01-02T03:04:05Z"`) || !strings.Contains(stdout, `"updated_at":"2026-01-02T03:04:05Z"`) {
 		t.Fatalf("unexpected JSON output: %s", stdout)
 	}
@@ -84,7 +84,7 @@ func TestReadsListJSONUsesFullReadRepresentation(t *testing.T) {
 // ── Reads Add ─────────────────────────────────────────────────────────────────
 
 func TestReadsAddPostsToBookEndpoint(t *testing.T) {
-	const bookID = "550e8400-e29b-41d4-a716-446655440000"
+	const bookID = int64(1)
 	var captured reads.CreateReadRequest
 	var capturedPath string
 
@@ -94,13 +94,13 @@ func TestReadsAddPostsToBookEndpoint(t *testing.T) {
 			t.Error(err)
 		}
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(reads.Read{ID: "read-1", BookID: bookID})
+		_ = json.NewEncoder(w).Encode(reads.Read{ID: 10, BookID: bookID})
 	}))
 
 	defer server.Close()
 
 	exitCode, stdout, stderr := runCLI([]string{
-		"reads", "add", "--book", bookID, "--started-at", "2026-01-01",
+		"reads", "add", "--book", "1", "--started-at", "2026-01-01",
 		"--abandoned-at", "2026-01-03", "--rating", "4.5", "--notes", "Excellent",
 		"--server", server.URL,
 	})
@@ -108,13 +108,13 @@ func TestReadsAddPostsToBookEndpoint(t *testing.T) {
 	if exitCode != 0 || stderr != "" {
 		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
 	}
-	if capturedPath != "/api/books/"+bookID+"/reads" {
+	if capturedPath != "/api/books/1/reads" {
 		t.Fatalf("unexpected path %q", capturedPath)
 	}
 	if captured.StartedAt == nil || *captured.StartedAt != "2026-01-01" || captured.AbandonedAt == nil || *captured.AbandonedAt != "2026-01-03" || captured.Rating == nil || *captured.Rating != 4.5 {
 		t.Fatalf("unexpected request: %#v", captured)
 	}
-	if stdout != "read-1\t"+bookID+"\n" {
+	if stdout != "10\t1\n" {
 		t.Fatalf("unexpected stdout %q", stdout)
 	}
 }

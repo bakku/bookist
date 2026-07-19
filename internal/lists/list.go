@@ -3,7 +3,7 @@ package lists
 import "time"
 
 type List struct {
-	ID          string    `json:"id"`
+	ID          int64     `json:"id"`
 	Name        string    `json:"name"`
 	Description *string   `json:"description"`
 	CreatedAt   time.Time `json:"created_at"`
@@ -16,5 +16,5 @@ type CreateListRequest struct {
 }
 
 type AddBookToListRequest struct {
-	BookID string `json:"book_id"`
+	BookID int64 `json:"book_id"`
 }

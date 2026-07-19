@@ -6,7 +6,6 @@ import (
 
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/testsupport"
-	"github.com/google/uuid"
 )
 
 // ── Create ────────────────────────────────────────────────────────────────────
@@ -20,11 +19,8 @@ func TestSQLiteRepositoryCreatePersistsAuthor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if created.ID == "" {
+	if created.ID <= 0 {
 		t.Fatal("expected created author to have an ID")
-	}
-	if _, err := uuid.Parse(created.ID); err != nil {
-		t.Fatalf("expected valid UUID, got %q: %v", created.ID, err)
 	}
 
 	testsupport.AssertAuthorRow(t, db, created.ID, "Jane Austen")
@@ -46,7 +42,7 @@ func TestSQLiteRepositoryListReadsPersistedAuthors(t *testing.T) {
 		t.Fatalf("expected 1 author, got %d", len(listed))
 	}
 	if listed[0].ID != id {
-		t.Fatalf("expected listed ID %s, got %s", id, listed[0].ID)
+		t.Fatalf("expected listed ID %d, got %d", id, listed[0].ID)
 	}
 	if listed[0].Name != "Jane Austen" {
 		t.Fatalf("expected Jane Austen, got %q", listed[0].Name)
@@ -76,7 +72,7 @@ func TestSQLiteRepositoryGetByIDsReturnsMatchingAuthors(t *testing.T) {
 	id1 := testsupport.InsertAuthorRow(t, db, "Author One")
 	id2 := testsupport.InsertAuthorRow(t, db, "Author Two")
 
-	found, err := repository.GetByIDs(ctx, []string{id1, id2, uuid.NewString()})
+	found, err := repository.GetByIDs(ctx, []int64{id1, id2, 999999})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +111,7 @@ func TestSQLiteRepositoryListByBookIDsReturnsAuthorsGroupedByBook(t *testing.T) 
 	testsupport.InsertBookAuthorRow(t, db, bookID1, authorID)
 	testsupport.InsertBookAuthorRow(t, db, bookID2, authorID)
 
-	result, err := repository.ListByBookIDs(ctx, []string{bookID1, bookID2})
+	result, err := repository.ListByBookIDs(ctx, []int64{bookID1, bookID2})
 	if err != nil {
 		t.Fatal(err)
 	}

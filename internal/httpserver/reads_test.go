@@ -5,12 +5,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"bakku.dev/bookist/internal/testsupport"
-	"github.com/google/uuid"
 )
 
 // ── Create ────────────────────────────────────────────────────────────────────
@@ -25,7 +25,7 @@ func TestReadAPICreate(t *testing.T) {
 		"notes":"Excellent"
 	}`)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/books/"+bookID+"/reads", body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/books/%d/reads", bookID), body)
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
 
@@ -38,7 +38,7 @@ func TestReadAPICreate(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		t.Fatal(err)
 	}
-	if response["book_id"] != bookID || response["abandoned_at"] != "2026-01-03" || response["rating"] != 4.5 || response["notes"] != "Excellent" {
+	if response["book_id"] != float64(bookID) || response["abandoned_at"] != "2026-01-03" || response["rating"] != 4.5 || response["notes"] != "Excellent" {
 		t.Fatalf("unexpected response: %#v", response)
 	}
 	if response["created_at"] == nil {
@@ -72,7 +72,7 @@ func TestReadAPICreateRejectsClientTimestamp(t *testing.T) {
 	app := newTestApp(t)
 	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
 	body := bytes.NewBufferString(`{"created_at":"2026-01-01T00:00:00Z"}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/books/"+bookID+"/reads", body)
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/books/%d/reads", bookID), body)
 	resp := httptest.NewRecorder()
 
 	app.handler.ServeHTTP(resp, req)
@@ -83,12 +83,26 @@ func TestReadAPICreateRejectsClientTimestamp(t *testing.T) {
 
 func TestReadAPICreateReturns404ForUnknownBook(t *testing.T) {
 	app := newTestApp(t)
-	req := httptest.NewRequest(http.MethodPost, "/api/books/"+uuid.NewString()+"/reads", bytes.NewBufferString(`{}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/books/999999/reads", bytes.NewBufferString(`{}`))
 	resp := httptest.NewRecorder()
 
 	app.handler.ServeHTTP(resp, req)
 	if resp.Code != http.StatusNotFound {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, resp.Code, resp.Body.String())
+	}
+}
+
+func TestReadAPIRejectsInvalidBookID(t *testing.T) {
+	for _, path := range []string{"/api/books/not-a-number/reads", "/api/books/0/reads", "/api/books/-1/reads"} {
+		t.Run(path, func(t *testing.T) {
+			app := newTestApp(t)
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			resp := httptest.NewRecorder()
+			app.handler.ServeHTTP(resp, req)
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
+			}
+		})
 	}
 }
 
@@ -107,7 +121,7 @@ func TestReadAPICreateRejectsInvalidValues(t *testing.T) {
 		t.Run(body, func(t *testing.T) {
 			app := newTestApp(t)
 			bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
-			req := httptest.NewRequest(http.MethodPost, "/api/books/"+bookID+"/reads", bytes.NewBufferString(body))
+			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/books/%d/reads", bookID), bytes.NewBufferString(body))
 			resp := httptest.NewRecorder()
 
 			app.handler.ServeHTTP(resp, req)
@@ -130,8 +144,8 @@ func TestReadAPICreateRejectsInvalidValues(t *testing.T) {
 func TestReadAPIList(t *testing.T) {
 	app := newTestApp(t)
 	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
-	olderID := uuid.NewString()
-	newerID := uuid.NewString()
+	olderID := int64(100)
+	newerID := int64(101)
 	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{
 		ID: olderID, BookID: bookID, StartedAt: new("2025-01-01"), FinishedAt: new("2025-01-03"),
 		Rating: new(4.0), Notes: new("Good"), CreatedAt: "2026-01-01T00:00:00Z",
@@ -140,7 +154,7 @@ func TestReadAPIList(t *testing.T) {
 		ID: newerID, BookID: bookID, StartedAt: new("2026-01-01"), AbandonedAt: new("2026-01-03"),
 		Rating: new(4.5), Notes: new("Excellent"), CreatedAt: "2026-01-02T00:00:00Z",
 	})
-	req := httptest.NewRequest(http.MethodGet, "/api/books/"+bookID+"/reads", nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/books/%d/reads", bookID), nil)
 	resp := httptest.NewRecorder()
 
 	app.handler.ServeHTTP(resp, req)
@@ -152,7 +166,7 @@ func TestReadAPIList(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		t.Fatal(err)
 	}
-	if len(raw) != 2 || raw[0]["id"] != newerID || raw[1]["id"] != olderID {
+	if len(raw) != 2 || raw[0]["id"] != float64(newerID) || raw[1]["id"] != float64(olderID) {
 		t.Fatalf("expected newest reads first, got %#v", raw)
 	}
 	if raw[0]["abandoned_at"] != "2026-01-03" || raw[0]["finished_at"] != nil || raw[1]["abandoned_at"] != nil {
@@ -170,7 +184,7 @@ func TestReadAPIList(t *testing.T) {
 func TestReadAPIListReturnsEmptyArray(t *testing.T) {
 	app := newTestApp(t)
 	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
-	req := httptest.NewRequest(http.MethodGet, "/api/books/"+bookID+"/reads", nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/books/%d/reads", bookID), nil)
 	resp := httptest.NewRecorder()
 
 	app.handler.ServeHTTP(resp, req)
@@ -181,7 +195,7 @@ func TestReadAPIListReturnsEmptyArray(t *testing.T) {
 
 func TestReadAPIListReturns404ForUnknownBook(t *testing.T) {
 	app := newTestApp(t)
-	req := httptest.NewRequest(http.MethodGet, "/api/books/"+uuid.NewString()+"/reads", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/books/999999/reads", nil)
 	resp := httptest.NewRecorder()
 
 	app.handler.ServeHTTP(resp, req)

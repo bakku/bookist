@@ -8,12 +8,12 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
-	"github.com/google/uuid"
 )
 
 func runBooks(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -88,7 +88,7 @@ func runBooksList(args []string, stdout io.Writer, stderr io.Writer) int {
 		if book.ISBN != nil {
 			isbn = *book.ISBN
 		}
-		rows = append(rows, []string{book.ID, book.Title, isbn})
+		rows = append(rows, []string{strconv.FormatInt(book.ID, 10), book.Title, isbn})
 	}
 
 	if err := writeListOutput(stdout, format, listedBooks, []string{"ID", "TITLE", "ISBN"}, rows); err != nil {
@@ -251,16 +251,16 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 
-	_, _ = fmt.Fprintf(stdout, "%s\t%s\n", book.ID, book.Title)
+	_, _ = fmt.Fprintf(stdout, "%d\t%s\n", book.ID, book.Title)
 	return 0
 }
 
-func resolveAuthorIDs(serverURL string, values []string) ([]string, error) {
+func resolveAuthorIDs(serverURL string, values []string) ([]int64, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
 
-	var result []string
+	var result []int64
 	var byName map[string][]authors.Author
 
 	for _, val := range values {
@@ -269,10 +269,13 @@ func resolveAuthorIDs(serverURL string, values []string) ([]string, error) {
 			continue
 		}
 
-		parsed, err := uuid.Parse(val)
+		id, isID, err := parseIDReference(val)
+		if err != nil {
+			return nil, err
+		}
 
-		if err == nil && parsed.String() == strings.ToLower(val) {
-			result = append(result, parsed.String())
+		if isID {
+			result = append(result, id)
 		} else {
 			if byName == nil {
 				existingAuthors, err := fetchAuthors(serverURL)

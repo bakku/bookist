@@ -1,8 +1,10 @@
 package httpserver
 
 import (
+	"fmt"
 	"html/template"
 	"net/http"
+	"strconv"
 
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
@@ -17,6 +19,14 @@ type Server struct {
 	lists     *lists.Service
 	reads     *reads.Service
 	templates *template.Template
+}
+
+func parseID(value string) (int64, error) {
+	id, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || id <= 0 {
+		return 0, fmt.Errorf("invalid ID")
+	}
+	return id, nil
 }
 
 func New(books *books.Service, authors *authors.Service, lists *lists.Service, reads *reads.Service) (*Server, error) {

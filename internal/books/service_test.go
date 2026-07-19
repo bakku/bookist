@@ -8,7 +8,6 @@ import (
 
 	"bakku.dev/bookist/internal/books"
 	"bakku.dev/bookist/internal/testsupport"
-	"github.com/google/uuid"
 )
 
 // ── Create ────────────────────────────────────────────────────────────────────
@@ -42,7 +41,20 @@ func TestServiceCreateRejectsUnknownAuthorIDs(t *testing.T) {
 
 	_, err := service.Create(context.Background(), books.CreateBookRequest{
 		Title:     "Test",
-		AuthorIDs: []string{uuid.NewString()},
+		AuthorIDs: []int64{999999},
+	})
+	if !errors.Is(err, books.ErrAuthorNotFound) {
+		t.Fatalf("expected ErrAuthorNotFound, got %v", err)
+	}
+	testsupport.AssertBookCount(t, db, 0)
+}
+
+func TestServiceCreateRejectsNonPositiveAuthorIDs(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+
+	_, err := service.Create(context.Background(), books.CreateBookRequest{
+		Title:     "Test",
+		AuthorIDs: []int64{0},
 	})
 	if !errors.Is(err, books.ErrAuthorNotFound) {
 		t.Fatalf("expected ErrAuthorNotFound, got %v", err)
@@ -211,7 +223,7 @@ func TestServiceCreateWithValidAuthorIDsReturnsHydratedAuthors(t *testing.T) {
 	author := testsupport.InsertAuthorRow(t, db, "Test Author")
 	created, err := service.Create(context.Background(), books.CreateBookRequest{
 		Title:     "Test Book",
-		AuthorIDs: []string{author},
+		AuthorIDs: []int64{author},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -440,7 +452,7 @@ func TestServiceListReturnsPersistedBooks(t *testing.T) {
 	got := listed[0]
 
 	if got.ID != created.ID {
-		t.Fatalf("expected ID %s, got %s", created.ID, got.ID)
+		t.Fatalf("expected ID %d, got %d", created.ID, got.ID)
 	}
 
 	if got.Title != "Kindred" {

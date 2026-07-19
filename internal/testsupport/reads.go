@@ -7,8 +7,8 @@ import (
 )
 
 type ReadRow struct {
-	ID          string
-	BookID      string
+	ID          int64
+	BookID      int64
 	StartedAt   *string
 	FinishedAt  *string
 	AbandonedAt *string

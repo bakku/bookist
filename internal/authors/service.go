@@ -11,8 +11,8 @@ var ErrNameRequired = errors.New("name is required")
 type Repository interface {
 	Create(ctx context.Context, input CreateAuthorRequest) (Author, error)
 	List(ctx context.Context) ([]Author, error)
-	GetByIDs(ctx context.Context, ids []string) ([]Author, error)
-	ListByBookIDs(ctx context.Context, bookIDs []string) (map[string][]Author, error)
+	GetByIDs(ctx context.Context, ids []int64) ([]Author, error)
+	ListByBookIDs(ctx context.Context, bookIDs []int64) (map[int64][]Author, error)
 }
 
 type Service struct {
@@ -36,10 +36,10 @@ func (s *Service) List(ctx context.Context) ([]Author, error) {
 	return s.repository.List(ctx)
 }
 
-func (s *Service) GetByIDs(ctx context.Context, ids []string) ([]Author, error) {
+func (s *Service) GetByIDs(ctx context.Context, ids []int64) ([]Author, error) {
 	return s.repository.GetByIDs(ctx, ids)
 }
 
-func (s *Service) ListByBookIDs(ctx context.Context, bookIDs []string) (map[string][]Author, error) {
+func (s *Service) ListByBookIDs(ctx context.Context, bookIDs []int64) (map[int64][]Author, error) {
 	return s.repository.ListByBookIDs(ctx, bookIDs)
 }

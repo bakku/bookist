@@ -16,8 +16,8 @@ type Repository interface {
 	Create(ctx context.Context, input CreateListRequest) (List, error)
 	List(ctx context.Context) ([]List, error)
 	NameExists(ctx context.Context, name string) (bool, error)
-	GetByID(ctx context.Context, id string) (List, error)
-	AddBookToList(ctx context.Context, listID, bookID string) error
+	GetByID(ctx context.Context, id int64) (List, error)
+	AddBookToList(ctx context.Context, listID, bookID int64) error
 }
 
 type Service struct {
@@ -57,10 +57,10 @@ func (s *Service) List(ctx context.Context) ([]List, error) {
 	return s.repository.List(ctx)
 }
 
-func (s *Service) GetByID(ctx context.Context, id string) (List, error) {
+func (s *Service) GetByID(ctx context.Context, id int64) (List, error) {
 	return s.repository.GetByID(ctx, id)
 }
 
-func (s *Service) AddBookToList(ctx context.Context, listID, bookID string) error {
+func (s *Service) AddBookToList(ctx context.Context, listID, bookID int64) error {
 	return s.repository.AddBookToList(ctx, listID, bookID)
 }

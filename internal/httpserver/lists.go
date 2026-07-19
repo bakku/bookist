@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 
 	"bakku.dev/bookist/internal/lists"
 )
@@ -39,9 +38,13 @@ func (s *Server) handleAPICreateList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAPIListBooksInList(w http.ResponseWriter, r *http.Request) {
-	listID := r.PathValue("id")
+	listID, err := parseID(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid list ID", http.StatusBadRequest)
+		return
+	}
 
-	_, err := s.lists.GetByID(r.Context(), listID)
+	_, err = s.lists.GetByID(r.Context(), listID)
 	if err != nil {
 		if errors.Is(err, lists.ErrListNotFound) {
 			http.Error(w, "list not found", http.StatusNotFound)
@@ -61,7 +64,11 @@ func (s *Server) handleAPIListBooksInList(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleAPIAddBookToList(w http.ResponseWriter, r *http.Request) {
-	listID := r.PathValue("id")
+	listID, err := parseID(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid list ID", http.StatusBadRequest)
+		return
+	}
 
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -72,12 +79,12 @@ func (s *Server) handleAPIAddBookToList(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if strings.TrimSpace(input.BookID) == "" {
+	if input.BookID <= 0 {
 		http.Error(w, "book_id is required", http.StatusBadRequest)
 		return
 	}
 
-	err := s.lists.AddBookToList(r.Context(), listID, input.BookID)
+	err = s.lists.AddBookToList(r.Context(), listID, input.BookID)
 	if err != nil {
 		writeAddBookToListError(w, err)
 		return

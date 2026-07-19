@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type SQLiteRepository struct {
@@ -29,10 +27,10 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateListRequest) 
 	}
 
 	row := r.db.QueryRowContext(ctx, `
-		INSERT INTO lists (id, name, description, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO lists (name, description, created_at, updated_at)
+		VALUES (?, ?, ?, ?)
 		RETURNING id, name, description, created_at, updated_at
-	`, uuid.NewString(), input.Name, description, createdAt, updatedAt)
+	`, input.Name, description, createdAt, updatedAt)
 
 	list, err := scanList(row)
 	if err != nil && isUniqueViolation(err) {
@@ -78,7 +76,7 @@ func (r *SQLiteRepository) List(ctx context.Context) ([]List, error) {
 	return lists, nil
 }
 
-func (r *SQLiteRepository) GetByID(ctx context.Context, id string) (List, error) {
+func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (List, error) {
 	row := r.db.QueryRowContext(ctx, `
 		SELECT id, name, description, created_at, updated_at
 		FROM lists
@@ -96,12 +94,12 @@ func (r *SQLiteRepository) GetByID(ctx context.Context, id string) (List, error)
 	return list, nil
 }
 
-func (r *SQLiteRepository) AddBookToList(ctx context.Context, listID, bookID string) error {
+func (r *SQLiteRepository) AddBookToList(ctx context.Context, listID, bookID int64) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO book_lists (id, list_id, book_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?)
-	`, uuid.NewString(), listID, bookID, now, now)
+		INSERT INTO book_lists (list_id, book_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?)
+	`, listID, bookID, now, now)
 
 	if err != nil {
 		if isFKViolation(err) {
