@@ -20,6 +20,7 @@ CREATE TABLE books (
             END
         )
     ),
+    purchase_price TEXT NULL CHECK (purchase_price IS NULL OR trim(purchase_price) <> ''),
     pages INTEGER NULL CHECK (pages IS NULL OR (typeof(pages) = 'integer' AND pages >= 1)),
     notes TEXT NULL,
     summary TEXT NULL,

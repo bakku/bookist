@@ -21,6 +21,7 @@ func TestSQLiteRepositoryCreatePersistsAllFields(t *testing.T) {
 	ed := "2nd"
 	format := books.FormatPaperback
 	purchased := "2025-06-15"
+	purchasePrice := "12.34 EUR"
 	pages := 400
 	notes := "Great book"
 	summary := "A practical Go guide"
@@ -41,6 +42,7 @@ func TestSQLiteRepositoryCreatePersistsAllFields(t *testing.T) {
 		Edition:           &ed,
 		Format:            &format,
 		PurchasedAt:       &purchased,
+		PurchasePrice:     &purchasePrice,
 		Pages:             &pages,
 		Notes:             &notes,
 		Summary:           &summary,
@@ -71,6 +73,7 @@ func TestSQLiteRepositoryCreatePersistsAllFields(t *testing.T) {
 		Edition:           &ed,
 		Format:            &f,
 		PurchasedAt:       &purchased,
+		PurchasePrice:     &purchasePrice,
 		Pages:             &pages,
 		Notes:             &notes,
 		Summary:           &summary,
@@ -146,6 +149,7 @@ func TestSQLiteRepositoryListReadsPersistedBooks(t *testing.T) {
 	ed := "2nd"
 	format := books.FormatPaperback
 	purchased := "2025-06-15"
+	purchasePrice := "12.34 EUR"
 	pages := 400
 	notes := "Great book"
 	summary := "A practical Go guide"
@@ -166,6 +170,7 @@ func TestSQLiteRepositoryListReadsPersistedBooks(t *testing.T) {
 		Edition:           &ed,
 		Format:            &format,
 		PurchasedAt:       &purchased,
+		PurchasePrice:     &purchasePrice,
 		Pages:             &pages,
 		Notes:             &notes,
 		Summary:           &summary,
@@ -222,6 +227,10 @@ func TestSQLiteRepositoryListReadsPersistedBooks(t *testing.T) {
 
 	if got.PurchasedAt == nil || *got.PurchasedAt != purchased {
 		t.Fatalf("expected PurchasedAt %q, got %#v", purchased, got.PurchasedAt)
+	}
+
+	if got.PurchasePrice == nil || *got.PurchasePrice != purchasePrice {
+		t.Fatalf("expected PurchasePrice %q, got %#v", purchasePrice, got.PurchasePrice)
 	}
 
 	if got.Pages == nil || *got.Pages != pages {

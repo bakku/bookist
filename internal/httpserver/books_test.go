@@ -26,6 +26,7 @@ func TestBookAPICreate(t *testing.T) {
 		"edition":"1st",
 		"format":"paperback",
 		"purchased_at":"2025-06-15",
+		"purchase_price":"12.34 EUR",
 		"pages":412,
 		"notes":"Classic",
 		"summary":"A desert epic",
@@ -63,6 +64,9 @@ func TestBookAPICreate(t *testing.T) {
 	if created.ISBN == nil || *created.ISBN != "9780441172719" {
 		t.Fatalf("expected ISBN, got %#v", created.ISBN)
 	}
+	if created.PurchasePrice == nil || *created.PurchasePrice != "12.34 EUR" {
+		t.Fatalf("expected purchase_price, got %#v", created.PurchasePrice)
+	}
 
 	isbn := "9780441172719"
 	language := "en"
@@ -70,6 +74,7 @@ func TestBookAPICreate(t *testing.T) {
 	edition := "1st"
 	format := "paperback"
 	purchasedAt := "2025-06-15"
+	purchasePrice := "12.34 EUR"
 	pages := 412
 	notes := "Classic"
 	summary := "A desert epic"
@@ -91,6 +96,7 @@ func TestBookAPICreate(t *testing.T) {
 		Edition:           &edition,
 		Format:            &format,
 		PurchasedAt:       &purchasedAt,
+		PurchasePrice:     &purchasePrice,
 		Pages:             &pages,
 		Notes:             &notes,
 		Summary:           &summary,
@@ -190,6 +196,7 @@ func TestBookAPICreateNormalizesBlankExtendedTextToNull(t *testing.T) {
 	app := newTestApp(t)
 	body := bytes.NewBufferString(`{
 		"title":"Minimal",
+		"purchase_price":" ",
 		"summary":" ",
 		"series_name":" ",
 		"location":" ",
@@ -206,7 +213,7 @@ func TestBookAPICreateNormalizesBlankExtendedTextToNull(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
 		t.Fatal(err)
 	}
-	if created.Summary != nil || created.SeriesName != nil || created.SeriesPosition != nil ||
+	if created.PurchasePrice != nil || created.Summary != nil || created.SeriesName != nil || created.SeriesPosition != nil ||
 		created.Location != nil || created.Condition != nil || created.AcquisitionSource != nil {
 		t.Fatalf("expected nullable extended metadata, got %#v", created)
 	}
@@ -244,12 +251,12 @@ func TestBookAPIList(t *testing.T) {
 	id := int64(100)
 	_, err := app.db.ExecContext(context.Background(), `
 		INSERT INTO books (id, title, isbn, language, publisher, edition, format,
-		                   purchased_at, pages, notes, summary, series_name,
+		                   purchased_at, purchase_price, pages, notes, summary, series_name,
 		                   series_position, location, condition, acquisition_source,
 		                   published_year, published_month, published_day, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id, "Dune", "9780441172719", "en", "Chilton", "1st", "paperback", "2025-06-15",
-		412, "Classic", "A desert epic", "Dune", 1.5, "Living room", "very_good", "Bookshop",
+		"12.34 EUR", 412, "Classic", "A desert epic", "Dune", 1.5, "Living room", "very_good", "Bookshop",
 		1965, 8, 1, now, now)
 	if err != nil {
 		t.Fatal(err)
@@ -296,6 +303,9 @@ func TestBookAPIList(t *testing.T) {
 	}
 	if got.PurchasedAt == nil || *got.PurchasedAt != "2025-06-15" {
 		t.Fatalf("expected purchased_at '2025-06-15', got %#v", got.PurchasedAt)
+	}
+	if got.PurchasePrice == nil || *got.PurchasePrice != "12.34 EUR" {
+		t.Fatalf("expected purchase_price '12.34 EUR', got %#v", got.PurchasePrice)
 	}
 	if got.Pages == nil || *got.Pages != 412 {
 		t.Fatalf("expected pages 412, got %#v", got.Pages)

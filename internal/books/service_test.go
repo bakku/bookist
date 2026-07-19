@@ -70,6 +70,7 @@ func TestServiceCreateTrimsAndPersistsInput(t *testing.T) {
 	ed := " 2nd "
 	format := books.FormatPaperback
 	purchased := " 2025-06-15 "
+	purchasePrice := " 12.34 EUR "
 	pages := 400
 	notes := " Great "
 	summary := " A practical Go guide "
@@ -90,6 +91,7 @@ func TestServiceCreateTrimsAndPersistsInput(t *testing.T) {
 		Edition:           &ed,
 		Format:            &format,
 		PurchasedAt:       &purchased,
+		PurchasePrice:     &purchasePrice,
 		Pages:             &pages,
 		Notes:             &notes,
 		Summary:           &summary,
@@ -132,6 +134,10 @@ func TestServiceCreateTrimsAndPersistsInput(t *testing.T) {
 
 	if created.PurchasedAt == nil || *created.PurchasedAt != "2025-06-15" {
 		t.Fatalf("expected trimmed PurchasedAt '2025-06-15', got %#v", created.PurchasedAt)
+	}
+
+	if created.PurchasePrice == nil || *created.PurchasePrice != "12.34 EUR" {
+		t.Fatalf("expected trimmed PurchasePrice '12.34 EUR', got %#v", created.PurchasePrice)
 	}
 
 	if created.Pages == nil || *created.Pages != 400 {
@@ -188,6 +194,7 @@ func TestServiceCreateTrimsAndPersistsInput(t *testing.T) {
 		Edition:           new("2nd"),
 		Format:            &f,
 		PurchasedAt:       new("2025-06-15"),
+		PurchasePrice:     new("12.34 EUR"),
 		Pages:             new(400),
 		Notes:             new("Great"),
 		Summary:           new("A practical Go guide"),
@@ -284,6 +291,7 @@ func TestServiceCreateConvertsBlankStringFieldsToNull(t *testing.T) {
 	location := " "
 	acquisitionSource := " "
 	purchased := " "
+	purchasePrice := " "
 
 	created, err := service.Create(context.Background(), books.CreateBookRequest{
 		Title:             "Blank Fields",
@@ -296,6 +304,7 @@ func TestServiceCreateConvertsBlankStringFieldsToNull(t *testing.T) {
 		Location:          &location,
 		AcquisitionSource: &acquisitionSource,
 		PurchasedAt:       &purchased,
+		PurchasePrice:     &purchasePrice,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -32,6 +32,7 @@ type Book struct {
 	Edition           *string          `json:"edition"`
 	Format            *Format          `json:"format"`
 	PurchasedAt       *string          `json:"purchased_at"`
+	PurchasePrice     *string          `json:"purchase_price"`
 	Pages             *int             `json:"pages"`
 	Notes             *string          `json:"notes"`
 	Summary           *string          `json:"summary"`
@@ -57,6 +58,7 @@ type CreateBookRequest struct {
 	Edition           *string    `json:"edition"`
 	Format            *Format    `json:"format"`
 	PurchasedAt       *string    `json:"purchased_at"`
+	PurchasePrice     *string    `json:"purchase_price"`
 	Pages             *int       `json:"pages"`
 	Notes             *string    `json:"notes"`
 	Summary           *string    `json:"summary"`

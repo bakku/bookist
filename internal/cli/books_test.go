@@ -132,6 +132,7 @@ func TestBooksAddWithNewFields(t *testing.T) {
 	exitCode := cli.Run([]string{
 		"books", "add", "--title", "Full Book", "--language", "en", "--publisher", "O'Reilly",
 		"--edition", "2nd", "--format", "paperback", "--purchased-at", "2025-06-15",
+		"--purchase-price", "12.34 EUR",
 		"--pages", "400", "--notes", "Great read", "--summary", "A practical guide",
 		"--series-name", "Programming", "--series-position", "1.5", "--location", "Office shelf",
 		"--condition", "very_good", "--acquisition-source", "Bookshop", "--published-year", "2024",
@@ -170,6 +171,10 @@ func TestBooksAddWithNewFields(t *testing.T) {
 
 	if got.PurchasedAt == nil || *got.PurchasedAt != "2025-06-15" {
 		t.Fatalf("expected purchased_at '2025-06-15', got %#v", got.PurchasedAt)
+	}
+
+	if got.PurchasePrice == nil || *got.PurchasePrice != "12.34 EUR" {
+		t.Fatalf("expected purchase_price '12.34 EUR', got %#v", got.PurchasePrice)
 	}
 
 	if got.Pages == nil || *got.Pages != 400 {
@@ -232,7 +237,7 @@ func TestBooksAddSendsNullForOmittedOptionalFields(t *testing.T) {
 		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr.String())
 	}
 	if posted.ISBN != nil || posted.Language != nil || posted.Publisher != nil || posted.Edition != nil ||
-		posted.Format != nil || posted.PurchasedAt != nil || posted.Pages != nil || posted.Notes != nil ||
+		posted.Format != nil || posted.PurchasedAt != nil || posted.PurchasePrice != nil || posted.Pages != nil || posted.Notes != nil ||
 		posted.Summary != nil || posted.SeriesName != nil || posted.SeriesPosition != nil ||
 		posted.Location != nil || posted.Condition != nil || posted.AcquisitionSource != nil ||
 		posted.PublishedYear != nil || posted.PublishedMonth != nil || posted.PublishedDay != nil {
