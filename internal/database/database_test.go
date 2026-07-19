@@ -83,16 +83,9 @@ func TestInitialSchemaRejectsNonUUIDIDs(t *testing.T) {
 	}
 }
 
-func TestInitialSchemaEnforcesNaturalKeysAndBookValidation(t *testing.T) {
+func TestInitialSchemaEnforcesBookValidation(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	now := "2026-01-02T03:04:05Z"
-
-	if _, err := db.Exec(`INSERT INTO authors (id, name, created_at, updated_at) VALUES (?, 'Jane Austen', ?, ?)`, uuid.NewString(), now, now); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`INSERT INTO authors (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)`, uuid.NewString(), "jane AUSTEN", now, now); err == nil {
-		t.Fatal("expected case-insensitive duplicate author name to violate a constraint")
-	}
 
 	for _, test := range []struct {
 		title string
@@ -115,12 +108,6 @@ func TestInitialSchemaEnforcesNaturalKeysAndBookValidation(t *testing.T) {
 		if _, err := db.Exec(query, args...); err == nil {
 			t.Fatalf("expected %s to violate a constraint", test.title)
 		}
-	}
-	if _, err := db.Exec(`INSERT INTO books (id, title, created_at, updated_at) VALUES (?, 'Dune', ?, ?)`, uuid.NewString(), now, now); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`INSERT INTO books (id, title, created_at, updated_at) VALUES (?, 'dUnE', ?, ?)`, uuid.NewString(), now, now); err == nil {
-		t.Fatal("expected case-insensitive duplicate title to violate a constraint")
 	}
 }
 

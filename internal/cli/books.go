@@ -261,7 +261,7 @@ func resolveAuthorIDs(serverURL string, values []string) ([]string, error) {
 	}
 
 	var result []string
-	var byName map[string]authors.Author
+	var byName map[string][]authors.Author
 
 	for _, val := range values {
 		val = strings.TrimSpace(val)
@@ -280,15 +280,21 @@ func resolveAuthorIDs(serverURL string, values []string) ([]string, error) {
 					return nil, fmt.Errorf("fetch authors: %v", err)
 				}
 
-				byName = make(map[string]authors.Author, len(existingAuthors))
+				byName = make(map[string][]authors.Author, len(existingAuthors))
 
 				for _, a := range existingAuthors {
-					byName[strings.ToLower(a.Name)] = a
+					key := strings.ToLower(a.Name)
+					byName[key] = append(byName[key], a)
 				}
 			}
 
-			if a, ok := byName[strings.ToLower(val)]; ok {
-				result = append(result, a.ID)
+			key := strings.ToLower(val)
+			matches := byName[key]
+			if len(matches) > 1 {
+				return nil, fmt.Errorf("author %q exists multiple times; pass an author ID instead", val)
+			}
+			if len(matches) == 1 {
+				result = append(result, matches[0].ID)
 			} else {
 				// Textual author references create the missing author for convenient book entry.
 				created, err := createAuthor(serverURL, val)
@@ -297,6 +303,7 @@ func resolveAuthorIDs(serverURL string, values []string) ([]string, error) {
 				}
 
 				result = append(result, created.ID)
+				byName[key] = []authors.Author{created}
 			}
 		}
 	}

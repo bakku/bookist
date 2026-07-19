@@ -370,18 +370,6 @@ func TestServiceCreateRejectsInvalidPurchasedAt(t *testing.T) {
 	testsupport.AssertBookCount(t, db, 0)
 }
 
-func TestServiceCreateRejectsCaseInsensitiveDuplicate(t *testing.T) {
-	service, db := testsupport.NewBookService(t)
-
-	if _, err := service.Create(context.Background(), books.CreateBookRequest{Title: "Dune"}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.Create(context.Background(), books.CreateBookRequest{Title: "dUnE"}); !errors.Is(err, books.ErrTitleConflict) {
-		t.Fatalf("expected ErrTitleConflict, got %v", err)
-	}
-	testsupport.AssertBookCount(t, db, 1)
-}
-
 // ── List ──────────────────────────────────────────────────────────────────────
 
 func TestServiceListHydratesAuthors(t *testing.T) {

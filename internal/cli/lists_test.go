@@ -200,6 +200,40 @@ func TestListsAddBookResolvesBookByTitle(t *testing.T) {
 	}
 }
 
+func TestListsAddBookWithAmbiguousTitleRequiresID(t *testing.T) {
+	bookPosted := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/lists":
+			_ = json.NewEncoder(w).Encode([]lists.List{{ID: "list-1", Name: "Want to Buy"}})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/books":
+			_ = json.NewEncoder(w).Encode([]struct {
+				ID    string `json:"id"`
+				Title string `json:"title"`
+			}{
+				{ID: "book-1", Title: "Dune"},
+				{ID: "book-2", Title: "dUnE"},
+			})
+		case r.Method == http.MethodPost:
+			bookPosted = true
+		}
+	}))
+	defer server.Close()
+
+	var stdout, stderr strings.Builder
+	exitCode := cli.Run([]string{"lists", "add-book", "--list", "Want to Buy", "--book", "Dune", "--server", server.URL}, &stdout, &stderr)
+
+	if exitCode == 0 {
+		t.Fatal("expected non-zero exit code")
+	}
+	if bookPosted {
+		t.Fatal("expected ambiguous title to prevent adding a book")
+	}
+	if !strings.Contains(stderr.String(), `book "Dune" exists multiple times; pass a book ID instead`) {
+		t.Fatalf("unexpected error: %q", stderr.String())
+	}
+}
+
 func TestListsAddBookListNotFoundExitsNonZero(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/api/lists" {

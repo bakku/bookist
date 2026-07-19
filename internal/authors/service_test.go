@@ -36,19 +36,6 @@ func TestServiceCreateTrimsAndPersistsName(t *testing.T) {
 	testsupport.AssertAuthorRow(t, db, created.ID, "Jane Austen")
 }
 
-func TestServiceCreateRejectsCaseInsensitiveDuplicate(t *testing.T) {
-	db := testsupport.OpenMigratedDB(t)
-	service := authors.NewService(authors.NewSQLiteRepository(db))
-
-	if _, err := service.Create(context.Background(), authors.CreateAuthorRequest{Name: "Jane Austen"}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := service.Create(context.Background(), authors.CreateAuthorRequest{Name: "jane AUSTEN"}); !errors.Is(err, authors.ErrNameConflict) {
-		t.Fatalf("expected ErrNameConflict, got %v", err)
-	}
-	testsupport.AssertAuthorCount(t, db, 1)
-}
-
 // ── List ──────────────────────────────────────────────────────────────────────
 
 func TestServiceListDelegates(t *testing.T) {

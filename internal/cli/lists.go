@@ -269,15 +269,18 @@ func resolveBookID(serverURL, value string) (string, error) {
 		return "", fmt.Errorf("fetch books: %v", err)
 	}
 
-	byTitle := make(map[string]string)
+	byTitle := make(map[string][]string)
 	for _, b := range existing {
-		if _, exists := byTitle[strings.ToLower(b.Title)]; !exists {
-			byTitle[strings.ToLower(b.Title)] = b.ID
-		}
+		key := strings.ToLower(b.Title)
+		byTitle[key] = append(byTitle[key], b.ID)
 	}
 
-	if id, ok := byTitle[strings.ToLower(value)]; ok {
-		return id, nil
+	matches := byTitle[strings.ToLower(value)]
+	if len(matches) > 1 {
+		return "", fmt.Errorf("book %q exists multiple times; pass a book ID instead", value)
+	}
+	if len(matches) == 1 {
+		return matches[0], nil
 	}
 
 	return "", fmt.Errorf("book not found: %s", value)

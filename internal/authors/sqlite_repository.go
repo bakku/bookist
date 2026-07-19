@@ -29,17 +29,7 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateAuthorRequest
 		RETURNING id, name, created_at, updated_at
 	`, uuid.NewString(), input.Name, createdAt, updatedAt)
 
-	author, err := scanAuthor(row)
-	if err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed: authors.name") {
-		return Author{}, ErrNameConflict
-	}
-	return author, err
-}
-
-func (r *SQLiteRepository) NameExists(ctx context.Context, name string) (bool, error) {
-	var exists bool
-	err := r.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM authors WHERE name = ? COLLATE NOCASE)`, name).Scan(&exists)
-	return exists, err
+	return scanAuthor(row)
 }
 
 func (r *SQLiteRepository) List(ctx context.Context) ([]Author, error) {
