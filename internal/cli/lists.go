@@ -23,8 +23,8 @@ func runLists(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	switch args[0] {
-	case "list":
-		return runListsList(args[1:], stdout, stderr)
+	case "ls":
+		return runListsLS(args[1:], stdout, stderr)
 
 	case "add":
 		return runListsAdd(args[1:], stdout, stderr)
@@ -49,22 +49,23 @@ func printListsHelp(w io.Writer) {
 		usage:       "bookist lists [command [command options]]",
 		description: "Manage book lists",
 		commands: []helpCommand{
-			{name: "list", description: "List book lists"},
+			{name: "ls", description: "List book lists"},
 			{name: "add", description: "Add a book list"},
 			{name: "add-book", description: "Add a book to a list"},
 		},
 	}, nil)
 }
 
-func runListsList(args []string, stdout io.Writer, stderr io.Writer) int {
-	flags := flag.NewFlagSet("lists list", flag.ContinueOnError)
+func runListsLS(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("lists ls", flag.ContinueOnError)
 
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
 	formatValue := flags.String("format", string(outputFormatPretty), "Output format (tsv|pretty|json)")
+	query := flags.String("query", "", "Filter lists by name")
 
 	help := commandHelp{
-		name:        "bookist lists list",
-		usage:       "bookist lists list [options]",
+		name:        "bookist lists ls",
+		usage:       "bookist lists ls [options]",
 		description: "List book lists",
 	}
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
@@ -77,9 +78,9 @@ func runListsList(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
-	listed, err := fetchLists(*serverURL)
+	listed, err := fetchLists(*serverURL, *query)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "list lists: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "ls lists: %v\n", err)
 		return 1
 	}
 
@@ -89,7 +90,7 @@ func runListsList(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	if err := writeListOutput(stdout, format, listed, []string{"ID", "NAME"}, rows); err != nil {
-		_, _ = fmt.Fprintf(stderr, "list lists: write output: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "ls lists: write output: %v\n", err)
 		return 1
 	}
 
@@ -240,20 +241,23 @@ func resolveListID(serverURL, value string) (int64, error) {
 		return id, nil
 	}
 
-	existing, err := fetchLists(serverURL)
+	existing, err := fetchLists(serverURL, value)
 	if err != nil {
 		return 0, fmt.Errorf("fetch lists: %v", err)
 	}
 
-	byName := make(map[string]int64)
+	var matches []lists.List
 	for _, l := range existing {
-		if _, exists := byName[strings.ToLower(l.Name)]; !exists {
-			byName[strings.ToLower(l.Name)] = l.ID
+		if strings.EqualFold(l.Name, value) {
+			matches = append(matches, l)
 		}
 	}
 
-	if id, ok := byName[strings.ToLower(value)]; ok {
-		return id, nil
+	if len(matches) > 1 {
+		return 0, fmt.Errorf("list %q exists multiple times; pass a list ID instead", value)
+	}
+	if len(matches) == 1 {
+		return matches[0].ID, nil
 	}
 
 	return 0, fmt.Errorf("list not found: %s", value)
@@ -270,15 +274,17 @@ func resolveBookID(serverURL, value string) (int64, error) {
 		return id, nil
 	}
 
-	existing, err := fetchBooks(serverURL)
+	existing, err := fetchBooks(serverURL, value)
 	if err != nil {
 		return 0, fmt.Errorf("fetch books: %v", err)
 	}
 
 	byTitle := make(map[string][]int64)
 	for _, b := range existing {
-		key := strings.ToLower(b.Title)
-		byTitle[key] = append(byTitle[key], b.ID)
+		if strings.EqualFold(b.Title, value) {
+			key := strings.ToLower(b.Title)
+			byTitle[key] = append(byTitle[key], b.ID)
+		}
 	}
 
 	matches := byTitle[strings.ToLower(value)]
@@ -292,8 +298,8 @@ func resolveBookID(serverURL, value string) (int64, error) {
 	return 0, fmt.Errorf("book not found: %s", value)
 }
 
-func fetchLists(serverURL string) ([]lists.List, error) {
-	endpoint, err := joinURL(serverURL, "/api/lists")
+func fetchLists(serverURL, query string) ([]lists.List, error) {
+	endpoint, err := joinURLWithQuery(serverURL, "/api/lists", query)
 	if err != nil {
 		return nil, fmt.Errorf("invalid server URL: %v", err)
 	}

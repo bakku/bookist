@@ -13,8 +13,8 @@ import (
 	"bakku.dev/bookist/internal/authors"
 )
 
-func fetchAuthors(serverURL string) ([]authors.Author, error) {
-	endpoint, err := joinURL(serverURL, "/api/authors")
+func fetchAuthors(serverURL, query string) ([]authors.Author, error) {
+	endpoint, err := joinURLWithQuery(serverURL, "/api/authors", query)
 	if err != nil {
 		return nil, fmt.Errorf("invalid server URL: %v", err)
 	}
@@ -82,8 +82,8 @@ func runAuthors(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	switch args[0] {
-	case "list":
-		return runAuthorsList(args[1:], stdout, stderr)
+	case "ls":
+		return runAuthorsLS(args[1:], stdout, stderr)
 
 	case "add":
 		return runAuthorsAdd(args[1:], stdout, stderr)
@@ -105,21 +105,22 @@ func printAuthorsHelp(w io.Writer) {
 		usage:       "bookist authors [command [command options]]",
 		description: "Manage authors",
 		commands: []helpCommand{
-			{name: "list", description: "List authors"},
+			{name: "ls", description: "List authors"},
 			{name: "add", description: "Add an author"},
 		},
 	}, nil)
 }
 
-func runAuthorsList(args []string, stdout io.Writer, stderr io.Writer) int {
-	flags := flag.NewFlagSet("authors list", flag.ContinueOnError)
+func runAuthorsLS(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("authors ls", flag.ContinueOnError)
 
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
 	formatValue := flags.String("format", string(outputFormatPretty), "Output format (tsv|pretty|json)")
+	query := flags.String("query", "", "Filter authors by name")
 
 	help := commandHelp{
-		name:        "bookist authors list",
-		usage:       "bookist authors list [options]",
+		name:        "bookist authors ls",
+		usage:       "bookist authors ls [options]",
 		description: "List authors",
 	}
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
@@ -132,9 +133,9 @@ func runAuthorsList(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
-	listed, err := fetchAuthors(*serverURL)
+	listed, err := fetchAuthors(*serverURL, *query)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "list authors: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "ls authors: %v\n", err)
 		return 1
 	}
 
@@ -144,7 +145,7 @@ func runAuthorsList(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	if err := writeListOutput(stdout, format, listed, []string{"ID", "NAME"}, rows); err != nil {
-		_, _ = fmt.Fprintf(stderr, "list authors: write output: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "ls authors: write output: %v\n", err)
 		return 1
 	}
 

@@ -36,7 +36,7 @@ func TestListsListTableFormats(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			args := []string{"lists", "list", "--server", server.URL}
+			args := []string{"lists", "ls", "--server", server.URL}
 			if test.format != "" {
 				args = append(args, "--format", test.format)
 			}
@@ -65,7 +65,7 @@ func TestListsListJSONPreservesNullableDescription(t *testing.T) {
 	}))
 	defer server.Close()
 
-	exitCode, stdout, stderr := runCLI([]string{"lists", "list", "--server", server.URL, "--format", "json"})
+	exitCode, stdout, stderr := runCLI([]string{"lists", "ls", "--server", server.URL, "--format", "json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
 	}
@@ -85,6 +85,23 @@ func TestListsListJSONPreservesNullableDescription(t *testing.T) {
 	}
 	if listed[1].Description != nil {
 		t.Fatalf("expected null description, got %#v", listed[1].Description)
+	}
+}
+
+func TestListsLSForwardsQuery(t *testing.T) {
+	var gotQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query().Get("q")
+		_ = json.NewEncoder(w).Encode([]lists.List{})
+	}))
+	defer server.Close()
+
+	exitCode, _, stderr := runCLI([]string{"lists", "ls", "--query", "Want & Buy", "--server", server.URL})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
+	}
+	if gotQuery != "Want & Buy" {
+		t.Fatalf("expected query %q, got %q", "Want & Buy", gotQuery)
 	}
 }
 
@@ -122,7 +139,11 @@ func TestListsAddBookResolvesListByName(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/lists":
+			if got := r.URL.Query().Get("q"); got != "want TO buy" {
+				t.Fatalf("expected list query %q, got %q", "want TO buy", got)
+			}
 			json.NewEncoder(w).Encode([]lists.List{
+				{ID: 9, Name: "Want to Buy Later"},
 				{ID: 1, Name: "Want to Buy"},
 			})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/books":
@@ -176,10 +197,14 @@ func TestListsAddBookResolvesBookByTitle(t *testing.T) {
 				{ID: 1, Name: "Want to Buy"},
 			})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/books":
+			if got := r.URL.Query().Get("q"); got != "dUnE" {
+				t.Fatalf("expected book query %q, got %q", "dUnE", got)
+			}
 			json.NewEncoder(w).Encode([]struct {
 				ID    int64  `json:"id"`
 				Title string `json:"title"`
 			}{
+				{ID: 3, Title: "Dune Messiah"},
 				{ID: 2, Title: "Dune"},
 			})
 		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/lists/"):

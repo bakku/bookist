@@ -81,6 +81,32 @@ func TestSQLiteRepositoryListReadsPersistedLists(t *testing.T) {
 	}
 }
 
+// ── Search ────────────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositorySearchMatchesNamesCaseInsensitively(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+	id1 := testsupport.InsertListRow(t, db, "Bedroom Shelf")
+	id2 := testsupport.InsertListRow(t, db, "Office Shelf")
+	id3 := testsupport.InsertListRow(t, db, "Living Room Shelf")
+	testsupport.InsertListRow(t, db, "Want to Buy")
+	if _, err := db.Exec(`UPDATE lists SET updated_at = '2026-01-03T00:00:00Z' WHERE id = ?`, id3); err != nil {
+		t.Fatal(err)
+	}
+
+	matched, err := repository.Search(ctx, "sHeLf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matched) != 3 {
+		t.Fatalf("expected 3 matching lists, got %#v", matched)
+	}
+	if matched[0].ID != id3 || matched[1].ID != id1 || matched[2].ID != id2 {
+		t.Fatalf("expected updated-at and ID ordering [%d %d %d], got [%d %d %d]", id3, id1, id2, matched[0].ID, matched[1].ID, matched[2].ID)
+	}
+}
+
 // ── GetByID ───────────────────────────────────────────────────────────────────
 
 func TestSQLiteRepositoryGetByIDReturnsList(t *testing.T) {

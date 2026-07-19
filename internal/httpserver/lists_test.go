@@ -118,6 +118,28 @@ func TestListAPIList(t *testing.T) {
 	}
 }
 
+func TestListAPISearchesNamesCaseInsensitively(t *testing.T) {
+	app := newTestApp(t)
+	testsupport.InsertListRow(t, app.db, "Nightstand")
+	testsupport.InsertListRow(t, app.db, "Want to Buy")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/lists?q=NIGHT", nil)
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, resp.Code)
+	}
+
+	var listed []lists.List
+	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].Name != "Nightstand" {
+		t.Fatalf("expected only Nightstand, got %#v", listed)
+	}
+}
+
 // ── AddBookToList ─────────────────────────────────────────────────────────────
 
 func TestListAPIAddBookToList(t *testing.T) {
@@ -248,6 +270,35 @@ func TestListAPIListBooks(t *testing.T) {
 	}
 	if bookList[1].Title != "Foundation" {
 		t.Fatalf("expected Foundation, got %q", bookList[1].Title)
+	}
+}
+
+func TestListAPIListBooksSearchesWithinList(t *testing.T) {
+	app := newTestApp(t)
+
+	listID := testsupport.InsertListRow(t, app.db, "Nightstand")
+	otherListID := testsupport.InsertListRow(t, app.db, "Archive")
+	duneID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
+	foundationID := testsupport.InsertBookRow(t, app.db, "Foundation", nil)
+	otherDuneID := testsupport.InsertBookRow(t, app.db, "Dune Messiah", nil)
+	testsupport.InsertBookListRow(t, app.db, listID, duneID)
+	testsupport.InsertBookListRow(t, app.db, listID, foundationID)
+	testsupport.InsertBookListRow(t, app.db, otherListID, otherDuneID)
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/lists/%d/books?q=UNE", listID), nil)
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, resp.Code)
+	}
+
+	var listed []books.Book
+	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].Title != "Dune" {
+		t.Fatalf("expected only Dune from Nightstand, got %#v", listed)
 	}
 }
 
