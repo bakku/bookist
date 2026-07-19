@@ -3,8 +3,8 @@ package reads
 import "time"
 
 type Read struct {
-	ID          string    `json:"id"`
-	BookID      string    `json:"book_id"`
+	ID          int64     `json:"id"`
+	BookID      int64     `json:"book_id"`
 	StartedAt   *string   `json:"started_at"`
 	FinishedAt  *string   `json:"finished_at"`
 	AbandonedAt *string   `json:"abandoned_at"`

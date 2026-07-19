@@ -21,7 +21,7 @@ func TestAuthorsAddPrintsIDAndName(t *testing.T) {
 			json.NewDecoder(r.Body).Decode(&req)
 			capturedBody = req.Name
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(authors.Author{ID: "new-uuid", Name: req.Name})
+			json.NewEncoder(w).Encode(authors.Author{ID: 10, Name: req.Name})
 		}
 	}))
 	defer server.Close()
@@ -35,8 +35,8 @@ func TestAuthorsAddPrintsIDAndName(t *testing.T) {
 	if capturedBody != "Test Author" {
 		t.Fatalf("expected POST body name 'Test Author', got %q", capturedBody)
 	}
-	if !strings.Contains(stdout.String(), "new-uuid\tTest Author") {
-		t.Fatalf("expected stdout to contain 'new-uuid\\tTest Author', got %q", stdout.String())
+	if !strings.Contains(stdout.String(), "10\tTest Author") {
+		t.Fatalf("expected stdout to contain '10\\tTest Author', got %q", stdout.String())
 	}
 }
 
@@ -46,8 +46,8 @@ func TestAuthorsListTableFormats(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/api/authors" {
 			_ = json.NewEncoder(w).Encode([]authors.Author{
-				{ID: "id-1", Name: "Author One"},
-				{ID: "id-2", Name: "Author Two"},
+				{ID: 1, Name: "Author One"},
+				{ID: 2, Name: "Author Two"},
 			})
 		}
 	}))
@@ -58,9 +58,9 @@ func TestAuthorsListTableFormats(t *testing.T) {
 		format   string
 		expected string
 	}{
-		{name: "default pretty", expected: "ID    NAME\nid-1  Author One\nid-2  Author Two\n"},
-		{name: "explicit TSV", format: "tsv", expected: "id-1\tAuthor One\nid-2\tAuthor Two\n"},
-		{name: "pretty", format: "pretty", expected: "ID    NAME\nid-1  Author One\nid-2  Author Two\n"},
+		{name: "default pretty", expected: "ID  NAME\n1   Author One\n2   Author Two\n"},
+		{name: "explicit TSV", format: "tsv", expected: "1\tAuthor One\n2\tAuthor Two\n"},
+		{name: "pretty", format: "pretty", expected: "ID  NAME\n1   Author One\n2   Author Two\n"},
 	}
 
 	for _, test := range tests {
@@ -86,7 +86,7 @@ func TestAuthorsListTableFormats(t *testing.T) {
 
 func TestAuthorsListJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode([]authors.Author{{ID: "id-1", Name: "Author One"}})
+		_ = json.NewEncoder(w).Encode([]authors.Author{{ID: 1, Name: "Author One"}})
 	}))
 	defer server.Close()
 
@@ -102,7 +102,7 @@ func TestAuthorsListJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &listed); err != nil {
 		t.Fatalf("expected valid JSON, got %q: %v", stdout, err)
 	}
-	if len(listed) != 1 || listed[0].ID != "id-1" || listed[0].Name != "Author One" {
+	if len(listed) != 1 || listed[0].ID != 1 || listed[0].Name != "Author One" {
 		t.Fatalf("expected complete author JSON, got %#v", listed)
 	}
 }

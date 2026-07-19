@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"bakku.dev/bookist/internal/books"
 	"bakku.dev/bookist/internal/testsupport"
-	"github.com/google/uuid"
 )
 
 // ── Create ────────────────────────────────────────────────────────────────────
@@ -52,7 +52,7 @@ func TestBookAPICreate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if created.ID == "" {
+	if created.ID <= 0 {
 		t.Fatal("expected created book to have an ID")
 	}
 
@@ -125,7 +125,7 @@ func TestBookAPICreateRejectsFormBody(t *testing.T) {
 func TestBookAPICreateRejectsUnknownAuthor(t *testing.T) {
 	app := newTestApp(t)
 
-	body := bytes.NewBufferString(`{"title":"Test Book","author_ids":["` + uuid.NewString() + `"]}`)
+	body := bytes.NewBufferString(`{"title":"Test Book","author_ids":[999999]}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/books", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
@@ -143,7 +143,7 @@ func TestBookAPICreateWithAuthors(t *testing.T) {
 	app := newTestApp(t)
 	authorID := testsupport.InsertAuthorRow(t, app.db, "Test Author")
 
-	body := bytes.NewBufferString(`{"title":"Test Book","author_ids":["` + authorID + `"]}`)
+	body := bytes.NewBufferString(fmt.Sprintf(`{"title":"Test Book","author_ids":[%d]}`, authorID))
 	req := httptest.NewRequest(http.MethodPost, "/api/books", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
@@ -241,7 +241,7 @@ func TestBookAPIList(t *testing.T) {
 	app := newTestApp(t)
 	now := "2026-01-02T03:04:05Z"
 
-	id := uuid.NewString()
+	id := int64(100)
 	_, err := app.db.ExecContext(context.Background(), `
 		INSERT INTO books (id, title, isbn, language, publisher, edition, format,
 		                   purchased_at, pages, notes, summary, series_name,
@@ -274,7 +274,7 @@ func TestBookAPIList(t *testing.T) {
 	got := listed[0]
 
 	if got.ID != id {
-		t.Fatalf("expected ID %s, got %s", id, got.ID)
+		t.Fatalf("expected ID %d, got %d", id, got.ID)
 	}
 	if got.Title != "Dune" {
 		t.Fatalf("expected Dune, got %q", got.Title)

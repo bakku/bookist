@@ -7,7 +7,6 @@ import (
 
 	"bakku.dev/bookist/internal/lists"
 	"bakku.dev/bookist/internal/testsupport"
-	"github.com/google/uuid"
 )
 
 // ── Create ────────────────────────────────────────────────────────────────────
@@ -21,11 +20,8 @@ func TestSQLiteRepositoryCreatePersistsList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if created.ID == "" {
+	if created.ID <= 0 {
 		t.Fatal("expected created list to have an ID")
-	}
-	if _, err := uuid.Parse(created.ID); err != nil {
-		t.Fatalf("expected valid UUID, got %q: %v", created.ID, err)
 	}
 
 	testsupport.AssertListRow(t, db, created.ID, "Want to Buy")
@@ -81,7 +77,7 @@ func TestSQLiteRepositoryListReadsPersistedLists(t *testing.T) {
 		wantFirst, wantSecond = id2, id1
 	}
 	if listed[0].ID != wantFirst || listed[1].ID != wantSecond {
-		t.Fatalf("expected ID tie-break ordering [%s %s], got [%s %s]", wantFirst, wantSecond, listed[0].ID, listed[1].ID)
+		t.Fatalf("expected ID tie-break ordering [%d %d], got [%d %d]", wantFirst, wantSecond, listed[0].ID, listed[1].ID)
 	}
 }
 
@@ -98,7 +94,7 @@ func TestSQLiteRepositoryGetByIDReturnsList(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got.ID != id {
-		t.Fatalf("expected ID %s, got %s", id, got.ID)
+		t.Fatalf("expected ID %d, got %d", id, got.ID)
 	}
 	if got.Name != "Want to Buy" {
 		t.Fatalf("expected Want to Buy, got %q", got.Name)
@@ -110,7 +106,7 @@ func TestSQLiteRepositoryGetByIDReturnsErrListNotFound(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	repository := lists.NewSQLiteRepository(db)
 
-	_, err := repository.GetByID(ctx, uuid.NewString())
+	_, err := repository.GetByID(ctx, 999999)
 	if !errors.Is(err, lists.ErrListNotFound) {
 		t.Fatalf("expected ErrListNotFound, got %v", err)
 	}
@@ -160,7 +156,7 @@ func TestSQLiteRepositoryAddBookToListReturnsErrListNotFound(t *testing.T) {
 
 	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
 
-	err := repository.AddBookToList(ctx, uuid.NewString(), bookID)
+	err := repository.AddBookToList(ctx, 999999, bookID)
 	if !errors.Is(err, lists.ErrListNotFound) {
 		t.Fatalf("expected ErrListNotFound, got %v", err)
 	}
@@ -173,7 +169,7 @@ func TestSQLiteRepositoryAddBookToListReturnsErrBookNotFound(t *testing.T) {
 
 	listID := testsupport.InsertListRow(t, db, "Want to Buy")
 
-	err := repository.AddBookToList(ctx, listID, uuid.NewString())
+	err := repository.AddBookToList(ctx, listID, 999999)
 	if !errors.Is(err, lists.ErrBookNotFound) {
 		t.Fatalf("expected ErrBookNotFound, got %v", err)
 	}

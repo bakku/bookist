@@ -93,7 +93,7 @@ func runReadsList(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	for _, read := range listed {
 		rows = append(rows, []string{
-			read.ID,
+			strconv.FormatInt(read.ID, 10),
 			stringValue(read.StartedAt),
 			stringValue(read.FinishedAt),
 			stringValue(read.AbandonedAt),
@@ -164,7 +164,7 @@ func runReadsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 
-	endpoint, err := joinURL(*serverURL, "/api/books/"+bookID+"/reads")
+	endpoint, err := joinURL(*serverURL, "/api/books/"+strconv.FormatInt(bookID, 10)+"/reads")
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
 		return 2
@@ -192,13 +192,13 @@ func runReadsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 
-	_, _ = fmt.Fprintf(stdout, "%s\t%s\n", created.ID, created.BookID)
+	_, _ = fmt.Fprintf(stdout, "%d\t%d\n", created.ID, created.BookID)
 
 	return 0
 }
 
-func fetchReads(serverURL, bookID string) ([]reads.Read, error) {
-	endpoint, err := joinURL(serverURL, "/api/books/"+bookID+"/reads")
+func fetchReads(serverURL string, bookID int64) ([]reads.Read, error) {
+	endpoint, err := joinURL(serverURL, "/api/books/"+strconv.FormatInt(bookID, 10)+"/reads")
 	if err != nil {
 		return nil, fmt.Errorf("invalid server URL: %v", err)
 	}

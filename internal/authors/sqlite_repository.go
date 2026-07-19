@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type SQLiteRepository struct {
@@ -24,10 +22,10 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateAuthorRequest
 	updatedAt := createdAt
 
 	row := r.db.QueryRowContext(ctx, `
-		INSERT INTO authors (id, name, created_at, updated_at)
-		VALUES (?, ?, ?, ?)
+		INSERT INTO authors (name, created_at, updated_at)
+		VALUES (?, ?, ?)
 		RETURNING id, name, created_at, updated_at
-	`, uuid.NewString(), input.Name, createdAt, updatedAt)
+	`, input.Name, createdAt, updatedAt)
 
 	return scanAuthor(row)
 }
@@ -58,7 +56,7 @@ func (r *SQLiteRepository) List(ctx context.Context) ([]Author, error) {
 	return authors, nil
 }
 
-func (r *SQLiteRepository) GetByIDs(ctx context.Context, ids []string) ([]Author, error) {
+func (r *SQLiteRepository) GetByIDs(ctx context.Context, ids []int64) ([]Author, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -97,9 +95,9 @@ func (r *SQLiteRepository) GetByIDs(ctx context.Context, ids []string) ([]Author
 	return authors, nil
 }
 
-func (r *SQLiteRepository) ListByBookIDs(ctx context.Context, bookIDs []string) (map[string][]Author, error) {
+func (r *SQLiteRepository) ListByBookIDs(ctx context.Context, bookIDs []int64) (map[int64][]Author, error) {
 	if len(bookIDs) == 0 {
-		return map[string][]Author{}, nil
+		return map[int64][]Author{}, nil
 	}
 
 	placeholders := make([]string, len(bookIDs))
@@ -123,9 +121,9 @@ func (r *SQLiteRepository) ListByBookIDs(ctx context.Context, bookIDs []string) 
 	}
 	defer rows.Close()
 
-	result := make(map[string][]Author)
+	result := make(map[int64][]Author)
 	for rows.Next() {
-		var bookID string
+		var bookID int64
 		var author Author
 		var name, createdAt, updatedAt string
 

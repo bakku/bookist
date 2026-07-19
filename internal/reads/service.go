@@ -19,8 +19,8 @@ var ErrAbandonedBeforeStarted = errors.New("abandoned_at must not be before star
 var ErrInvalidRating = errors.New("rating must be between 1 and 5 in increments of 0.5")
 
 type Repository interface {
-	Create(ctx context.Context, bookID string, input CreateReadRequest) (Read, error)
-	ListByBookID(ctx context.Context, bookID string) ([]Read, error)
+	Create(ctx context.Context, bookID int64, input CreateReadRequest) (Read, error)
+	ListByBookID(ctx context.Context, bookID int64) ([]Read, error)
 }
 
 type Service struct {
@@ -31,7 +31,7 @@ func NewService(repository Repository) *Service {
 	return &Service{repository: repository}
 }
 
-func (s *Service) Create(ctx context.Context, bookID string, input CreateReadRequest) (Read, error) {
+func (s *Service) Create(ctx context.Context, bookID int64, input CreateReadRequest) (Read, error) {
 	startedAt, err := normalizeDate(input.StartedAt, ErrInvalidStartedAt)
 	if err != nil {
 		return Read{}, err
@@ -80,7 +80,7 @@ func (s *Service) Create(ctx context.Context, bookID string, input CreateReadReq
 	return s.repository.Create(ctx, bookID, input)
 }
 
-func (s *Service) ListByBookID(ctx context.Context, bookID string) ([]Read, error) {
+func (s *Service) ListByBookID(ctx context.Context, bookID int64) ([]Read, error) {
 	return s.repository.ListByBookID(ctx, bookID)
 }
 

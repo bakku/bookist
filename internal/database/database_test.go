@@ -8,7 +8,6 @@ import (
 
 	"bakku.dev/bookist/internal/database"
 	"bakku.dev/bookist/internal/testsupport"
-	"github.com/google/uuid"
 )
 
 func TestOpenEnablesForeignKeysOnEveryConnection(t *testing.T) {
@@ -50,6 +49,7 @@ func TestInitialSchemaHasIDsAndTimestampsOnEveryTable(t *testing.T) {
 			defer rows.Close()
 
 			columns := make(map[string]struct {
+				kind    string
 				notNull bool
 				primary bool
 			})
@@ -62,12 +62,16 @@ func TestInitialSchemaHasIDsAndTimestampsOnEveryTable(t *testing.T) {
 					t.Fatal(err)
 				}
 				columns[name] = struct {
+					kind    string
 					notNull bool
 					primary bool
-				}{notNull: notNull == 1, primary: primary == 1}
+				}{kind: kind, notNull: notNull == 1, primary: primary == 1}
 			}
 			if !columns["id"].primary {
 				t.Fatal("expected id primary key")
+			}
+			if columns["id"].kind != "INTEGER" {
+				t.Fatalf("expected INTEGER id, got %q", columns["id"].kind)
 			}
 			if !columns["created_at"].notNull || !columns["updated_at"].notNull {
 				t.Fatal("expected non-null created_at and updated_at")
@@ -76,10 +80,11 @@ func TestInitialSchemaHasIDsAndTimestampsOnEveryTable(t *testing.T) {
 	}
 }
 
-func TestInitialSchemaRejectsNonUUIDIDs(t *testing.T) {
+func TestInitialSchemaGeneratesIntegerIDs(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
-	if _, err := db.Exec(`INSERT INTO authors (id, name, created_at, updated_at) VALUES ('not-a-uuid', 'Jane Austen', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`); err == nil {
-		t.Fatal("expected non-UUID ID to violate a constraint")
+	id := testsupport.InsertAuthorRow(t, db, "Jane Austen")
+	if id <= 0 {
+		t.Fatalf("expected generated positive ID, got %d", id)
 	}
 }
 
@@ -101,10 +106,10 @@ func TestInitialSchemaEnforcesBookValidation(t *testing.T) {
 		for range test.args[1:] {
 			placeholders += ", ?"
 		}
-		args := []any{uuid.NewString(), test.title}
+		args := []any{test.title}
 		args = append(args, test.args...)
 		args = append(args, now, now)
-		query := `INSERT INTO books (id, title, ` + test.cols + `, created_at, updated_at) VALUES (?, ?, ` + placeholders + `, ?, ?)`
+		query := `INSERT INTO books (title, ` + test.cols + `, created_at, updated_at) VALUES (?, ` + placeholders + `, ?, ?)`
 		if _, err := db.Exec(query, args...); err == nil {
 			t.Fatalf("expected %s to violate a constraint", test.title)
 		}
@@ -130,9 +135,9 @@ func TestInitialSchemaSupportsExtendedBookMetadata(t *testing.T) {
 
 	for _, value := range []string{"new", "very_good", "good", "acceptable", "poor"} {
 		_, err := db.Exec(`
-			INSERT INTO books (id, title, summary, series_name, series_position, location, condition, acquisition_source, created_at, updated_at)
-			VALUES (?, ?, 'Summary', 'Series', 1.5, 'Shelf', ?, 'Gift', ?, ?)
-		`, uuid.NewString(), "Condition "+value, value, now, now)
+			INSERT INTO books (title, summary, series_name, series_position, location, condition, acquisition_source, created_at, updated_at)
+			VALUES (?, 'Summary', 'Series', 1.5, 'Shelf', ?, 'Gift', ?, ?)
+		`, "Condition "+value, value, now, now)
 		if err != nil {
 			t.Fatalf("expected condition %q and fractional position to be accepted: %v", value, err)
 		}
@@ -147,8 +152,8 @@ func TestInitialSchemaSupportsExtendedBookMetadata(t *testing.T) {
 		{title: "zero series position", column: "series_position", value: 0},
 		{title: "negative series position", column: "series_position", value: -1.5},
 	} {
-		query := `INSERT INTO books (id, title, ` + test.column + `, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`
-		if _, err := db.Exec(query, uuid.NewString(), test.title, test.value, now, now); err == nil {
+		query := `INSERT INTO books (title, ` + test.column + `, created_at, updated_at) VALUES (?, ?, ?, ?)`
+		if _, err := db.Exec(query, test.title, test.value, now, now); err == nil {
 			t.Fatalf("expected %s to violate a constraint", test.title)
 		}
 	}
@@ -163,10 +168,10 @@ func TestInitialSchemaEnforcesRelationshipMetadataAndUniqueness(t *testing.T) {
 	if _, err := db.Exec(`INSERT INTO book_authors (book_id, author_id) VALUES (?, ?)`, bookID, authorID); err == nil {
 		t.Fatal("expected relationship metadata to be required")
 	}
-	if _, err := db.Exec(`INSERT INTO book_authors (id, book_id, author_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`, uuid.NewString(), bookID, authorID, now, now); err != nil {
+	if _, err := db.Exec(`INSERT INTO book_authors (book_id, author_id, created_at, updated_at) VALUES (?, ?, ?, ?)`, bookID, authorID, now, now); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT INTO book_authors (id, book_id, author_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`, uuid.NewString(), bookID, authorID, now, now); err == nil {
+	if _, err := db.Exec(`INSERT INTO book_authors (book_id, author_id, created_at, updated_at) VALUES (?, ?, ?, ?)`, bookID, authorID, now, now); err == nil {
 		t.Fatal("expected relationship foreign-key pair to be unique")
 	}
 }

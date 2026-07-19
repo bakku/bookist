@@ -8,7 +8,6 @@ import (
 
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
-	"github.com/google/uuid"
 )
 
 func NewBookService(t testing.TB) (*books.Service, *sql.DB) {
@@ -19,7 +18,7 @@ func NewBookService(t testing.TB) (*books.Service, *sql.DB) {
 	return books.NewService(books.NewSQLiteRepository(db), authorRepo), db
 }
 
-func InsertBookRow(t testing.TB, db *sql.DB, title string, isbn *string) string {
+func InsertBookRow(t testing.TB, db *sql.DB, title string, isbn *string) int64 {
 	t.Helper()
 
 	now := "2026-01-02T03:04:05Z"
@@ -28,11 +27,12 @@ func InsertBookRow(t testing.TB, db *sql.DB, title string, isbn *string) string 
 		isbnValue = sql.NullString{String: *isbn, Valid: true}
 	}
 
-	id := uuid.NewString()
-	_, err := db.ExecContext(context.Background(), `
-		INSERT INTO books (id, title, isbn, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?)
-	`, id, title, isbnValue, now, now)
+	var id int64
+	err := db.QueryRowContext(context.Background(), `
+		INSERT INTO books (title, isbn, created_at, updated_at)
+		VALUES (?, ?, ?, ?)
+		RETURNING id
+	`, title, isbnValue, now, now).Scan(&id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ type BookRowAssertion struct {
 	PublishedDay      *int
 }
 
-func AssertBookRow(t testing.TB, db *sql.DB, id string, wantTitle string, wantISBN *string) {
+func AssertBookRow(t testing.TB, db *sql.DB, id int64, wantTitle string, wantISBN *string) {
 	t.Helper()
 
 	var title string
@@ -94,7 +94,7 @@ func AssertBookRow(t testing.TB, db *sql.DB, id string, wantTitle string, wantIS
 	}
 }
 
-func AssertBookRowFields(t testing.TB, db *sql.DB, id string, want BookRowAssertion) {
+func AssertBookRowFields(t testing.TB, db *sql.DB, id int64, want BookRowAssertion) {
 	t.Helper()
 
 	var title string
@@ -212,20 +212,20 @@ func AssertBookCount(t testing.TB, db *sql.DB, want int) {
 	}
 }
 
-func InsertBookAuthorRow(t testing.TB, db *sql.DB, bookID string, authorID string) {
+func InsertBookAuthorRow(t testing.TB, db *sql.DB, bookID int64, authorID int64) {
 	t.Helper()
 	now := "2026-01-02T03:04:05Z"
 
 	_, err := db.ExecContext(context.Background(), `
-		INSERT INTO book_authors (id, book_id, author_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?)
-	`, uuid.NewString(), bookID, authorID, now, now)
+		INSERT INTO book_authors (book_id, author_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?)
+	`, bookID, authorID, now, now)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func AssertBookAuthors(t testing.TB, db *sql.DB, bookID string, wantAuthorIDs ...string) {
+func AssertBookAuthors(t testing.TB, db *sql.DB, bookID int64, wantAuthorIDs ...int64) {
 	t.Helper()
 
 	rows, err := db.QueryContext(context.Background(), `
@@ -238,9 +238,9 @@ func AssertBookAuthors(t testing.TB, db *sql.DB, bookID string, wantAuthorIDs ..
 	}
 	defer rows.Close()
 
-	var gotIDs []string
+	var gotIDs []int64
 	for rows.Next() {
-		var id string
+		var id int64
 		if err := rows.Scan(&id); err != nil {
 			t.Fatal(err)
 		}
@@ -253,16 +253,16 @@ func AssertBookAuthors(t testing.TB, db *sql.DB, bookID string, wantAuthorIDs ..
 	if len(gotIDs) != len(wantAuthorIDs) {
 		t.Fatalf("expected %d book_authors rows, got %d", len(wantAuthorIDs), len(gotIDs))
 	}
-	gotSet := make(map[string]bool, len(gotIDs))
+	gotSet := make(map[int64]bool, len(gotIDs))
 	for _, id := range gotIDs {
 		if gotSet[id] {
-			t.Fatalf("duplicate author_id %q in book_authors", id)
+			t.Fatalf("duplicate author_id %d in book_authors", id)
 		}
 		gotSet[id] = true
 	}
 	for _, want := range wantAuthorIDs {
 		if !gotSet[want] {
-			t.Fatalf("expected author_id %q not found in book_authors", want)
+			t.Fatalf("expected author_id %d not found in book_authors", want)
 		}
 	}
 }

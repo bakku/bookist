@@ -3,6 +3,7 @@ package httpserver_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,7 +11,6 @@ import (
 	"bakku.dev/bookist/internal/books"
 	"bakku.dev/bookist/internal/lists"
 	"bakku.dev/bookist/internal/testsupport"
-	"github.com/google/uuid"
 )
 
 // ── Create ────────────────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ func TestListAPICreate(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
 		t.Fatal(err)
 	}
-	if created.ID == "" {
+	if created.ID <= 0 {
 		t.Fatal("expected created list to have an ID")
 	}
 	if created.Name != "Want to Buy" {
@@ -126,8 +126,8 @@ func TestListAPIAddBookToList(t *testing.T) {
 	listID := testsupport.InsertListRow(t, app.db, "Want to Buy")
 	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
 
-	body := bytes.NewBufferString(`{"book_id":"` + bookID + `"}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/lists/"+listID+"/books", body)
+	body := bytes.NewBufferString(fmt.Sprintf(`{"book_id":%d}`, bookID))
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/lists/%d/books", listID), body)
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
 
@@ -143,10 +143,10 @@ func TestListAPIAddBookToListRejectsUnknownBook(t *testing.T) {
 	app := newTestApp(t)
 
 	listID := testsupport.InsertListRow(t, app.db, "Want to Buy")
-	unknownBookID := uuid.NewString()
+	unknownBookID := int64(999999)
 
-	body := bytes.NewBufferString(`{"book_id":"` + unknownBookID + `"}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/lists/"+listID+"/books", body)
+	body := bytes.NewBufferString(fmt.Sprintf(`{"book_id":%d}`, unknownBookID))
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/lists/%d/books", listID), body)
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
 
@@ -160,10 +160,10 @@ func TestListAPIAddBookToListReturns404ForUnknownList(t *testing.T) {
 	app := newTestApp(t)
 
 	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
-	unknownListID := uuid.NewString()
+	unknownListID := int64(999999)
 
-	body := bytes.NewBufferString(`{"book_id":"` + bookID + `"}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/lists/"+unknownListID+"/books", body)
+	body := bytes.NewBufferString(fmt.Sprintf(`{"book_id":%d}`, bookID))
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/lists/%d/books", unknownListID), body)
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
 
@@ -179,8 +179,8 @@ func TestListAPIAddBookToListReturns409ForDuplicate(t *testing.T) {
 	listID := testsupport.InsertListRow(t, app.db, "Want to Buy")
 	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
 
-	body := bytes.NewBufferString(`{"book_id":"` + bookID + `"}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/lists/"+listID+"/books", body)
+	body := bytes.NewBufferString(fmt.Sprintf(`{"book_id":%d}`, bookID))
+	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/lists/%d/books", listID), body)
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
 
@@ -189,14 +189,28 @@ func TestListAPIAddBookToListReturns409ForDuplicate(t *testing.T) {
 		t.Fatalf("expected first request to succeed, got %d", resp.Code)
 	}
 
-	body = bytes.NewBufferString(`{"book_id":"` + bookID + `"}`)
-	req = httptest.NewRequest(http.MethodPost, "/api/lists/"+listID+"/books", body)
+	body = bytes.NewBufferString(fmt.Sprintf(`{"book_id":%d}`, bookID))
+	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/lists/%d/books", listID), body)
 	req.Header.Set("Content-Type", "application/json")
 	resp = httptest.NewRecorder()
 
 	app.handler.ServeHTTP(resp, req)
 	if resp.Code != http.StatusConflict {
 		t.Fatalf("expected status %d for duplicate, got %d: %s", http.StatusConflict, resp.Code, resp.Body.String())
+	}
+}
+
+func TestListAPIAddBookToListRejectsInvalidIDs(t *testing.T) {
+	for _, path := range []string{"/api/lists/not-a-number/books", "/api/lists/0/books", "/api/lists/-1/books"} {
+		t.Run(path, func(t *testing.T) {
+			app := newTestApp(t)
+			req := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(`{"book_id":1}`))
+			resp := httptest.NewRecorder()
+			app.handler.ServeHTTP(resp, req)
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
+			}
+		})
 	}
 }
 
@@ -215,7 +229,7 @@ func TestListAPIListBooks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/lists/"+listID+"/books", nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/lists/%d/books", listID), nil)
 	resp := httptest.NewRecorder()
 	app.handler.ServeHTTP(resp, req)
 	if resp.Code != http.StatusOK {
@@ -242,7 +256,7 @@ func TestListAPIListBooksReturnsEmptyArrayForEmptyList(t *testing.T) {
 
 	listID := testsupport.InsertListRow(t, app.db, "Want to Buy")
 
-	req := httptest.NewRequest(http.MethodGet, "/api/lists/"+listID+"/books", nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/lists/%d/books", listID), nil)
 	resp := httptest.NewRecorder()
 	app.handler.ServeHTTP(resp, req)
 	if resp.Code != http.StatusOK {
@@ -264,9 +278,9 @@ func TestListAPIListBooksReturnsEmptyArrayForEmptyList(t *testing.T) {
 func TestListAPIListBooksReturns404ForUnknownList(t *testing.T) {
 	app := newTestApp(t)
 
-	unknownListID := uuid.NewString()
+	unknownListID := int64(999999)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/lists/"+unknownListID+"/books", nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/lists/%d/books", unknownListID), nil)
 	resp := httptest.NewRecorder()
 	app.handler.ServeHTTP(resp, req)
 	if resp.Code != http.StatusNotFound {
@@ -283,7 +297,7 @@ func TestListAPIListBooksHydratesAuthors(t *testing.T) {
 	testsupport.InsertBookAuthorRow(t, app.db, bookID, authorID)
 	testsupport.InsertBookListRow(t, app.db, listID, bookID)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/lists/"+listID+"/books", nil)
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/lists/%d/books", listID), nil)
 	resp := httptest.NewRecorder()
 	app.handler.ServeHTTP(resp, req)
 	if resp.Code != http.StatusOK {

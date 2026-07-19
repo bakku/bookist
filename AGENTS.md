@@ -24,7 +24,7 @@ Bookist is intended to be a Go application for managing a home library.
 - Use SQLite for persistence with the pure-Go `modernc.org/sqlite` driver.
 - Use `github.com/pressly/goose/v3` for embedded SQL migrations. Serving runs migrations automatically at startup.
 - Keep Pico.css vendored as an embedded static asset rather than loading it from a CDN.
-- Every table, including relationship tables, uses a UUID `TEXT` primary key plus `created_at` and `updated_at` timestamps. ISBN remains nullable in Go and SQLite.
+- Every table, including relationship tables, uses an SQLite-generated `INTEGER PRIMARY KEY` represented as `int64` in Go, plus `created_at` and `updated_at` timestamps. ISBN remains nullable in Go and SQLite.
 - Collections default to `updated_at DESC, id ASC`; relationship-backed collections use the relationship row's timestamps and ID.
 - Enforce durable invariants in both services and SQLite constraints.
 - Rewriting the initial migration is acceptable while the schema is pre-release and disposable; once compatibility matters, migrations are append-only.

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"bakku.dev/bookist/internal/authors"
@@ -139,7 +140,7 @@ func runAuthorsList(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	rows := make([][]string, 0, len(listed))
 	for _, author := range listed {
-		rows = append(rows, []string{author.ID, author.Name})
+		rows = append(rows, []string{strconv.FormatInt(author.ID, 10), author.Name})
 	}
 
 	if err := writeListOutput(stdout, format, listed, []string{"ID", "NAME"}, rows); err != nil {
@@ -171,6 +172,6 @@ func runAuthorsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 
-	_, _ = fmt.Fprintf(stdout, "%s\t%s\n", author.ID, author.Name)
+	_, _ = fmt.Fprintf(stdout, "%d\t%s\n", author.ID, author.Name)
 	return 0
 }

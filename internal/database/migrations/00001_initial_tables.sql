@@ -1,11 +1,6 @@
 -- +goose Up
 CREATE TABLE books (
-    id TEXT PRIMARY KEY CHECK (
-        length(id) = 36 AND lower(id) = id AND
-        substr(id, 9, 1) = '-' AND substr(id, 14, 1) = '-' AND
-        substr(id, 19, 1) = '-' AND substr(id, 24, 1) = '-' AND
-        length(replace(id, '-', '')) = 32 AND replace(id, '-', '') NOT GLOB '*[^0-9a-f]*'
-    ),
+    id INTEGER PRIMARY KEY,
     title TEXT NOT NULL COLLATE NOCASE CHECK (trim(title) <> ''),
     isbn TEXT NULL,
     language TEXT NULL,
@@ -50,62 +45,37 @@ CREATE TABLE books (
     updated_at TEXT NOT NULL
 );
 CREATE TABLE authors (
-    id TEXT PRIMARY KEY CHECK (
-        length(id) = 36 AND lower(id) = id AND
-        substr(id, 9, 1) = '-' AND substr(id, 14, 1) = '-' AND
-        substr(id, 19, 1) = '-' AND substr(id, 24, 1) = '-' AND
-        length(replace(id, '-', '')) = 32 AND replace(id, '-', '') NOT GLOB '*[^0-9a-f]*'
-    ),
+    id INTEGER PRIMARY KEY,
     name TEXT NOT NULL COLLATE NOCASE CHECK (trim(name) <> ''),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
 CREATE TABLE book_authors (
-    id TEXT PRIMARY KEY CHECK (
-        length(id) = 36 AND lower(id) = id AND
-        substr(id, 9, 1) = '-' AND substr(id, 14, 1) = '-' AND
-        substr(id, 19, 1) = '-' AND substr(id, 24, 1) = '-' AND
-        length(replace(id, '-', '')) = 32 AND replace(id, '-', '') NOT GLOB '*[^0-9a-f]*'
-    ),
-    book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
-    author_id TEXT NOT NULL REFERENCES authors(id) ON DELETE CASCADE,
+    id INTEGER PRIMARY KEY,
+    book_id INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    author_id INTEGER NOT NULL REFERENCES authors(id) ON DELETE CASCADE,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     UNIQUE (book_id, author_id)
 );
 CREATE TABLE lists (
-    id TEXT PRIMARY KEY CHECK (
-        length(id) = 36 AND lower(id) = id AND
-        substr(id, 9, 1) = '-' AND substr(id, 14, 1) = '-' AND
-        substr(id, 19, 1) = '-' AND substr(id, 24, 1) = '-' AND
-        length(replace(id, '-', '')) = 32 AND replace(id, '-', '') NOT GLOB '*[^0-9a-f]*'
-    ),
+    id INTEGER PRIMARY KEY,
     name TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK (trim(name) <> ''),
     description TEXT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
 CREATE TABLE book_lists (
-    id TEXT PRIMARY KEY CHECK (
-        length(id) = 36 AND lower(id) = id AND
-        substr(id, 9, 1) = '-' AND substr(id, 14, 1) = '-' AND
-        substr(id, 19, 1) = '-' AND substr(id, 24, 1) = '-' AND
-        length(replace(id, '-', '')) = 32 AND replace(id, '-', '') NOT GLOB '*[^0-9a-f]*'
-    ),
-    list_id TEXT NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
-    book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    id INTEGER PRIMARY KEY,
+    list_id INTEGER NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+    book_id INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     UNIQUE (list_id, book_id)
 );
 CREATE TABLE reads (
-    id TEXT PRIMARY KEY CHECK (
-        length(id) = 36 AND lower(id) = id AND
-        substr(id, 9, 1) = '-' AND substr(id, 14, 1) = '-' AND
-        substr(id, 19, 1) = '-' AND substr(id, 24, 1) = '-' AND
-        length(replace(id, '-', '')) = 32 AND replace(id, '-', '') NOT GLOB '*[^0-9a-f]*'
-    ),
-    book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    id INTEGER PRIMARY KEY,
+    book_id INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
     started_at TEXT NULL CHECK (
         started_at IS NULL OR (
             length(started_at) = 10 AND started_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND

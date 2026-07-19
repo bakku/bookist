@@ -9,7 +9,6 @@ import (
 
 	"bakku.dev/bookist/internal/reads"
 	"bakku.dev/bookist/internal/testsupport"
-	"github.com/google/uuid"
 )
 
 // ── Create ────────────────────────────────────────────────────────────────────
@@ -29,14 +28,14 @@ func TestSQLiteRepositoryCreatePersistsRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := uuid.Parse(created.ID); err != nil {
-		t.Fatalf("expected UUID read ID, got %q", created.ID)
+	if created.ID <= 0 {
+		t.Fatalf("expected positive read ID, got %d", created.ID)
 	}
 	if created.CreatedAt.IsZero() || created.UpdatedAt.IsZero() {
 		t.Fatal("expected backend timestamps")
 	}
 
-	var gotBookID string
+	var gotBookID int64
 	var gotStartedAt, gotFinishedAt, gotAbandonedAt, gotNotes sql.NullString
 	var gotRating sql.NullFloat64
 	var createdAt, updatedAt string
@@ -62,7 +61,7 @@ func TestSQLiteRepositoryCreateReturnsBookNotFound(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	repository := reads.NewSQLiteRepository(db)
 
-	_, err := repository.Create(context.Background(), uuid.NewString(), reads.CreateReadRequest{})
+	_, err := repository.Create(context.Background(), 999999, reads.CreateReadRequest{})
 	if !errors.Is(err, reads.ErrBookNotFound) {
 		t.Fatalf("expected ErrBookNotFound, got %v", err)
 	}
@@ -74,8 +73,8 @@ func TestSQLiteRepositoryListByBookIDOrdersNewestFirst(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
 	otherBookID := testsupport.InsertBookRow(t, db, "Foundation", nil)
-	oldID := uuid.NewString()
-	newID := uuid.NewString()
+	oldID := int64(100)
+	newID := int64(101)
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
 		ID: oldID, BookID: bookID, StartedAt: new("2025-01-01"), FinishedAt: new("2025-01-02"),
 		CreatedAt: "2026-01-01T00:00:00Z",
@@ -85,7 +84,7 @@ func TestSQLiteRepositoryListByBookIDOrdersNewestFirst(t *testing.T) {
 		CreatedAt: "2026-01-02T00:00:00Z",
 	})
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
-		ID: uuid.NewString(), BookID: otherBookID, StartedAt: new("2027-01-01"), FinishedAt: new("2027-01-02"),
+		ID: 102, BookID: otherBookID, StartedAt: new("2027-01-01"), FinishedAt: new("2027-01-02"),
 		CreatedAt: "2027-01-02T00:00:00Z",
 	})
 
@@ -117,7 +116,7 @@ func TestSQLiteRepositoryListByBookIDReturnsEmptySlice(t *testing.T) {
 func TestSQLiteRepositoryListByBookIDReturnsBookNotFound(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 
-	_, err := reads.NewSQLiteRepository(db).ListByBookID(context.Background(), uuid.NewString())
+	_, err := reads.NewSQLiteRepository(db).ListByBookID(context.Background(), 999999)
 	if !errors.Is(err, reads.ErrBookNotFound) {
 		t.Fatalf("expected ErrBookNotFound, got %v", err)
 	}
@@ -148,9 +147,9 @@ func TestReadsTableEnforcesRatingAndDateConstraints(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := db.Exec(`
-				INSERT INTO reads (id, book_id, started_at, finished_at, abandoned_at, rating, created_at, updated_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-			`, uuid.NewString(), bookID, test.startedAt, test.finishedAt, test.abandonedAt, test.rating, now, now)
+				INSERT INTO reads (book_id, started_at, finished_at, abandoned_at, rating, created_at, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?)
+			`, bookID, test.startedAt, test.finishedAt, test.abandonedAt, test.rating, now, now)
 			if err == nil {
 				t.Fatal("expected database constraint error")
 			}
@@ -175,9 +174,9 @@ func TestReadsTablePermitsPartialAndSameDayTerminalDates(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := db.Exec(`
-				INSERT INTO reads (id, book_id, started_at, finished_at, abandoned_at, created_at, updated_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?)
-			`, uuid.NewString(), bookID, test.startedAt, test.finishedAt, test.abandonedAt, now, now)
+				INSERT INTO reads (book_id, started_at, finished_at, abandoned_at, created_at, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?)
+			`, bookID, test.startedAt, test.finishedAt, test.abandonedAt, now, now)
 			if err != nil {
 				t.Fatalf("expected valid read: %v", err)
 			}

@@ -17,8 +17,8 @@ import (
 func TestBooksListTableFormats(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]books.Book{
-			{ID: "id-1", Title: "Dune", ISBN: new("9780441172719")},
-			{ID: "id-2", Title: "Kindred", ISBN: nil},
+			{ID: 1, Title: "Dune", ISBN: new("9780441172719")},
+			{ID: 2, Title: "Kindred", ISBN: nil},
 		})
 	}))
 	defer server.Close()
@@ -28,9 +28,9 @@ func TestBooksListTableFormats(t *testing.T) {
 		format   string
 		expected string
 	}{
-		{name: "default pretty", expected: "ID    TITLE    ISBN\nid-1  Dune     9780441172719\nid-2  Kindred\n"},
-		{name: "explicit TSV", format: "tsv", expected: "id-1\tDune\t9780441172719\nid-2\tKindred\t\n"},
-		{name: "pretty", format: "pretty", expected: "ID    TITLE    ISBN\nid-1  Dune     9780441172719\nid-2  Kindred\n"},
+		{name: "default pretty", expected: "ID  TITLE    ISBN\n1   Dune     9780441172719\n2   Kindred\n"},
+		{name: "explicit TSV", format: "tsv", expected: "1\tDune\t9780441172719\n2\tKindred\t\n"},
+		{name: "pretty", format: "pretty", expected: "ID  TITLE    ISBN\n1   Dune     9780441172719\n2   Kindred\n"},
 	}
 
 	for _, test := range tests {
@@ -58,10 +58,10 @@ func TestBooksListJSONPreservesNullableFields(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]books.Book{
 			{
-				ID:                "id-1",
+				ID:                1,
 				Title:             "Dune",
 				ISBN:              new("9780441172719"),
-				Authors:           []authors.Author{{ID: "author-1", Name: "Frank Herbert"}},
+				Authors:           []authors.Author{{ID: 10, Name: "Frank Herbert"}},
 				Summary:           new("A desert epic"),
 				SeriesName:        new("Dune"),
 				SeriesPosition:    new(1.5),
@@ -69,7 +69,7 @@ func TestBooksListJSONPreservesNullableFields(t *testing.T) {
 				Condition:         new(books.ConditionVeryGood),
 				AcquisitionSource: new("Bookshop"),
 			},
-			{ID: "id-2", Title: "Kindred", ISBN: nil},
+			{ID: 2, Title: "Kindred", ISBN: nil},
 		})
 	}))
 	defer server.Close()
@@ -122,7 +122,7 @@ func TestBooksAddWithNewFields(t *testing.T) {
 			json.NewDecoder(r.Body).Decode(&req)
 			postedBooks = append(postedBooks, req)
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(books.Book{ID: "new-book-id", Title: req.Title})
+			json.NewEncoder(w).Encode(books.Book{ID: 10, Title: req.Title})
 		}
 	}))
 	defer server.Close()
@@ -221,7 +221,7 @@ func TestBooksAddSendsNullForOmittedOptionalFields(t *testing.T) {
 			t.Fatal(err)
 		}
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(books.Book{ID: "new-book-id", Title: posted.Title})
+		_ = json.NewEncoder(w).Encode(books.Book{ID: 10, Title: posted.Title})
 	}))
 	defer server.Close()
 
@@ -273,7 +273,7 @@ func TestBooksAddWithAuthorNameExistsLinksAuthor(t *testing.T) {
 			switch r.Method {
 			case http.MethodGet:
 				json.NewEncoder(w).Encode([]authors.Author{
-					{ID: "existing-id", Name: "Existing Author"},
+					{ID: 5, Name: "Existing Author"},
 				})
 
 			case http.MethodPost:
@@ -285,7 +285,7 @@ func TestBooksAddWithAuthorNameExistsLinksAuthor(t *testing.T) {
 			json.NewDecoder(r.Body).Decode(&req)
 			postedBooks = append(postedBooks, req)
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(books.Book{ID: "new-book-id", Title: req.Title})
+			json.NewEncoder(w).Encode(books.Book{ID: 10, Title: req.Title})
 		}
 	}))
 	defer server.Close()
@@ -299,8 +299,8 @@ func TestBooksAddWithAuthorNameExistsLinksAuthor(t *testing.T) {
 	if len(postedBooks) != 1 {
 		t.Fatalf("expected 1 POST /api/books, got %d", len(postedBooks))
 	}
-	if len(postedBooks[0].AuthorIDs) != 1 || postedBooks[0].AuthorIDs[0] != "existing-id" {
-		t.Fatalf("expected author_ids [existing-id], got %#v", postedBooks[0].AuthorIDs)
+	if len(postedBooks[0].AuthorIDs) != 1 || postedBooks[0].AuthorIDs[0] != 5 {
+		t.Fatalf("expected author_ids [5], got %#v", postedBooks[0].AuthorIDs)
 	}
 }
 
@@ -310,8 +310,8 @@ func TestBooksAddWithAmbiguousAuthorNameRequiresID(t *testing.T) {
 		switch r.URL.Path {
 		case "/api/authors":
 			_ = json.NewEncoder(w).Encode([]authors.Author{
-				{ID: "author-1", Name: "Alex Smith"},
-				{ID: "author-2", Name: "alex SMITH"},
+				{ID: 1, Name: "Alex Smith"},
+				{ID: 2, Name: "alex SMITH"},
 			})
 		case "/api/books":
 			bookPosted = true
@@ -349,7 +349,7 @@ func TestBooksAddWithAuthorNameNotFoundCreatesAuthorThenBook(t *testing.T) {
 				json.NewDecoder(r.Body).Decode(&req)
 				postedAuthors = append(postedAuthors, req)
 				w.WriteHeader(http.StatusCreated)
-				json.NewEncoder(w).Encode(authors.Author{ID: "new-author-id", Name: req.Name})
+				json.NewEncoder(w).Encode(authors.Author{ID: 5, Name: req.Name})
 			}
 
 		case "/api/books":
@@ -357,7 +357,7 @@ func TestBooksAddWithAuthorNameNotFoundCreatesAuthorThenBook(t *testing.T) {
 			json.NewDecoder(r.Body).Decode(&req)
 			postedBooks = append(postedBooks, req)
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(books.Book{ID: "new-book-id", Title: req.Title})
+			json.NewEncoder(w).Encode(books.Book{ID: 10, Title: req.Title})
 		}
 	}))
 	defer server.Close()
@@ -374,36 +374,31 @@ func TestBooksAddWithAuthorNameNotFoundCreatesAuthorThenBook(t *testing.T) {
 	if len(postedBooks) != 1 {
 		t.Fatalf("expected 1 POST /api/books, got %d", len(postedBooks))
 	}
-	if len(postedBooks[0].AuthorIDs) != 1 || postedBooks[0].AuthorIDs[0] != "new-author-id" {
-		t.Fatalf("expected author_ids [new-author-id], got %#v", postedBooks[0].AuthorIDs)
+	if len(postedBooks[0].AuthorIDs) != 1 || postedBooks[0].AuthorIDs[0] != 5 {
+		t.Fatalf("expected author_ids [5], got %#v", postedBooks[0].AuthorIDs)
 	}
-	if !strings.Contains(stdout.String(), "new-book-id\tMy Book") {
-		t.Fatalf("expected stdout to contain 'new-book-id\\tMy Book', got %q", stdout.String())
+	if !strings.Contains(stdout.String(), "10\tMy Book") {
+		t.Fatalf("expected stdout to contain '10\\tMy Book', got %q", stdout.String())
 	}
 }
 
-func TestBooksAddWithAuthorUUIDExistsLinksAuthor(t *testing.T) {
+func TestBooksAddWithIntegerAuthorIDLinksAuthor(t *testing.T) {
 	var postedBooks []books.CreateBookRequest
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/authors":
-			json.NewEncoder(w).Encode([]authors.Author{
-				{ID: "550e8400-e29b-41d4-a716-446655440000", Name: "UUID Author"},
-			})
-
 		case "/api/books":
 			var req books.CreateBookRequest
 			json.NewDecoder(r.Body).Decode(&req)
 			postedBooks = append(postedBooks, req)
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(books.Book{ID: "new-book-id", Title: req.Title})
+			json.NewEncoder(w).Encode(books.Book{ID: 10, Title: req.Title})
 		}
 	}))
 	defer server.Close()
 
 	var stdout, stderr strings.Builder
-	exitCode := cli.Run([]string{"books", "add", "--title", "My Book", "--author", "550e8400-e29b-41d4-a716-446655440000", "--server", server.URL}, &stdout, &stderr)
+	exitCode := cli.Run([]string{"books", "add", "--title", "My Book", "--author", "5", "--server", server.URL}, &stdout, &stderr)
 
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr.String())
@@ -411,12 +406,12 @@ func TestBooksAddWithAuthorUUIDExistsLinksAuthor(t *testing.T) {
 	if len(postedBooks) != 1 {
 		t.Fatalf("expected 1 POST /api/books, got %d", len(postedBooks))
 	}
-	if len(postedBooks[0].AuthorIDs) != 1 || postedBooks[0].AuthorIDs[0] != "550e8400-e29b-41d4-a716-446655440000" {
-		t.Fatalf("expected author_ids [550e8400...], got %#v", postedBooks[0].AuthorIDs)
+	if len(postedBooks[0].AuthorIDs) != 1 || postedBooks[0].AuthorIDs[0] != 5 {
+		t.Fatalf("expected author_ids [5], got %#v", postedBooks[0].AuthorIDs)
 	}
 }
 
-func TestBooksAddPassesAuthorUUIDThroughWithoutLookup(t *testing.T) {
+func TestBooksAddPassesAuthorIntegerIDThroughWithoutLookup(t *testing.T) {
 	var posted books.CreateBookRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -426,18 +421,34 @@ func TestBooksAddPassesAuthorUUIDThroughWithoutLookup(t *testing.T) {
 		case "/api/books":
 			_ = json.NewDecoder(r.Body).Decode(&posted)
 			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(books.Book{ID: "book-id", Title: posted.Title})
+			_ = json.NewEncoder(w).Encode(books.Book{ID: 10, Title: posted.Title})
 		}
 	}))
 	defer server.Close()
 
 	var stdout, stderr strings.Builder
-	exitCode := cli.Run([]string{"books", "add", "--title", "My Book", "--author", "550e8400-e29b-41d4-a716-446655440000", "--server", server.URL}, &stdout, &stderr)
+	exitCode := cli.Run([]string{"books", "add", "--title", "My Book", "--author", "5", "--server", server.URL}, &stdout, &stderr)
 
 	if exitCode != 0 {
 		t.Fatalf("expected success, got %d: %s", exitCode, stderr.String())
 	}
-	if len(posted.AuthorIDs) != 1 || posted.AuthorIDs[0] != "550e8400-e29b-41d4-a716-446655440000" {
-		t.Fatalf("expected UUID to pass through, got %#v", posted.AuthorIDs)
+	if len(posted.AuthorIDs) != 1 || posted.AuthorIDs[0] != 5 {
+		t.Fatalf("expected integer ID to pass through, got %#v", posted.AuthorIDs)
+	}
+}
+
+func TestBooksAddRejectsInvalidAuthorIntegerIDs(t *testing.T) {
+	for _, id := range []string{"0", "999999999999999999999999"} {
+		t.Run(id, func(t *testing.T) {
+			var stdout, stderr strings.Builder
+			exitCode := cli.Run([]string{"books", "add", "--title", "My Book", "--author", id}, &stdout, &stderr)
+
+			if exitCode == 0 {
+				t.Fatal("expected non-zero exit code")
+			}
+			if !strings.Contains(stderr.String(), `invalid ID "`+id+`"`) {
+				t.Fatalf("unexpected error: %q", stderr.String())
+			}
+		})
 	}
 }

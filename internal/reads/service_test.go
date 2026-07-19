@@ -7,7 +7,6 @@ import (
 
 	"bakku.dev/bookist/internal/reads"
 	"bakku.dev/bookist/internal/testsupport"
-	"github.com/google/uuid"
 )
 
 // ── Create ────────────────────────────────────────────────────────────────────
@@ -118,7 +117,7 @@ func TestServiceCreatePermitsAbandonedReadWithoutStart(t *testing.T) {
 func TestServiceListByBookIDReturnsReads(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
-	readID := uuid.NewString()
+	readID := int64(100)
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
 		ID: readID, BookID: bookID, StartedAt: new("2026-01-01"),
 		AbandonedAt: new("2026-01-03"), Rating: new(4.5), Notes: new("Excellent"),

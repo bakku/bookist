@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type SQLiteRepository struct {
@@ -19,16 +17,16 @@ func NewSQLiteRepository(db *sql.DB) *SQLiteRepository {
 	return &SQLiteRepository{db: db}
 }
 
-func (r *SQLiteRepository) Create(ctx context.Context, bookID string, input CreateReadRequest) (Read, error) {
+func (r *SQLiteRepository) Create(ctx context.Context, bookID int64, input CreateReadRequest) (Read, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	row := r.db.QueryRowContext(ctx, `
 		INSERT INTO reads (
-			id, book_id, started_at, finished_at, abandoned_at, rating, notes, created_at, updated_at
+			book_id, started_at, finished_at, abandoned_at, rating, notes, created_at, updated_at
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		RETURNING id, book_id, started_at, finished_at, abandoned_at, rating, notes, created_at, updated_at
-	`, uuid.NewString(), bookID, nullString(input.StartedAt), nullString(input.FinishedAt),
+	`, bookID, nullString(input.StartedAt), nullString(input.FinishedAt),
 		nullString(input.AbandonedAt), nullFloat64(input.Rating), nullString(input.Notes), now, now)
 
 	read, err := scanRead(row)
@@ -42,7 +40,7 @@ func (r *SQLiteRepository) Create(ctx context.Context, bookID string, input Crea
 	return read, nil
 }
 
-func (r *SQLiteRepository) ListByBookID(ctx context.Context, bookID string) ([]Read, error) {
+func (r *SQLiteRepository) ListByBookID(ctx context.Context, bookID int64) ([]Read, error) {
 	var exists int
 	if err := r.db.QueryRowContext(ctx, `SELECT 1 FROM books WHERE id = ?`, bookID).Scan(&exists); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

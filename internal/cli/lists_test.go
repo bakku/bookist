@@ -17,8 +17,8 @@ func TestListsListTableFormats(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/api/lists" {
 			_ = json.NewEncoder(w).Encode([]lists.List{
-				{ID: "id-1", Name: "Want to Buy"},
-				{ID: "id-2", Name: "Nightstand"},
+				{ID: 1, Name: "Want to Buy"},
+				{ID: 2, Name: "Nightstand"},
 			})
 		}
 	}))
@@ -29,9 +29,9 @@ func TestListsListTableFormats(t *testing.T) {
 		format   string
 		expected string
 	}{
-		{name: "default pretty", expected: "ID    NAME\nid-1  Want to Buy\nid-2  Nightstand\n"},
-		{name: "explicit TSV", format: "tsv", expected: "id-1\tWant to Buy\nid-2\tNightstand\n"},
-		{name: "pretty", format: "pretty", expected: "ID    NAME\nid-1  Want to Buy\nid-2  Nightstand\n"},
+		{name: "default pretty", expected: "ID  NAME\n1   Want to Buy\n2   Nightstand\n"},
+		{name: "explicit TSV", format: "tsv", expected: "1\tWant to Buy\n2\tNightstand\n"},
+		{name: "pretty", format: "pretty", expected: "ID  NAME\n1   Want to Buy\n2   Nightstand\n"},
 	}
 
 	for _, test := range tests {
@@ -59,8 +59,8 @@ func TestListsListJSONPreservesNullableDescription(t *testing.T) {
 	description := "Books to purchase"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]lists.List{
-			{ID: "id-1", Name: "Want to Buy", Description: &description},
-			{ID: "id-2", Name: "Nightstand", Description: nil},
+			{ID: 1, Name: "Want to Buy", Description: &description},
+			{ID: 2, Name: "Nightstand", Description: nil},
 		})
 	}))
 	defer server.Close()
@@ -96,7 +96,7 @@ func TestListsAddPrintsIDAndName(t *testing.T) {
 		if r.Method == http.MethodPost && r.URL.Path == "/api/lists" {
 			json.NewDecoder(r.Body).Decode(&capturedBody)
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(lists.List{ID: "new-uuid", Name: capturedBody.Name})
+			json.NewEncoder(w).Encode(lists.List{ID: 10, Name: capturedBody.Name})
 		}
 	}))
 	defer server.Close()
@@ -110,8 +110,8 @@ func TestListsAddPrintsIDAndName(t *testing.T) {
 	if capturedBody.Name != "Want to Buy" {
 		t.Fatalf("expected POST body name 'Want to Buy', got %q", capturedBody.Name)
 	}
-	if !strings.Contains(stdout.String(), "new-uuid\tWant to Buy") {
-		t.Fatalf("expected stdout to contain 'new-uuid\\tWant to Buy', got %q", stdout.String())
+	if !strings.Contains(stdout.String(), "10\tWant to Buy") {
+		t.Fatalf("expected stdout to contain '10\\tWant to Buy', got %q", stdout.String())
 	}
 }
 
@@ -123,7 +123,7 @@ func TestListsAddBookResolvesListByName(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/lists":
 			json.NewEncoder(w).Encode([]lists.List{
-				{ID: "list-1", Name: "Want to Buy"},
+				{ID: 1, Name: "Want to Buy"},
 			})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/books":
 			json.NewEncoder(w).Encode([]interface{}{})
@@ -135,17 +135,17 @@ func TestListsAddBookResolvesListByName(t *testing.T) {
 	defer server.Close()
 
 	var stdout, stderr strings.Builder
-	exitCode := cli.Run([]string{"lists", "add-book", "--list", "want TO buy", "--book", "550e8400-e29b-41d4-a716-446655440000", "--server", server.URL}, &stdout, &stderr)
+	exitCode := cli.Run([]string{"lists", "add-book", "--list", "want TO buy", "--book", "2", "--server", server.URL}, &stdout, &stderr)
 
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr.String())
 	}
-	if capturedPath != "/api/lists/list-1/books" {
-		t.Fatalf("expected POST to /api/lists/list-1/books, got %s", capturedPath)
+	if capturedPath != "/api/lists/1/books" {
+		t.Fatalf("expected POST to /api/lists/1/books, got %s", capturedPath)
 	}
 }
 
-func TestListsAddBookResolvesListByUUID(t *testing.T) {
+func TestListsAddBookPassesIntegerIDsThrough(t *testing.T) {
 	var capturedPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -157,13 +157,13 @@ func TestListsAddBookResolvesListByUUID(t *testing.T) {
 	defer server.Close()
 
 	var stdout, stderr strings.Builder
-	exitCode := cli.Run([]string{"lists", "add-book", "--list", "550e8400-e29b-41d4-a716-446655440000", "--book", "550e8400-e29b-41d4-a716-446655440001", "--server", server.URL}, &stdout, &stderr)
+	exitCode := cli.Run([]string{"lists", "add-book", "--list", "10", "--book", "20", "--server", server.URL}, &stdout, &stderr)
 
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr.String())
 	}
-	if capturedPath != "/api/lists/550e8400-e29b-41d4-a716-446655440000/books" {
-		t.Fatalf("expected POST to /api/lists/550e8400-e29b-41d4-a716-446655440000/books, got %s", capturedPath)
+	if capturedPath != "/api/lists/10/books" {
+		t.Fatalf("expected POST to /api/lists/10/books, got %s", capturedPath)
 	}
 }
 
@@ -173,14 +173,14 @@ func TestListsAddBookResolvesBookByTitle(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/lists":
 			json.NewEncoder(w).Encode([]lists.List{
-				{ID: "list-1", Name: "Want to Buy"},
+				{ID: 1, Name: "Want to Buy"},
 			})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/books":
 			json.NewEncoder(w).Encode([]struct {
-				ID    string `json:"id"`
+				ID    int64  `json:"id"`
 				Title string `json:"title"`
 			}{
-				{ID: "book-1", Title: "Dune"},
+				{ID: 2, Title: "Dune"},
 			})
 		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/lists/"):
 			json.NewDecoder(r.Body).Decode(&capturedBody)
@@ -195,8 +195,8 @@ func TestListsAddBookResolvesBookByTitle(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr.String())
 	}
-	if capturedBody.BookID != "book-1" {
-		t.Fatalf("expected book_id 'book-1', got %q", capturedBody.BookID)
+	if capturedBody.BookID != 2 {
+		t.Fatalf("expected book_id 2, got %d", capturedBody.BookID)
 	}
 }
 
@@ -205,14 +205,14 @@ func TestListsAddBookWithAmbiguousTitleRequiresID(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/lists":
-			_ = json.NewEncoder(w).Encode([]lists.List{{ID: "list-1", Name: "Want to Buy"}})
+			_ = json.NewEncoder(w).Encode([]lists.List{{ID: 1, Name: "Want to Buy"}})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/books":
 			_ = json.NewEncoder(w).Encode([]struct {
-				ID    string `json:"id"`
+				ID    int64  `json:"id"`
 				Title string `json:"title"`
 			}{
-				{ID: "book-1", Title: "Dune"},
-				{ID: "book-2", Title: "dUnE"},
+				{ID: 1, Title: "Dune"},
+				{ID: 2, Title: "dUnE"},
 			})
 		case r.Method == http.MethodPost:
 			bookPosted = true
@@ -243,7 +243,7 @@ func TestListsAddBookListNotFoundExitsNonZero(t *testing.T) {
 	defer server.Close()
 
 	var stdout, stderr strings.Builder
-	exitCode := cli.Run([]string{"lists", "add-book", "--list", "Nonexistent", "--book", "550e8400-e29b-41d4-a716-446655440000", "--server", server.URL}, &stdout, &stderr)
+	exitCode := cli.Run([]string{"lists", "add-book", "--list", "Nonexistent", "--book", "1", "--server", server.URL}, &stdout, &stderr)
 
 	if exitCode == 0 {
 		t.Fatalf("expected non-zero exit code, got 0")
@@ -258,11 +258,11 @@ func TestListsAddBookBookNotFoundExitsNonZero(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/lists":
 			json.NewEncoder(w).Encode([]lists.List{
-				{ID: "list-1", Name: "Want to Buy"},
+				{ID: 1, Name: "Want to Buy"},
 			})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/books":
 			json.NewEncoder(w).Encode([]struct {
-				ID    string `json:"id"`
+				ID    int64  `json:"id"`
 				Title string `json:"title"`
 			}{})
 		}

@@ -23,7 +23,7 @@ const (
 )
 
 type Book struct {
-	ID                string           `json:"id"`
+	ID                int64            `json:"id"`
 	Title             string           `json:"title"`
 	ISBN              *string          `json:"isbn"`
 	Authors           []authors.Author `json:"authors"`
@@ -51,7 +51,7 @@ type Book struct {
 type CreateBookRequest struct {
 	Title             string     `json:"title"`
 	ISBN              *string    `json:"isbn"`
-	AuthorIDs         []string   `json:"author_ids"`
+	AuthorIDs         []int64    `json:"author_ids"`
 	Language          *string    `json:"language"`
 	Publisher         *string    `json:"publisher"`
 	Edition           *string    `json:"edition"`

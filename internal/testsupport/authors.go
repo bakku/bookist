@@ -5,19 +5,18 @@ import (
 	"database/sql"
 	"testing"
 	"time"
-
-	"github.com/google/uuid"
 )
 
-func InsertAuthorRow(t testing.TB, db *sql.DB, name string) string {
+func InsertAuthorRow(t testing.TB, db *sql.DB, name string) int64 {
 	t.Helper()
 
 	now := "2026-01-02T03:04:05Z"
-	id := uuid.NewString()
-	_, err := db.ExecContext(context.Background(), `
-		INSERT INTO authors (id, name, created_at, updated_at)
-		VALUES (?, ?, ?, ?)
-	`, id, name, now, now)
+	var id int64
+	err := db.QueryRowContext(context.Background(), `
+		INSERT INTO authors (name, created_at, updated_at)
+		VALUES (?, ?, ?)
+		RETURNING id
+	`, name, now, now).Scan(&id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,7 +24,7 @@ func InsertAuthorRow(t testing.TB, db *sql.DB, name string) string {
 	return id
 }
 
-func AssertAuthorRow(t testing.TB, db *sql.DB, id string, wantName string) {
+func AssertAuthorRow(t testing.TB, db *sql.DB, id int64, wantName string) {
 	t.Helper()
 
 	var name string

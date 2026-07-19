@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"bakku.dev/bookist/internal/authors"
-	"github.com/google/uuid"
 )
 
 type SQLiteRepository struct {
@@ -47,7 +46,7 @@ func (r *SQLiteRepository) List(ctx context.Context) ([]Book, error) {
 	return books, nil
 }
 
-func (r *SQLiteRepository) ListByListID(ctx context.Context, listID string) ([]Book, error) {
+func (r *SQLiteRepository) ListByListID(ctx context.Context, listID int64) ([]Book, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT b.id, b.title, b.isbn, b.language, b.publisher, b.edition, b.format,
 		       b.purchased_at, b.pages, b.notes, b.summary, b.series_name,
@@ -184,20 +183,18 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 		publishedDay = sql.NullInt64{Int64: int64(*input.PublishedDay), Valid: true}
 	}
 
-	bookID := uuid.NewString()
-
 	row := tx.QueryRowContext(ctx, `
-		INSERT INTO books (id, title, isbn, language, publisher, edition, format, 
+		INSERT INTO books (title, isbn, language, publisher, edition, format,
 		                   purchased_at, pages, notes, summary, series_name,
 		                   series_position, location, condition, acquisition_source,
 		                   published_year, published_month, published_day,
 		                   created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		RETURNING id, title, isbn, language, publisher, edition, format, purchased_at, 
 			pages, notes, summary, series_name, series_position, location, condition,
 			acquisition_source, published_year, published_month, published_day,
 			created_at, updated_at
-	`, bookID, input.Title, isbn, language, publisher, edition, format, purchasedAt,
+	`, input.Title, isbn, language, publisher, edition, format, purchasedAt,
 		pages, notes, summary, seriesName, seriesPosition, location, condition,
 		acquisitionSource, publishedYear, publishedMonth, publishedDay, createdAt, updatedAt)
 
@@ -208,9 +205,9 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 
 	for _, authorID := range input.AuthorIDs {
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO book_authors (id, book_id, author_id, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?)
-		`, uuid.NewString(), book.ID, authorID, createdAt, updatedAt)
+			INSERT INTO book_authors (book_id, author_id, created_at, updated_at)
+			VALUES (?, ?, ?, ?)
+		`, book.ID, authorID, createdAt, updatedAt)
 		if err != nil {
 			return Book{}, err
 		}

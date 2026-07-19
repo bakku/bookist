@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"bakku.dev/bookist/internal/lists"
-	"github.com/google/uuid"
 )
 
 func runLists(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -85,7 +85,7 @@ func runListsList(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	rows := make([][]string, 0, len(listed))
 	for _, list := range listed {
-		rows = append(rows, []string{list.ID, list.Name})
+		rows = append(rows, []string{strconv.FormatInt(list.ID, 10), list.Name})
 	}
 
 	if err := writeListOutput(stdout, format, listed, []string{"ID", "NAME"}, rows); err != nil {
@@ -154,7 +154,7 @@ func runListsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 
-	_, _ = fmt.Fprintf(stdout, "%s\t%s\n", created.ID, created.Name)
+	_, _ = fmt.Fprintf(stdout, "%d\t%s\n", created.ID, created.Name)
 	return 0
 }
 
@@ -196,7 +196,7 @@ func runListsAddBook(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 
-	endpoint, err := joinURL(*serverURL, "/api/lists/"+listID+"/books")
+	endpoint, err := joinURL(*serverURL, "/api/lists/"+strconv.FormatInt(listID, 10)+"/books")
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
 		return 2
@@ -225,24 +225,27 @@ func runListsAddBook(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 
-	_, _ = fmt.Fprintf(stdout, "added book %s to list %s\n", bookID, listID)
+	_, _ = fmt.Fprintf(stdout, "added book %d to list %d\n", bookID, listID)
 	return 0
 }
 
-func resolveListID(serverURL, value string) (string, error) {
+func resolveListID(serverURL, value string) (int64, error) {
 	value = strings.TrimSpace(value)
 
-	parsed, err := uuid.Parse(value)
-	if err == nil && parsed.String() == strings.ToLower(value) {
-		return parsed.String(), nil
+	id, isID, err := parseIDReference(value)
+	if err != nil {
+		return 0, err
+	}
+	if isID {
+		return id, nil
 	}
 
 	existing, err := fetchLists(serverURL)
 	if err != nil {
-		return "", fmt.Errorf("fetch lists: %v", err)
+		return 0, fmt.Errorf("fetch lists: %v", err)
 	}
 
-	byName := make(map[string]string)
+	byName := make(map[string]int64)
 	for _, l := range existing {
 		if _, exists := byName[strings.ToLower(l.Name)]; !exists {
 			byName[strings.ToLower(l.Name)] = l.ID
@@ -253,23 +256,26 @@ func resolveListID(serverURL, value string) (string, error) {
 		return id, nil
 	}
 
-	return "", fmt.Errorf("list not found: %s", value)
+	return 0, fmt.Errorf("list not found: %s", value)
 }
 
-func resolveBookID(serverURL, value string) (string, error) {
+func resolveBookID(serverURL, value string) (int64, error) {
 	value = strings.TrimSpace(value)
 
-	parsed, err := uuid.Parse(value)
-	if err == nil && parsed.String() == strings.ToLower(value) {
-		return parsed.String(), nil
+	id, isID, err := parseIDReference(value)
+	if err != nil {
+		return 0, err
+	}
+	if isID {
+		return id, nil
 	}
 
 	existing, err := fetchBooks(serverURL)
 	if err != nil {
-		return "", fmt.Errorf("fetch books: %v", err)
+		return 0, fmt.Errorf("fetch books: %v", err)
 	}
 
-	byTitle := make(map[string][]string)
+	byTitle := make(map[string][]int64)
 	for _, b := range existing {
 		key := strings.ToLower(b.Title)
 		byTitle[key] = append(byTitle[key], b.ID)
@@ -277,13 +283,13 @@ func resolveBookID(serverURL, value string) (string, error) {
 
 	matches := byTitle[strings.ToLower(value)]
 	if len(matches) > 1 {
-		return "", fmt.Errorf("book %q exists multiple times; pass a book ID instead", value)
+		return 0, fmt.Errorf("book %q exists multiple times; pass a book ID instead", value)
 	}
 	if len(matches) == 1 {
 		return matches[0], nil
 	}
 
-	return "", fmt.Errorf("book not found: %s", value)
+	return 0, fmt.Errorf("book not found: %s", value)
 }
 
 func fetchLists(serverURL string) ([]lists.List, error) {

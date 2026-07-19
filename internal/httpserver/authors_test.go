@@ -30,7 +30,7 @@ func TestAuthorAPICreate(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
 		t.Fatal(err)
 	}
-	if created.ID == "" {
+	if created.ID <= 0 {
 		t.Fatal("expected created author to have an ID")
 	}
 	if created.Name != "Jane Austen" {

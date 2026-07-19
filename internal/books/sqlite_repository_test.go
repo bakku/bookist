@@ -57,7 +57,7 @@ func TestSQLiteRepositoryCreatePersistsAllFields(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if created.ID == "" {
+	if created.ID <= 0 {
 		t.Fatal("expected created book to have an ID")
 	}
 
@@ -109,7 +109,7 @@ func TestSQLiteRepositoryCreateWithAuthorIDsPersistsBookAuthors(t *testing.T) {
 
 	created, err := repository.Create(ctx, books.CreateBookRequest{
 		Title:     "Book With Authors",
-		AuthorIDs: []string{authorID},
+		AuthorIDs: []int64{authorID},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -193,7 +193,7 @@ func TestSQLiteRepositoryListReadsPersistedBooks(t *testing.T) {
 	got := listed[0]
 
 	if got.ID != created.ID {
-		t.Fatalf("expected ID %s, got %s", created.ID, got.ID)
+		t.Fatalf("expected ID %d, got %d", created.ID, got.ID)
 	}
 
 	if got.Title != "The Go Programming Language" {

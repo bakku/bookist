@@ -9,7 +9,13 @@ import (
 )
 
 func (s *Server) handleAPIListReads(w http.ResponseWriter, r *http.Request) {
-	result, err := s.reads.ListByBookID(r.Context(), r.PathValue("id"))
+	bookID, err := parseID(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid book ID", http.StatusBadRequest)
+		return
+	}
+
+	result, err := s.reads.ListByBookID(r.Context(), bookID)
 	if err != nil {
 		if errors.Is(err, reads.ErrBookNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -24,6 +30,12 @@ func (s *Server) handleAPIListReads(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAPICreateRead(w http.ResponseWriter, r *http.Request) {
+	bookID, err := parseID(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid book ID", http.StatusBadRequest)
+		return
+	}
+
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 
@@ -33,7 +45,7 @@ func (s *Server) handleAPICreateRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := s.reads.Create(r.Context(), r.PathValue("id"), input)
+	result, err := s.reads.Create(r.Context(), bookID, input)
 	if err != nil {
 		writeCreateReadError(w, err)
 		return

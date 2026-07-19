@@ -24,7 +24,7 @@ var ErrInvalidPublishedDay = errors.New("published_day must form a valid date an
 
 type Repository interface {
 	List(ctx context.Context) ([]Book, error)
-	ListByListID(ctx context.Context, listID string) ([]Book, error)
+	ListByListID(ctx context.Context, listID int64) ([]Book, error)
 	Create(ctx context.Context, input CreateBookRequest) (Book, error)
 }
 
@@ -47,7 +47,7 @@ func (s *Service) List(ctx context.Context) ([]Book, error) {
 		return books, nil
 	}
 
-	ids := make([]string, len(books))
+	ids := make([]int64, len(books))
 	for i, b := range books {
 		ids[i] = b.ID
 	}
@@ -68,7 +68,7 @@ func (s *Service) List(ctx context.Context) ([]Book, error) {
 	return books, nil
 }
 
-func (s *Service) ListByListID(ctx context.Context, listID string) ([]Book, error) {
+func (s *Service) ListByListID(ctx context.Context, listID int64) ([]Book, error) {
 	books, err := s.repository.ListByListID(ctx, listID)
 	if err != nil {
 		return nil, err
@@ -78,7 +78,7 @@ func (s *Service) ListByListID(ctx context.Context, listID string) ([]Book, erro
 		return books, nil
 	}
 
-	ids := make([]string, len(books))
+	ids := make([]int64, len(books))
 	for i, b := range books {
 		ids[i] = b.ID
 	}
@@ -243,11 +243,13 @@ func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, er
 		}
 	}
 
-	seen := make(map[string]bool)
-	var deduped []string
+	seen := make(map[int64]bool)
+	var deduped []int64
 	for _, id := range input.AuthorIDs {
-		id = strings.TrimSpace(id)
-		if id != "" && !seen[id] {
+		if id <= 0 {
+			return Book{}, ErrAuthorNotFound
+		}
+		if !seen[id] {
 			seen[id] = true
 			deduped = append(deduped, id)
 		}
@@ -262,7 +264,7 @@ func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, er
 			return Book{}, err
 		}
 
-		foundMap := make(map[string]bool)
+		foundMap := make(map[int64]bool)
 		for _, a := range found {
 			foundMap[a.ID] = true
 		}
