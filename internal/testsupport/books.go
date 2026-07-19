@@ -48,6 +48,7 @@ type BookRowAssertion struct {
 	Edition           *string
 	Format            *string
 	PurchasedAt       *string
+	PurchasePrice     *string
 	Pages             *int
 	Notes             *string
 	Summary           *string
@@ -104,6 +105,7 @@ func AssertBookRowFields(t testing.TB, db *sql.DB, id int64, want BookRowAsserti
 	var edition sql.NullString
 	var format sql.NullString
 	var purchasedAt sql.NullString
+	var purchasePrice sql.NullString
 	var notes sql.NullString
 	var summary sql.NullString
 	var seriesName sql.NullString
@@ -119,14 +121,14 @@ func AssertBookRowFields(t testing.TB, db *sql.DB, id int64, want BookRowAsserti
 	var updatedAt string
 
 	err := db.QueryRowContext(context.Background(), `
-		SELECT title, isbn, language, publisher, edition, format, purchased_at,
+		SELECT title, isbn, language, publisher, edition, format, purchased_at, purchase_price,
 		    pages, notes, summary, series_name, series_position, location,
 		    condition, acquisition_source, published_year, published_month, published_day,
 		    created_at, updated_at
 		FROM books
 		WHERE id = ?
 	`, id).Scan(&title, &isbn, &language, &publisher, &edition,
-		&format, &purchasedAt, &pages, &notes, &summary, &seriesName, &seriesPosition,
+		&format, &purchasedAt, &purchasePrice, &pages, &notes, &summary, &seriesName, &seriesPosition,
 		&location, &condition, &acquisitionSource, &publishedYear, &publishedMonth,
 		&publishedDay, &createdAt, &updatedAt)
 	if err != nil {
@@ -143,6 +145,7 @@ func AssertBookRowFields(t testing.TB, db *sql.DB, id int64, want BookRowAsserti
 	assertNullString(t, "edition", edition, want.Edition)
 	assertNullString(t, "format", format, want.Format)
 	assertNullString(t, "purchased_at", purchasedAt, want.PurchasedAt)
+	assertNullString(t, "purchase_price", purchasePrice, want.PurchasePrice)
 	assertNullInt(t, "pages", pages, want.Pages)
 	assertNullString(t, "notes", notes, want.Notes)
 	assertNullString(t, "summary", summary, want.Summary)

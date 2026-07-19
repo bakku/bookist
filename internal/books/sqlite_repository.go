@@ -20,7 +20,7 @@ func NewSQLiteRepository(db *sql.DB) *SQLiteRepository {
 func (r *SQLiteRepository) List(ctx context.Context) ([]Book, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, title, isbn, language, publisher, edition, format, 
-		    purchased_at, pages, notes, summary, series_name, series_position,
+		    purchased_at, purchase_price, pages, notes, summary, series_name, series_position,
 		    location, condition, acquisition_source, published_year,
 		    published_month, published_day, created_at, updated_at
 		FROM books
@@ -49,7 +49,7 @@ func (r *SQLiteRepository) List(ctx context.Context) ([]Book, error) {
 func (r *SQLiteRepository) ListByListID(ctx context.Context, listID int64) ([]Book, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT b.id, b.title, b.isbn, b.language, b.publisher, b.edition, b.format,
-		       b.purchased_at, b.pages, b.notes, b.summary, b.series_name,
+		       b.purchased_at, b.purchase_price, b.pages, b.notes, b.summary, b.series_name,
 		       b.series_position, b.location, b.condition, b.acquisition_source,
 		       b.published_year, b.published_month, b.published_day,
 		       b.created_at, b.updated_at
@@ -128,6 +128,11 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 		purchasedAt = sql.NullString{String: *input.PurchasedAt, Valid: true}
 	}
 
+	purchasePrice := sql.NullString{}
+	if input.PurchasePrice != nil {
+		purchasePrice = sql.NullString{String: *input.PurchasePrice, Valid: true}
+	}
+
 	notes := sql.NullString{}
 	if input.Notes != nil {
 		notes = sql.NullString{String: *input.Notes, Valid: true}
@@ -185,16 +190,17 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 
 	row := tx.QueryRowContext(ctx, `
 		INSERT INTO books (title, isbn, language, publisher, edition, format,
-		                   purchased_at, pages, notes, summary, series_name,
+		                   purchased_at, purchase_price, pages, notes, summary, series_name,
 		                   series_position, location, condition, acquisition_source,
 		                   published_year, published_month, published_day,
 		                   created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		RETURNING id, title, isbn, language, publisher, edition, format, purchased_at, 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		RETURNING id, title, isbn, language, publisher, edition, format, purchased_at,
+			purchase_price,
 			pages, notes, summary, series_name, series_position, location, condition,
 			acquisition_source, published_year, published_month, published_day,
 			created_at, updated_at
-	`, input.Title, isbn, language, publisher, edition, format, purchasedAt,
+	`, input.Title, isbn, language, publisher, edition, format, purchasedAt, purchasePrice,
 		pages, notes, summary, seriesName, seriesPosition, location, condition,
 		acquisitionSource, publishedYear, publishedMonth, publishedDay, createdAt, updatedAt)
 
@@ -234,6 +240,7 @@ func scanBook(scanner bookScanner) (Book, error) {
 	var edition sql.NullString
 	var format sql.NullString
 	var purchasedAt sql.NullString
+	var purchasePrice sql.NullString
 	var pages sql.NullInt64
 	var notes sql.NullString
 	var summary sql.NullString
@@ -249,7 +256,7 @@ func scanBook(scanner bookScanner) (Book, error) {
 	var updatedAt string
 
 	if err := scanner.Scan(&book.ID, &book.Title, &isbn, &language, &publisher, &edition,
-		&format, &purchasedAt, &pages, &notes, &summary, &seriesName, &seriesPosition,
+		&format, &purchasedAt, &purchasePrice, &pages, &notes, &summary, &seriesName, &seriesPosition,
 		&location, &condition, &acquisitionSource, &publishedYear, &publishedMonth,
 		&publishedDay, &createdAt, &updatedAt); err != nil {
 		return Book{}, err
@@ -278,6 +285,10 @@ func scanBook(scanner bookScanner) (Book, error) {
 
 	if purchasedAt.Valid {
 		book.PurchasedAt = &purchasedAt.String
+	}
+
+	if purchasePrice.Valid {
+		book.PurchasePrice = &purchasePrice.String
 	}
 
 	if pages.Valid {

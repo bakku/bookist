@@ -141,6 +141,7 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	var edition optionalStringFlag
 	var format optionalStringFlag
 	var purchasedAt optionalStringFlag
+	var purchasePrice optionalStringFlag
 	var notes optionalStringFlag
 	var summary optionalStringFlag
 	var seriesName optionalStringFlag
@@ -159,6 +160,7 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags.Var(&edition, "edition", "Book edition")
 	flags.Var(&format, "format", "Book format (hardback|paperback|epub)")
 	flags.Var(&purchasedAt, "purchased-at", "Date purchased (YYYY-MM-DD)")
+	flags.Var(&purchasePrice, "purchase-price", "Book purchase price (free-form text)")
 	flags.Var(&notes, "notes", "Personal notes")
 	flags.Var(&summary, "summary", "Book summary")
 	flags.Var(&seriesName, "series-name", "Book series name")
@@ -187,6 +189,7 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		Publisher:         publisher.value,
 		Edition:           edition.value,
 		PurchasedAt:       purchasedAt.value,
+		PurchasePrice:     purchasePrice.value,
 		Pages:             pages.value,
 		Notes:             notes.value,
 		Summary:           summary.value,

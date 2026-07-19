@@ -101,6 +101,7 @@ func TestInitialSchemaEnforcesBookValidation(t *testing.T) {
 		{title: "month without year", cols: "published_month", args: []any{1}},
 		{title: "invalid calendar day", cols: "published_year, published_month, published_day", args: []any{2023, 2, 29}},
 		{title: "invalid purchased date", cols: "purchased_at", args: []any{"2025-02-29"}},
+		{title: "blank purchase price", cols: "purchase_price", args: []any{" "}},
 	} {
 		placeholders := "?"
 		for range test.args[1:] {

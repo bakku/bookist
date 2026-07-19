@@ -164,6 +164,15 @@ func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, er
 		}
 	}
 
+	if input.PurchasePrice != nil {
+		v := strings.TrimSpace(*input.PurchasePrice)
+		if v == "" {
+			input.PurchasePrice = nil
+		} else {
+			input.PurchasePrice = &v
+		}
+	}
+
 	if input.Notes != nil {
 		v := strings.TrimSpace(*input.Notes)
 		if v == "" {
