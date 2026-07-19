@@ -213,18 +213,6 @@ func TestBookAPICreateNormalizesBlankExtendedTextToNull(t *testing.T) {
 	testsupport.AssertBookRowFields(t, app.db, created.ID, testsupport.BookRowAssertion{Title: "Minimal"})
 }
 
-func TestBookAPICreateReturnsConflictForDuplicateTitle(t *testing.T) {
-	app := newTestApp(t)
-	testsupport.InsertBookRow(t, app.db, "Dune", nil)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/books", bytes.NewBufferString(`{"title":"dUnE"}`))
-	resp := httptest.NewRecorder()
-	app.handler.ServeHTTP(resp, req)
-	if resp.Code != http.StatusConflict {
-		t.Fatalf("expected status %d, got %d: %s", http.StatusConflict, resp.Code, resp.Body.String())
-	}
-}
-
 func TestBookAPICreateRejectsInvalidDatesAndNumbers(t *testing.T) {
 	for _, body := range []string{
 		`{"title":"Bad Purchase","purchased_at":"2025-02-29"}`,

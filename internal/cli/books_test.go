@@ -304,6 +304,35 @@ func TestBooksAddWithAuthorNameExistsLinksAuthor(t *testing.T) {
 	}
 }
 
+func TestBooksAddWithAmbiguousAuthorNameRequiresID(t *testing.T) {
+	bookPosted := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/authors":
+			_ = json.NewEncoder(w).Encode([]authors.Author{
+				{ID: "author-1", Name: "Alex Smith"},
+				{ID: "author-2", Name: "alex SMITH"},
+			})
+		case "/api/books":
+			bookPosted = true
+		}
+	}))
+	defer server.Close()
+
+	var stdout, stderr strings.Builder
+	exitCode := cli.Run([]string{"books", "add", "--title", "My Book", "--author", "Alex Smith", "--server", server.URL}, &stdout, &stderr)
+
+	if exitCode == 0 {
+		t.Fatal("expected non-zero exit code")
+	}
+	if bookPosted {
+		t.Fatal("expected ambiguous author to prevent book creation")
+	}
+	if !strings.Contains(stderr.String(), `author "Alex Smith" exists multiple times; pass an author ID instead`) {
+		t.Fatalf("unexpected error: %q", stderr.String())
+	}
+}
+
 func TestBooksAddWithAuthorNameNotFoundCreatesAuthorThenBook(t *testing.T) {
 	var postedAuthors []authors.CreateAuthorRequest
 	var postedBooks []books.CreateBookRequest

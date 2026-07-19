@@ -12,7 +12,6 @@ import (
 )
 
 var ErrTitleRequired = errors.New("title is required")
-var ErrTitleConflict = errors.New("a book with this title already exists")
 var ErrAuthorNotFound = errors.New("author not found")
 var ErrInvalidFormat = errors.New("format must be one of: hardback, paperback, epub")
 var ErrInvalidPurchasedAt = errors.New("purchased_at must be a date in YYYY-MM-DD format")
@@ -26,7 +25,6 @@ var ErrInvalidPublishedDay = errors.New("published_day must form a valid date an
 type Repository interface {
 	List(ctx context.Context) ([]Book, error)
 	ListByListID(ctx context.Context, listID string) ([]Book, error)
-	TitleExists(ctx context.Context, title string) (bool, error)
 	Create(ctx context.Context, input CreateBookRequest) (Book, error)
 }
 
@@ -105,15 +103,6 @@ func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, er
 	input.Title = strings.TrimSpace(input.Title)
 	if input.Title == "" {
 		return Book{}, ErrTitleRequired
-	}
-
-	exists, err := s.repository.TitleExists(ctx, input.Title)
-	if err != nil {
-		return Book{}, err
-	}
-
-	if exists {
-		return Book{}, ErrTitleConflict
 	}
 
 	if input.ISBN != nil {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 	"time"
 
 	"bakku.dev/bookist/internal/authors"
@@ -84,12 +83,6 @@ func (r *SQLiteRepository) ListByListID(ctx context.Context, listID string) ([]B
 	}
 
 	return bookList, nil
-}
-
-func (r *SQLiteRepository) TitleExists(ctx context.Context, title string) (bool, error) {
-	var exists bool
-	err := r.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM books WHERE title = ? COLLATE NOCASE)`, title).Scan(&exists)
-	return exists, err
 }
 
 func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) (Book, error) {
@@ -210,9 +203,6 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 
 	book, err := scanBook(row)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed: books.title") {
-			return Book{}, ErrTitleConflict
-		}
 		return Book{}, err
 	}
 

@@ -6,7 +6,7 @@ CREATE TABLE books (
         substr(id, 19, 1) = '-' AND substr(id, 24, 1) = '-' AND
         length(replace(id, '-', '')) = 32 AND replace(id, '-', '') NOT GLOB '*[^0-9a-f]*'
     ),
-    title TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK (trim(title) <> ''),
+    title TEXT NOT NULL COLLATE NOCASE CHECK (trim(title) <> ''),
     isbn TEXT NULL,
     language TEXT NULL,
     publisher TEXT NULL,
@@ -56,7 +56,7 @@ CREATE TABLE authors (
         substr(id, 19, 1) = '-' AND substr(id, 24, 1) = '-' AND
         length(replace(id, '-', '')) = 32 AND replace(id, '-', '') NOT GLOB '*[^0-9a-f]*'
     ),
-    name TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK (trim(name) <> ''),
+    name TEXT NOT NULL COLLATE NOCASE CHECK (trim(name) <> ''),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
