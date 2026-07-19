@@ -65,7 +65,7 @@ func TestAuthorsListTableFormats(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			args := []string{"authors", "list", "--server", server.URL}
+			args := []string{"authors", "ls", "--server", server.URL}
 			if test.format != "" {
 				args = append(args, "--format", test.format)
 			}
@@ -90,7 +90,7 @@ func TestAuthorsListJSON(t *testing.T) {
 	}))
 	defer server.Close()
 
-	exitCode, stdout, stderr := runCLI([]string{"authors", "list", "--server", server.URL, "--format", "json"})
+	exitCode, stdout, stderr := runCLI([]string{"authors", "ls", "--server", server.URL, "--format", "json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
 	}
@@ -104,5 +104,22 @@ func TestAuthorsListJSON(t *testing.T) {
 	}
 	if len(listed) != 1 || listed[0].ID != 1 || listed[0].Name != "Author One" {
 		t.Fatalf("expected complete author JSON, got %#v", listed)
+	}
+}
+
+func TestAuthorsLSForwardsQuery(t *testing.T) {
+	var gotQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query().Get("q")
+		_ = json.NewEncoder(w).Encode([]authors.Author{})
+	}))
+	defer server.Close()
+
+	exitCode, _, stderr := runCLI([]string{"authors", "ls", "--query", "Octavia Butler", "--server", server.URL})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
+	}
+	if gotQuery != "Octavia Butler" {
+		t.Fatalf("expected query %q, got %q", "Octavia Butler", gotQuery)
 	}
 }

@@ -15,6 +15,7 @@ var ErrBookAlreadyInList = errors.New("book is already in this list")
 type Repository interface {
 	Create(ctx context.Context, input CreateListRequest) (List, error)
 	List(ctx context.Context) ([]List, error)
+	Search(ctx context.Context, query string) ([]List, error)
 	NameExists(ctx context.Context, name string) (bool, error)
 	GetByID(ctx context.Context, id int64) (List, error)
 	AddBookToList(ctx context.Context, listID, bookID int64) error
@@ -55,6 +56,10 @@ func (s *Service) Create(ctx context.Context, input CreateListRequest) (List, er
 
 func (s *Service) List(ctx context.Context) ([]List, error) {
 	return s.repository.List(ctx)
+}
+
+func (s *Service) Search(ctx context.Context, query string) ([]List, error) {
+	return s.repository.Search(ctx, strings.TrimSpace(query))
 }
 
 func (s *Service) GetByID(ctx context.Context, id int64) (List, error) {

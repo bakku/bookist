@@ -10,6 +10,7 @@ import (
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
 	"bakku.dev/bookist/internal/cli"
+	"bakku.dev/bookist/internal/lists"
 )
 
 // ── Books List ─────────────────────────────────────────────────────────────────
@@ -35,7 +36,7 @@ func TestBooksListTableFormats(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			args := []string{"books", "list", "--server", server.URL}
+			args := []string{"books", "ls", "--server", server.URL}
 			if test.format != "" {
 				args = append(args, "--format", test.format)
 			}
@@ -74,7 +75,7 @@ func TestBooksListJSONPreservesNullableFields(t *testing.T) {
 	}))
 	defer server.Close()
 
-	exitCode, stdout, stderr := runCLI([]string{"books", "list", "--server", server.URL, "--format", "json"})
+	exitCode, stdout, stderr := runCLI([]string{"books", "ls", "--server", server.URL, "--format", "json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
 	}
@@ -104,6 +105,57 @@ func TestBooksListJSONPreservesNullableFields(t *testing.T) {
 		listed[1].SeriesName != nil || listed[1].SeriesPosition != nil || listed[1].Location != nil ||
 		listed[1].Condition != nil || listed[1].AcquisitionSource != nil {
 		t.Fatalf("expected nullable fields to remain nil, got %#v", listed[1])
+	}
+}
+
+func TestBooksLSForwardsQuery(t *testing.T) {
+	var gotQuery string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query().Get("q")
+		_ = json.NewEncoder(w).Encode([]books.Book{})
+	}))
+	defer server.Close()
+
+	exitCode, _, stderr := runCLI([]string{"books", "ls", "--query", "Lord & Rings", "--server", server.URL})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
+	}
+	if gotQuery != "Lord & Rings" {
+		t.Fatalf("expected query %q, got %q", "Lord & Rings", gotQuery)
+	}
+}
+
+func TestBooksLSResolvesExactListAndForwardsQuery(t *testing.T) {
+	var gotListQuery, gotBookQuery, gotBookPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/lists":
+			gotListQuery = r.URL.Query().Get("q")
+			_ = json.NewEncoder(w).Encode([]lists.List{
+				{ID: 1, Name: "Old Nightstand"},
+				{ID: 2, Name: "Nightstand"},
+			})
+		case "/api/lists/2/books":
+			gotBookPath = r.URL.Path
+			gotBookQuery = r.URL.Query().Get("q")
+			_ = json.NewEncoder(w).Encode([]books.Book{})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	exitCode, _, stderr := runCLI([]string{
+		"books", "ls", "--list", "nightstand", "--query", "Lord", "--server", server.URL,
+	})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
+	}
+	if gotListQuery != "nightstand" {
+		t.Fatalf("expected list query %q, got %q", "nightstand", gotListQuery)
+	}
+	if gotBookPath != "/api/lists/2/books" || gotBookQuery != "Lord" {
+		t.Fatalf("expected filtered list books request, got path %q query %q", gotBookPath, gotBookQuery)
 	}
 }
 
@@ -277,7 +329,11 @@ func TestBooksAddWithAuthorNameExistsLinksAuthor(t *testing.T) {
 		case "/api/authors":
 			switch r.Method {
 			case http.MethodGet:
+				if got := r.URL.Query().Get("q"); got != "existing author" {
+					t.Fatalf("expected author query %q, got %q", "existing author", got)
+				}
 				json.NewEncoder(w).Encode([]authors.Author{
+					{ID: 4, Name: "Former Existing Author"},
 					{ID: 5, Name: "Existing Author"},
 				})
 

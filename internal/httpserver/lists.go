@@ -9,7 +9,7 @@ import (
 )
 
 func (s *Server) handleAPIListLists(w http.ResponseWriter, r *http.Request) {
-	listList, err := s.lists.List(r.Context())
+	listList, err := s.lists.Search(r.Context(), r.URL.Query().Get("q"))
 	if err != nil {
 		http.Error(w, "failed to list lists", http.StatusInternalServerError)
 		return
@@ -54,7 +54,7 @@ func (s *Server) handleAPIListBooksInList(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	listBooks, err := s.books.ListByListID(r.Context(), listID)
+	listBooks, err := s.books.SearchByListID(r.Context(), listID, r.URL.Query().Get("q"))
 	if err != nil {
 		http.Error(w, "failed to list books", http.StatusInternalServerError)
 		return

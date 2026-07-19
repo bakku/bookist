@@ -9,7 +9,7 @@ import (
 )
 
 func (s *Server) handleAPIListAuthors(w http.ResponseWriter, r *http.Request) {
-	authorList, err := s.authors.List(r.Context())
+	authorList, err := s.authors.Search(r.Context(), r.URL.Query().Get("q"))
 	if err != nil {
 		http.Error(w, "failed to list authors", http.StatusInternalServerError)
 		return
