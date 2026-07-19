@@ -7,6 +7,7 @@ import (
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
 	"bakku.dev/bookist/internal/lists"
+	"bakku.dev/bookist/internal/reads"
 	"bakku.dev/bookist/internal/web"
 )
 
@@ -14,10 +15,11 @@ type Server struct {
 	books     *books.Service
 	authors   *authors.Service
 	lists     *lists.Service
+	reads     *reads.Service
 	templates *template.Template
 }
 
-func New(books *books.Service, authors *authors.Service, lists *lists.Service) (*Server, error) {
+func New(books *books.Service, authors *authors.Service, lists *lists.Service, reads *reads.Service) (*Server, error) {
 	templates, err := web.Templates()
 	if err != nil {
 		return nil, err
@@ -27,6 +29,7 @@ func New(books *books.Service, authors *authors.Service, lists *lists.Service) (
 		books:     books,
 		authors:   authors,
 		lists:     lists,
+		reads:     reads,
 		templates: templates,
 	}, nil
 }
@@ -37,6 +40,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /", s.handleIndex)
 	mux.HandleFunc("GET /api/books", s.handleAPIListBooks)
 	mux.HandleFunc("POST /api/books", s.handleAPICreateBook)
+	mux.HandleFunc("GET /api/books/{id}/reads", s.handleAPIListReads)
+	mux.HandleFunc("POST /api/books/{id}/reads", s.handleAPICreateRead)
 	mux.HandleFunc("GET /api/authors", s.handleAPIListAuthors)
 	mux.HandleFunc("POST /api/authors", s.handleAPICreateAuthor)
 	mux.HandleFunc("GET /api/lists", s.handleAPIListLists)

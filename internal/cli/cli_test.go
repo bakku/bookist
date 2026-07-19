@@ -9,6 +9,8 @@ import (
 	"bakku.dev/bookist/internal/cli"
 )
 
+// ── Help Display ──────────────────────────────────────────────────────────────
+
 func TestRootHelpShowsOnlyTopLevelCommands(t *testing.T) {
 	for _, args := range [][]string{{"--help"}, {"-h"}, {"help"}, {"h"}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
@@ -28,6 +30,7 @@ func TestRootHelpShowsOnlyTopLevelCommands(t *testing.T) {
 				"books    Manage books",
 				"authors  Manage authors",
 				"lists    Manage book lists",
+				"reads    Manage book reads",
 			} {
 				if !strings.Contains(stdout, expected) {
 					t.Errorf("expected stdout to contain %q, got:\n%s", expected, stdout)
@@ -67,6 +70,12 @@ func TestParentHelpShowsOnlyImmediateCommands(t *testing.T) {
 			args:       []string{"lists", "--help"},
 			expected:   []string{"bookist lists - Manage book lists", "list      List book lists", "add       Add a book list", "add-book  Add a book to a list"},
 			unexpected: []string{"Manage authors", "--description", "--book"},
+		},
+		{
+			name:       "reads",
+			args:       []string{"reads", "--help"},
+			expected:   []string{"bookist reads - Manage book reads", "list  List reads for a book", "add   Record a read for a book"},
+			unexpected: []string{"Manage authors", "--rating", "--book"},
 		},
 	}
 
@@ -109,6 +118,8 @@ func TestLeafHelpShowsCommandOptionsAndExitsSuccessfully(t *testing.T) {
 		{name: "authors add", args: []string{"authors", "add", "--help"}, expected: []string{"bookist authors add - Add an author", "--name string"}},
 		{name: "lists list", args: []string{"lists", "list", "--help"}, expected: []string{"bookist lists list - List book lists", "--format string", "Output format (tsv|pretty|json) (default: tsv)", "--server string"}},
 		{name: "lists add-book", args: []string{"lists", "add-book", "--help"}, expected: []string{"bookist lists add-book - Add a book to a list", "--book string", "--list string"}},
+		{name: "reads list", args: []string{"reads", "list", "--help"}, expected: []string{"bookist reads list - List reads for a book", "--book string", "--format string"}},
+		{name: "reads add", args: []string{"reads", "add", "--help"}, expected: []string{"bookist reads add - Record a read for a book", "--book string", "--rating float"}},
 	}
 
 	for _, test := range tests {
@@ -130,8 +141,10 @@ func TestLeafHelpShowsCommandOptionsAndExitsSuccessfully(t *testing.T) {
 	}
 }
 
+// ── List Format Validation ────────────────────────────────────────────────────
+
 func TestListCommandsRejectUnsupportedFormat(t *testing.T) {
-	for _, resource := range []string{"books", "authors", "lists"} {
+	for _, resource := range []string{"books", "authors", "lists", "reads"} {
 		t.Run(resource, func(t *testing.T) {
 			requestCount := 0
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -157,6 +170,8 @@ func TestListCommandsRejectUnsupportedFormat(t *testing.T) {
 	}
 }
 
+// ── Error Help ────────────────────────────────────────────────────────────────
+
 func TestFlagErrorShowsOnlyCommandHelp(t *testing.T) {
 	exitCode, stdout, stderr := runCLI([]string{"books", "add", "--pages", "many"})
 
@@ -178,7 +193,7 @@ func TestFlagErrorShowsOnlyCommandHelp(t *testing.T) {
 }
 
 func TestInvalidSubcommandShowsParentHelp(t *testing.T) {
-	for _, parent := range []string{"books", "authors", "lists"} {
+	for _, parent := range []string{"books", "authors", "lists", "reads"} {
 		t.Run(parent, func(t *testing.T) {
 			exitCode, stdout, stderr := runCLI([]string{parent, "invalid"})
 
@@ -200,6 +215,8 @@ func TestInvalidSubcommandShowsParentHelp(t *testing.T) {
 		})
 	}
 }
+
+// ── Help Command ──────────────────────────────────────────────────────────────
 
 func TestHelpCommandAcceptsACommandPath(t *testing.T) {
 	exitCode, stdout, stderr := runCLI([]string{"help", "books", "add"})

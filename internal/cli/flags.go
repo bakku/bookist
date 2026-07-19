@@ -36,6 +36,26 @@ type optionalIntFlag struct {
 	value *int
 }
 
+type optionalFloatFlag struct {
+	value *float64
+}
+
+func (f *optionalFloatFlag) String() string {
+	if f.value == nil {
+		return ""
+	}
+	return strconv.FormatFloat(*f.value, 'f', -1, 64)
+}
+
+func (f *optionalFloatFlag) Set(value string) error {
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return err
+	}
+	f.value = &parsed
+	return nil
+}
+
 func (f *optionalIntFlag) String() string {
 	if f.value == nil {
 		return ""

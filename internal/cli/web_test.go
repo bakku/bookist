@@ -8,6 +8,8 @@ import (
 	"bakku.dev/bookist/internal/cli"
 )
 
+// ── Serve ─────────────────────────────────────────────────────────────────────
+
 func TestServeWritesListeningStatusToStdout(t *testing.T) {
 	addr := "127.0.0.1:not-a-port"
 	dbPath := filepath.Join(t.TempDir(), "bookist.db")

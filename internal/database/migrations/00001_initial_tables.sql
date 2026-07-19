@@ -39,8 +39,24 @@ CREATE TABLE book_lists (
     book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
     PRIMARY KEY (list_id, book_id)
 );
+CREATE TABLE reads (
+    id TEXT PRIMARY KEY,
+    book_id TEXT NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    started_at TEXT NULL,
+    finished_at TEXT NULL,
+    rating REAL NULL CHECK (
+        rating IS NULL OR
+        (rating >= 1 AND rating <= 5 AND rating * 2 = CAST(rating * 2 AS INTEGER))
+    ),
+    notes TEXT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    CHECK (started_at IS NULL OR finished_at IS NULL OR finished_at >= started_at)
+);
+CREATE INDEX reads_book_id_idx ON reads(book_id);
 
 -- +goose Down
+DROP TABLE reads;
 DROP TABLE book_lists;
 DROP TABLE lists;
 DROP TABLE book_authors;
