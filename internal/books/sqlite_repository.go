@@ -18,14 +18,19 @@ func NewSQLiteRepository(db *sql.DB) *SQLiteRepository {
 }
 
 func (r *SQLiteRepository) List(ctx context.Context) ([]Book, error) {
+	return r.Search(ctx, "")
+}
+
+func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]Book, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, title, isbn, language, publisher, edition, format, 
 		    purchased_at, purchase_price, pages, notes, summary, series_name, series_position,
 		    location, condition, acquisition_source, published_year,
 		    published_month, published_day, created_at, updated_at
 		FROM books
+		WHERE instr(lower(title), lower(?)) > 0
 		ORDER BY updated_at DESC, id ASC
-	`)
+	`, query)
 	if err != nil {
 		return nil, err
 	}
@@ -47,6 +52,10 @@ func (r *SQLiteRepository) List(ctx context.Context) ([]Book, error) {
 }
 
 func (r *SQLiteRepository) ListByListID(ctx context.Context, listID int64) ([]Book, error) {
+	return r.SearchByListID(ctx, listID, "")
+}
+
+func (r *SQLiteRepository) SearchByListID(ctx context.Context, listID int64, query string) ([]Book, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT b.id, b.title, b.isbn, b.language, b.publisher, b.edition, b.format,
 		       b.purchased_at, b.purchase_price, b.pages, b.notes, b.summary, b.series_name,
@@ -55,9 +64,9 @@ func (r *SQLiteRepository) ListByListID(ctx context.Context, listID int64) ([]Bo
 		       b.created_at, b.updated_at
 		FROM books b
 		JOIN book_lists bl ON bl.book_id = b.id
-		WHERE bl.list_id = ?
+		WHERE bl.list_id = ? AND instr(lower(b.title), lower(?)) > 0
 		ORDER BY bl.updated_at DESC, bl.id ASC
-	`, listID)
+	`, listID, query)
 	if err != nil {
 		return nil, err
 	}

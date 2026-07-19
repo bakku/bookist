@@ -23,8 +23,8 @@ func runReads(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	switch args[0] {
-	case "list":
-		return runReadsList(args[1:], stdout, stderr)
+	case "ls":
+		return runReadsLS(args[1:], stdout, stderr)
 	case "add":
 		return runReadsAdd(args[1:], stdout, stderr)
 	case "help", "-h", "--help":
@@ -43,22 +43,22 @@ func printReadsHelp(w io.Writer) {
 		usage:       "bookist reads [command [command options]]",
 		description: "Manage book reads",
 		commands: []helpCommand{
-			{name: "list", description: "List reads for a book"},
+			{name: "ls", description: "List reads for a book"},
 			{name: "add", description: "Record a read for a book"},
 		},
 	}, nil)
 }
 
-func runReadsList(args []string, stdout io.Writer, stderr io.Writer) int {
-	flags := flag.NewFlagSet("reads list", flag.ContinueOnError)
+func runReadsLS(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("reads ls", flag.ContinueOnError)
 
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
 	bookRef := flags.String("book", "", "Book title or ID")
 	formatValue := flags.String("format", string(outputFormatPretty), "Output format (tsv|pretty|json)")
 
 	help := commandHelp{
-		name:        "bookist reads list",
-		usage:       "bookist reads list [options]",
+		name:        "bookist reads ls",
+		usage:       "bookist reads ls [options]",
 		description: "List reads for a book",
 	}
 

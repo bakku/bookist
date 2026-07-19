@@ -338,3 +338,43 @@ func TestBookAPIList(t *testing.T) {
 		t.Fatalf("expected published_day 1, got %#v", got.PublishedDay)
 	}
 }
+
+func TestBookAPISearchesTitlesCaseInsensitively(t *testing.T) {
+	app := newTestApp(t)
+	testsupport.InsertBookRow(t, app.db, "Dune", nil)
+	testsupport.InsertBookRow(t, app.db, "Foundation", nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/books?q=+UNE+", nil)
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, resp.Code)
+	}
+
+	var listed []books.Book
+	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].Title != "Dune" {
+		t.Fatalf("expected only Dune, got %#v", listed)
+	}
+}
+
+func TestBookAPISearchTreatsWildcardsLiterally(t *testing.T) {
+	app := newTestApp(t)
+	testsupport.InsertBookRow(t, app.db, "100% Complete", nil)
+	testsupport.InsertBookRow(t, app.db, "Dune", nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/books?q=%25", nil)
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, req)
+
+	var listed []books.Book
+	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].Title != "100% Complete" {
+		t.Fatalf("expected only the title containing %%, got %#v", listed)
+	}
+}

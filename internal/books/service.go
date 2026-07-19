@@ -24,7 +24,9 @@ var ErrInvalidPublishedDay = errors.New("published_day must form a valid date an
 
 type Repository interface {
 	List(ctx context.Context) ([]Book, error)
+	Search(ctx context.Context, query string) ([]Book, error)
 	ListByListID(ctx context.Context, listID int64) ([]Book, error)
+	SearchByListID(ctx context.Context, listID int64, query string) ([]Book, error)
 	Create(ctx context.Context, input CreateBookRequest) (Book, error)
 }
 
@@ -39,37 +41,25 @@ func NewService(repository Repository, authorRepo authors.Repository) *Service {
 
 func (s *Service) List(ctx context.Context) ([]Book, error) {
 	books, err := s.repository.List(ctx)
-	if err != nil {
-		return nil, err
-	}
+	return s.withAuthors(ctx, books, err)
+}
 
-	if len(books) == 0 {
-		return books, nil
-	}
-
-	ids := make([]int64, len(books))
-	for i, b := range books {
-		ids[i] = b.ID
-	}
-
-	authorsByBook, err := s.authorRepo.ListByBookIDs(ctx, ids)
-	if err != nil {
-		return nil, err
-	}
-
-	for i, b := range books {
-		if aa, ok := authorsByBook[b.ID]; ok {
-			books[i].Authors = aa
-		} else {
-			books[i].Authors = []authors.Author{}
-		}
-	}
-
-	return books, nil
+func (s *Service) Search(ctx context.Context, query string) ([]Book, error) {
+	books, err := s.repository.Search(ctx, strings.TrimSpace(query))
+	return s.withAuthors(ctx, books, err)
 }
 
 func (s *Service) ListByListID(ctx context.Context, listID int64) ([]Book, error) {
 	books, err := s.repository.ListByListID(ctx, listID)
+	return s.withAuthors(ctx, books, err)
+}
+
+func (s *Service) SearchByListID(ctx context.Context, listID int64, query string) ([]Book, error) {
+	books, err := s.repository.SearchByListID(ctx, listID, strings.TrimSpace(query))
+	return s.withAuthors(ctx, books, err)
+}
+
+func (s *Service) withAuthors(ctx context.Context, books []Book, err error) ([]Book, error) {
 	if err != nil {
 		return nil, err
 	}
