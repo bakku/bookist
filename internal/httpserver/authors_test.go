@@ -41,6 +41,18 @@ func TestAuthorAPICreate(t *testing.T) {
 	testsupport.AssertAuthorRow(t, app.db, created.ID, "Jane Austen")
 }
 
+func TestAuthorAPICreateReturnsConflictForDuplicateName(t *testing.T) {
+	app := newTestApp(t)
+	testsupport.InsertAuthorRow(t, app.db, "Jane Austen")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/authors", bytes.NewBufferString(`{"name":"jane AUSTEN"}`))
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusConflict {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusConflict, resp.Code, resp.Body.String())
+	}
+}
+
 // ── List ──────────────────────────────────────────────────────────────────────
 
 func TestAuthorAPIList(t *testing.T) {

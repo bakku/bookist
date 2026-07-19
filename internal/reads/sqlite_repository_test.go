@@ -74,16 +74,18 @@ func TestSQLiteRepositoryListByBookIDOrdersNewestFirst(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
 	otherBookID := testsupport.InsertBookRow(t, db, "Foundation", nil)
+	oldID := uuid.NewString()
+	newID := uuid.NewString()
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
-		ID: "old", BookID: bookID, StartedAt: new("2025-01-01"), FinishedAt: new("2025-01-02"),
+		ID: oldID, BookID: bookID, StartedAt: new("2025-01-01"), FinishedAt: new("2025-01-02"),
 		CreatedAt: "2026-01-01T00:00:00Z",
 	})
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
-		ID: "new", BookID: bookID, StartedAt: new("2026-01-01"), FinishedAt: new("2026-01-02"),
+		ID: newID, BookID: bookID, StartedAt: new("2026-01-01"), FinishedAt: new("2026-01-02"),
 		CreatedAt: "2026-01-02T00:00:00Z",
 	})
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
-		ID: "other", BookID: otherBookID, StartedAt: new("2027-01-01"), FinishedAt: new("2027-01-02"),
+		ID: uuid.NewString(), BookID: otherBookID, StartedAt: new("2027-01-01"), FinishedAt: new("2027-01-02"),
 		CreatedAt: "2027-01-02T00:00:00Z",
 	})
 
@@ -91,7 +93,7 @@ func TestSQLiteRepositoryListByBookIDOrdersNewestFirst(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(listed) != 2 || listed[0].ID != "new" || listed[1].ID != "old" {
+	if len(listed) != 2 || listed[0].ID != newID || listed[1].ID != oldID {
 		t.Fatalf("expected newest reads first, got %#v", listed)
 	}
 }
@@ -134,6 +136,8 @@ func TestReadsTableEnforcesRatingAndDateConstraints(t *testing.T) {
 		{name: "rating range", startedAt: "2026-01-01", finishedAt: "2026-01-02", rating: 5.5},
 		{name: "rating increment", startedAt: "2026-01-01", finishedAt: "2026-01-02", rating: 4.2},
 		{name: "date order", startedAt: "2026-01-02", finishedAt: "2026-01-01", rating: 4.5},
+		{name: "invalid calendar date", startedAt: "2026-02-30", finishedAt: "2026-03-01", rating: 4.5},
+		{name: "year zero", startedAt: "0000-01-01", finishedAt: "2026-03-01", rating: 4.5},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := db.Exec(`

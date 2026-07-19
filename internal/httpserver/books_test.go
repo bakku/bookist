@@ -168,13 +168,44 @@ func TestBookAPICreateRejectsInvalidFormat(t *testing.T) {
 	testsupport.AssertBookCount(t, app.db, 0)
 }
 
+func TestBookAPICreateReturnsConflictForDuplicateTitle(t *testing.T) {
+	app := newTestApp(t)
+	testsupport.InsertBookRow(t, app.db, "Dune", nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/books", bytes.NewBufferString(`{"title":"dUnE"}`))
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusConflict {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusConflict, resp.Code, resp.Body.String())
+	}
+}
+
+func TestBookAPICreateRejectsInvalidDatesAndNumbers(t *testing.T) {
+	for _, body := range []string{
+		`{"title":"Bad Purchase","purchased_at":"2025-02-29"}`,
+		`{"title":"Bad Pages","pages":0}`,
+		`{"title":"Bad Month","published_month":1}`,
+		`{"title":"Bad Day","published_year":2023,"published_month":2,"published_day":29}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			app := newTestApp(t)
+			req := httptest.NewRequest(http.MethodPost, "/api/books", bytes.NewBufferString(body))
+			resp := httptest.NewRecorder()
+			app.handler.ServeHTTP(resp, req)
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
+			}
+		})
+	}
+}
+
 // ── List ──────────────────────────────────────────────────────────────────────
 
 func TestBookAPIList(t *testing.T) {
 	app := newTestApp(t)
 	now := "2026-01-02T03:04:05Z"
 
-	id := "test-list-id"
+	id := uuid.NewString()
 	_, err := app.db.ExecContext(context.Background(), `
 		INSERT INTO books (id, title, isbn, language, publisher, edition, format,
 		                   purchased_at, pages, notes, published_year, published_month,

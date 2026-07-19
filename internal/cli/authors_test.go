@@ -58,7 +58,7 @@ func TestAuthorsListTableFormats(t *testing.T) {
 		format   string
 		expected string
 	}{
-		{name: "default TSV", expected: "id-1\tAuthor One\nid-2\tAuthor Two\n"},
+		{name: "default pretty", expected: "ID    NAME\nid-1  Author One\nid-2  Author Two\n"},
 		{name: "explicit TSV", format: "tsv", expected: "id-1\tAuthor One\nid-2\tAuthor Two\n"},
 		{name: "pretty", format: "pretty", expected: "ID    NAME\nid-1  Author One\nid-2  Author Two\n"},
 	}

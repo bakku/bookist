@@ -7,10 +7,12 @@ import (
 )
 
 var ErrNameRequired = errors.New("name is required")
+var ErrNameConflict = errors.New("an author with this name already exists")
 
 type Repository interface {
 	Create(ctx context.Context, input CreateAuthorRequest) (Author, error)
 	List(ctx context.Context) ([]Author, error)
+	NameExists(ctx context.Context, name string) (bool, error)
 	GetByIDs(ctx context.Context, ids []string) ([]Author, error)
 	ListByBookIDs(ctx context.Context, bookIDs []string) (map[string][]Author, error)
 }
@@ -28,6 +30,16 @@ func (s *Service) Create(ctx context.Context, input CreateAuthorRequest) (Author
 	if input.Name == "" {
 		return Author{}, ErrNameRequired
 	}
+
+	exists, err := s.repository.NameExists(ctx, input.Name)
+	if err != nil {
+		return Author{}, err
+	}
+
+	if exists {
+		return Author{}, ErrNameConflict
+	}
+
 	return s.repository.Create(ctx, input)
 }
 

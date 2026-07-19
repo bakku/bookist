@@ -42,11 +42,11 @@ func TestReadAPICreate(t *testing.T) {
 	if response["book_id"] != bookID || response["rating"] != 4.5 || response["notes"] != "Excellent" {
 		t.Fatalf("unexpected response: %#v", response)
 	}
-	if _, exists := response["created_at"]; exists {
-		t.Fatal("created_at must not be exposed")
+	if response["created_at"] == nil {
+		t.Fatal("created_at must be exposed")
 	}
-	if _, exists := response["updated_at"]; exists {
-		t.Fatal("updated_at must not be exposed")
+	if response["updated_at"] == nil {
+		t.Fatal("updated_at must be exposed")
 	}
 
 	var startedAt, finishedAt, notes sql.NullString
@@ -121,12 +121,14 @@ func TestReadAPICreateRejectsInvalidValues(t *testing.T) {
 func TestReadAPIList(t *testing.T) {
 	app := newTestApp(t)
 	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
+	olderID := uuid.NewString()
+	newerID := uuid.NewString()
 	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{
-		ID: "older", BookID: bookID, StartedAt: new("2025-01-01"), FinishedAt: new("2025-01-03"),
+		ID: olderID, BookID: bookID, StartedAt: new("2025-01-01"), FinishedAt: new("2025-01-03"),
 		Rating: new(4.0), Notes: new("Good"), CreatedAt: "2026-01-01T00:00:00Z",
 	})
 	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{
-		ID: "newer", BookID: bookID, StartedAt: new("2026-01-01"), FinishedAt: new("2026-01-03"),
+		ID: newerID, BookID: bookID, StartedAt: new("2026-01-01"), FinishedAt: new("2026-01-03"),
 		Rating: new(4.5), Notes: new("Excellent"), CreatedAt: "2026-01-02T00:00:00Z",
 	})
 	req := httptest.NewRequest(http.MethodGet, "/api/books/"+bookID+"/reads", nil)
@@ -141,23 +143,14 @@ func TestReadAPIList(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		t.Fatal(err)
 	}
-	if len(raw) != 2 || raw[0]["id"] != "newer" || raw[1]["id"] != "older" {
+	if len(raw) != 2 || raw[0]["id"] != newerID || raw[1]["id"] != olderID {
 		t.Fatalf("expected newest reads first, got %#v", raw)
 	}
 	for _, item := range raw {
-		for _, field := range []string{"id", "started_at", "finished_at", "rating", "notes"} {
+		for _, field := range []string{"id", "book_id", "started_at", "finished_at", "rating", "notes", "created_at", "updated_at"} {
 			if _, exists := item[field]; !exists {
 				t.Fatalf("expected field %q in %#v", field, item)
 			}
-		}
-		if _, exists := item["book_id"]; exists {
-			t.Fatal("book_id must not be exposed by the scoped list endpoint")
-		}
-		if _, exists := item["created_at"]; exists {
-			t.Fatal("created_at must not be exposed")
-		}
-		if _, exists := item["updated_at"]; exists {
-			t.Fatal("updated_at must not be exposed")
 		}
 	}
 }

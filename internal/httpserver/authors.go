@@ -42,6 +42,10 @@ func writeCreateAuthorError(w http.ResponseWriter, err error) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if errors.Is(err, authors.ErrNameConflict) {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
 
 	http.Error(w, "failed to create author", http.StatusInternalServerError)
 }

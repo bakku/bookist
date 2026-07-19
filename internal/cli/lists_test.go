@@ -29,7 +29,7 @@ func TestListsListTableFormats(t *testing.T) {
 		format   string
 		expected string
 	}{
-		{name: "default TSV", expected: "id-1\tWant to Buy\nid-2\tNightstand\n"},
+		{name: "default pretty", expected: "ID    NAME\nid-1  Want to Buy\nid-2  Nightstand\n"},
 		{name: "explicit TSV", format: "tsv", expected: "id-1\tWant to Buy\nid-2\tNightstand\n"},
 		{name: "pretty", format: "pretty", expected: "ID    NAME\nid-1  Want to Buy\nid-2  Nightstand\n"},
 	}
@@ -135,7 +135,7 @@ func TestListsAddBookResolvesListByName(t *testing.T) {
 	defer server.Close()
 
 	var stdout, stderr strings.Builder
-	exitCode := cli.Run([]string{"lists", "add-book", "--list", "Want to Buy", "--book", "550e8400-e29b-41d4-a716-446655440000", "--server", server.URL}, &stdout, &stderr)
+	exitCode := cli.Run([]string{"lists", "add-book", "--list", "want TO buy", "--book", "550e8400-e29b-41d4-a716-446655440000", "--server", server.URL}, &stdout, &stderr)
 
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr.String())
@@ -190,7 +190,7 @@ func TestListsAddBookResolvesBookByTitle(t *testing.T) {
 	defer server.Close()
 
 	var stdout, stderr strings.Builder
-	exitCode := cli.Run([]string{"lists", "add-book", "--list", "Want to Buy", "--book", "Dune", "--server", server.URL}, &stdout, &stderr)
+	exitCode := cli.Run([]string{"lists", "add-book", "--list", "Want to Buy", "--book", "dUnE", "--server", server.URL}, &stdout, &stderr)
 
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr.String())

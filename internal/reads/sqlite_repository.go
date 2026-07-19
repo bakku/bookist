@@ -55,7 +55,7 @@ func (r *SQLiteRepository) ListByBookID(ctx context.Context, bookID string) ([]R
 		SELECT id, book_id, started_at, finished_at, rating, notes, created_at, updated_at
 		FROM reads
 		WHERE book_id = ?
-		ORDER BY finished_at DESC, started_at DESC, created_at DESC
+		ORDER BY updated_at DESC, id ASC
 	`, bookID)
 	if err != nil {
 		return nil, err

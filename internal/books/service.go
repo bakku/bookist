@@ -4,17 +4,26 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"bakku.dev/bookist/internal/authors"
+	"bakku.dev/bookist/internal/validation"
 )
 
 var ErrTitleRequired = errors.New("title is required")
+var ErrTitleConflict = errors.New("a book with this title already exists")
 var ErrAuthorNotFound = errors.New("author not found")
 var ErrInvalidFormat = errors.New("format must be one of: hardback, paperback, epub")
+var ErrInvalidPurchasedAt = errors.New("purchased_at must be a date in YYYY-MM-DD format")
+var ErrInvalidPages = errors.New("pages must be at least 1")
+var ErrInvalidPublishedYear = errors.New("published_year must be at least 1")
+var ErrInvalidPublishedMonth = errors.New("published_month must be between 1 and 12 and requires published_year")
+var ErrInvalidPublishedDay = errors.New("published_day must form a valid date and requires published_year and published_month")
 
 type Repository interface {
 	List(ctx context.Context) ([]Book, error)
 	ListByListID(ctx context.Context, listID string) ([]Book, error)
+	TitleExists(ctx context.Context, title string) (bool, error)
 	Create(ctx context.Context, input CreateBookRequest) (Book, error)
 }
 
@@ -95,6 +104,15 @@ func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, er
 		return Book{}, ErrTitleRequired
 	}
 
+	exists, err := s.repository.TitleExists(ctx, input.Title)
+	if err != nil {
+		return Book{}, err
+	}
+
+	if exists {
+		return Book{}, ErrTitleConflict
+	}
+
 	if input.ISBN != nil {
 		isbn := strings.TrimSpace(*input.ISBN)
 		if isbn == "" {
@@ -146,6 +164,10 @@ func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, er
 		if v == "" {
 			input.PurchasedAt = nil
 		} else {
+			if !validation.IsCalendarDate(v) {
+				return Book{}, ErrInvalidPurchasedAt
+			}
+
 			input.PurchasedAt = &v
 		}
 	}
@@ -159,20 +181,23 @@ func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, er
 		}
 	}
 
-	if input.Pages != nil && *input.Pages <= 0 {
-		input.Pages = nil
+	if input.Pages != nil && *input.Pages < 1 {
+		return Book{}, ErrInvalidPages
 	}
 
-	if input.PublishedYear != nil && *input.PublishedYear <= 0 {
-		input.PublishedYear = nil
+	if input.PublishedYear != nil && *input.PublishedYear < 1 {
+		return Book{}, ErrInvalidPublishedYear
 	}
 
-	if input.PublishedMonth != nil && *input.PublishedMonth <= 0 {
-		input.PublishedMonth = nil
+	if input.PublishedMonth != nil && (input.PublishedYear == nil || *input.PublishedMonth < 1 || *input.PublishedMonth > 12) {
+		return Book{}, ErrInvalidPublishedMonth
 	}
 
-	if input.PublishedDay != nil && *input.PublishedDay <= 0 {
-		input.PublishedDay = nil
+	if input.PublishedDay != nil {
+		if input.PublishedYear == nil || input.PublishedMonth == nil || *input.PublishedDay < 1 ||
+			*input.PublishedDay > time.Date(*input.PublishedYear, time.Month(*input.PublishedMonth)+1, 0, 0, 0, 0, 0, time.UTC).Day() {
+			return Book{}, ErrInvalidPublishedDay
+		}
 	}
 
 	seen := make(map[string]bool)

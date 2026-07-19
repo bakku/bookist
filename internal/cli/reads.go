@@ -54,7 +54,7 @@ func runReadsList(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
 	bookRef := flags.String("book", "", "Book title or ID")
-	formatValue := flags.String("format", string(outputFormatTSV), "Output format (tsv|pretty|json)")
+	formatValue := flags.String("format", string(outputFormatPretty), "Output format (tsv|pretty|json)")
 
 	help := commandHelp{
 		name:        "bookist reads list",
@@ -193,7 +193,7 @@ func runReadsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	return 0
 }
 
-func fetchReads(serverURL, bookID string) ([]reads.ListItem, error) {
+func fetchReads(serverURL, bookID string) ([]reads.Read, error) {
 	endpoint, err := joinURL(serverURL, "/api/books/"+bookID+"/reads")
 	if err != nil {
 		return nil, fmt.Errorf("invalid server URL: %v", err)
@@ -213,7 +213,7 @@ func fetchReads(serverURL, bookID string) ([]reads.ListItem, error) {
 		return nil, fmt.Errorf("fetch reads: server returned %s", resp.Status)
 	}
 
-	var listed []reads.ListItem
+	var listed []reads.Read
 	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
 		return nil, fmt.Errorf("decode reads: %v", err)
 	}

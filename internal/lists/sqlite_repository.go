@@ -34,14 +34,24 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateListRequest) 
 		RETURNING id, name, description, created_at, updated_at
 	`, uuid.NewString(), input.Name, description, createdAt, updatedAt)
 
-	return scanList(row)
+	list, err := scanList(row)
+	if err != nil && isUniqueViolation(err) {
+		return List{}, ErrNameConflict
+	}
+	return list, err
+}
+
+func (r *SQLiteRepository) NameExists(ctx context.Context, name string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM lists WHERE name = ? COLLATE NOCASE)`, name).Scan(&exists)
+	return exists, err
 }
 
 func (r *SQLiteRepository) List(ctx context.Context) ([]List, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, name, description, created_at, updated_at
 		FROM lists
-		ORDER BY name ASC
+		ORDER BY updated_at DESC, id ASC
 	`)
 	if err != nil {
 		return nil, err
@@ -87,10 +97,11 @@ func (r *SQLiteRepository) GetByID(ctx context.Context, id string) (List, error)
 }
 
 func (r *SQLiteRepository) AddBookToList(ctx context.Context, listID, bookID string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO book_lists (list_id, book_id)
-		VALUES (?, ?)
-	`, listID, bookID)
+		INSERT INTO book_lists (id, list_id, book_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+	`, uuid.NewString(), listID, bookID, now, now)
 
 	if err != nil {
 		if isFKViolation(err) {

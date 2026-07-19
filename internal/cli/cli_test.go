@@ -12,7 +12,7 @@ import (
 // ── Help Display ──────────────────────────────────────────────────────────────
 
 func TestRootHelpShowsOnlyTopLevelCommands(t *testing.T) {
-	for _, args := range [][]string{{"--help"}, {"-h"}, {"help"}, {"h"}} {
+	for _, args := range [][]string{{}, {"--help"}, {"-h"}, {"help"}, {"h"}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			exitCode, stdout, stderr := runCLI(args)
 
@@ -111,12 +111,12 @@ func TestLeafHelpShowsCommandOptionsAndExitsSuccessfully(t *testing.T) {
 	}{
 		{name: "serve", args: []string{"serve", "--help"}, expected: []string{"bookist serve - Start the Bookist server", "--addr string", "--db string"}},
 		{name: "migrate", args: []string{"migrate", "--help"}, expected: []string{"bookist migrate - Run database migrations", "--db string"}},
-		{name: "books list", args: []string{"books", "list", "--help"}, expected: []string{"bookist books list - List books", "--format string", "Output format (tsv|pretty|json) (default: tsv)", "--server string"}},
+		{name: "books list", args: []string{"books", "list", "--help"}, expected: []string{"bookist books list - List books", "--format string", "Output format (tsv|pretty|json) (default: pretty)", "--server string"}},
 		{name: "books add", args: []string{"books", "add", "-h"}, expected: []string{"bookist books add - Add a book", "--author string", "--title string"}},
 		{name: "books add long single dash", args: []string{"books", "add", "-help"}, expected: []string{"bookist books add - Add a book", "--author string", "--title string"}},
-		{name: "authors list", args: []string{"authors", "list", "--help"}, expected: []string{"bookist authors list - List authors", "--format string", "Output format (tsv|pretty|json) (default: tsv)", "--server string"}},
+		{name: "authors list", args: []string{"authors", "list", "--help"}, expected: []string{"bookist authors list - List authors", "--format string", "Output format (tsv|pretty|json) (default: pretty)", "--server string"}},
 		{name: "authors add", args: []string{"authors", "add", "--help"}, expected: []string{"bookist authors add - Add an author", "--name string"}},
-		{name: "lists list", args: []string{"lists", "list", "--help"}, expected: []string{"bookist lists list - List book lists", "--format string", "Output format (tsv|pretty|json) (default: tsv)", "--server string"}},
+		{name: "lists list", args: []string{"lists", "list", "--help"}, expected: []string{"bookist lists list - List book lists", "--format string", "Output format (tsv|pretty|json) (default: pretty)", "--server string"}},
 		{name: "lists add-book", args: []string{"lists", "add-book", "--help"}, expected: []string{"bookist lists add-book - Add a book to a list", "--book string", "--list string"}},
 		{name: "reads list", args: []string{"reads", "list", "--help"}, expected: []string{"bookist reads list - List reads for a book", "--book string", "--format string"}},
 		{name: "reads add", args: []string{"reads", "add", "--help"}, expected: []string{"bookist reads add - Record a read for a book", "--book string", "--rating float"}},

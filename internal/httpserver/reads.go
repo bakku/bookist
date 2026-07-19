@@ -20,18 +20,7 @@ func (s *Server) handleAPIListReads(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := make([]reads.ListItem, len(result))
-	for i, read := range result {
-		items[i] = reads.ListItem{
-			ID:         read.ID,
-			StartedAt:  read.StartedAt,
-			FinishedAt: read.FinishedAt,
-			Rating:     read.Rating,
-			Notes:      read.Notes,
-		}
-	}
-
-	writeJSON(w, http.StatusOK, items)
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) handleAPICreateRead(w http.ResponseWriter, r *http.Request) {

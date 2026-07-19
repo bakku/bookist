@@ -22,9 +22,12 @@ Bookist is intended to be a Go application for managing a home library.
 - Prefer the Go standard library first: `net/http`, `http.ServeMux`, `html/template`, `embed`, `database/sql`, and `encoding/json`.
 - Do not add a web framework yet. Consider `chi` only if route groups, middleware, nested resources, auth, or larger API structure make the standard mux awkward.
 - Use SQLite for persistence with the pure-Go `modernc.org/sqlite` driver.
-- Use `github.com/pressly/goose/v3` for embedded SQL migrations. The binary should be able to run migrations itself.
+- Use `github.com/pressly/goose/v3` for embedded SQL migrations. Serving runs migrations automatically at startup.
 - Keep Pico.css vendored as an embedded static asset rather than loading it from a CDN.
-- The first book model uses integer IDs, title, nullable ISBN, and timestamps. ISBN should remain nullable in Go and SQLite.
+- Every table, including relationship tables, uses a UUID `TEXT` primary key plus `created_at` and `updated_at` timestamps. ISBN remains nullable in Go and SQLite.
+- Collections default to `updated_at DESC, id ASC`; relationship-backed collections use the relationship row's timestamps and ID.
+- Enforce durable invariants in both services and SQLite constraints.
+- Rewriting the initial migration is acceptable while the schema is pre-release and disposable; once compatibility matters, migrations are append-only.
 
 ## API, Web, And CLI Direction
 

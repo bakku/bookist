@@ -60,7 +60,7 @@ func runListsList(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("lists list", flag.ContinueOnError)
 
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
-	formatValue := flags.String("format", string(outputFormatTSV), "Output format (tsv|pretty|json)")
+	formatValue := flags.String("format", string(outputFormatPretty), "Output format (tsv|pretty|json)")
 
 	help := commandHelp{
 		name:        "bookist lists list",
@@ -233,7 +233,7 @@ func resolveListID(serverURL, value string) (string, error) {
 	value = strings.TrimSpace(value)
 
 	parsed, err := uuid.Parse(value)
-	if err == nil {
+	if err == nil && parsed.String() == strings.ToLower(value) {
 		return parsed.String(), nil
 	}
 
@@ -244,12 +244,12 @@ func resolveListID(serverURL, value string) (string, error) {
 
 	byName := make(map[string]string)
 	for _, l := range existing {
-		if _, exists := byName[l.Name]; !exists {
-			byName[l.Name] = l.ID
+		if _, exists := byName[strings.ToLower(l.Name)]; !exists {
+			byName[strings.ToLower(l.Name)] = l.ID
 		}
 	}
 
-	if id, ok := byName[value]; ok {
+	if id, ok := byName[strings.ToLower(value)]; ok {
 		return id, nil
 	}
 
@@ -260,7 +260,7 @@ func resolveBookID(serverURL, value string) (string, error) {
 	value = strings.TrimSpace(value)
 
 	parsed, err := uuid.Parse(value)
-	if err == nil {
+	if err == nil && parsed.String() == strings.ToLower(value) {
 		return parsed.String(), nil
 	}
 
@@ -271,12 +271,12 @@ func resolveBookID(serverURL, value string) (string, error) {
 
 	byTitle := make(map[string]string)
 	for _, b := range existing {
-		if _, exists := byTitle[b.Title]; !exists {
-			byTitle[b.Title] = b.ID
+		if _, exists := byTitle[strings.ToLower(b.Title)]; !exists {
+			byTitle[strings.ToLower(b.Title)] = b.ID
 		}
 	}
 
-	if id, ok := byTitle[value]; ok {
+	if id, ok := byTitle[strings.ToLower(value)]; ok {
 		return id, nil
 	}
 

@@ -81,6 +81,18 @@ func TestListAPICreateWithDescription(t *testing.T) {
 	}
 }
 
+func TestListAPICreateReturnsConflictForDuplicateName(t *testing.T) {
+	app := newTestApp(t)
+	testsupport.InsertListRow(t, app.db, "Nightstand")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/lists", bytes.NewBufferString(`{"name":"NIGHTSTAND"}`))
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusConflict {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusConflict, resp.Code, resp.Body.String())
+	}
+}
+
 // ── List ──────────────────────────────────────────────────────────────────────
 
 func TestListAPIList(t *testing.T) {
@@ -199,6 +211,9 @@ func TestListAPIListBooks(t *testing.T) {
 
 	testsupport.InsertBookListRow(t, app.db, listID, bookID1)
 	testsupport.InsertBookListRow(t, app.db, listID, bookID2)
+	if _, err := app.db.Exec(`UPDATE book_lists SET updated_at = '2026-01-03T00:00:00Z' WHERE book_id = ?`, bookID1); err != nil {
+		t.Fatal(err)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/lists/"+listID+"/books", nil)
 	resp := httptest.NewRecorder()

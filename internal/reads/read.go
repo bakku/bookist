@@ -9,19 +9,11 @@ type Read struct {
 	FinishedAt *string   `json:"finished_at"`
 	Rating     *float64  `json:"rating"`
 	Notes      *string   `json:"notes"`
-	CreatedAt  time.Time `json:"-"`
-	UpdatedAt  time.Time `json:"-"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 type CreateReadRequest struct {
-	StartedAt  *string  `json:"started_at"`
-	FinishedAt *string  `json:"finished_at"`
-	Rating     *float64 `json:"rating"`
-	Notes      *string  `json:"notes"`
-}
-
-type ListItem struct {
-	ID         string   `json:"id"`
 	StartedAt  *string  `json:"started_at"`
 	FinishedAt *string  `json:"finished_at"`
 	Rating     *float64 `json:"rating"`

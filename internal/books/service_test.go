@@ -242,26 +242,50 @@ func TestServiceCreateConvertsBlankStringFieldsToNull(t *testing.T) {
 	})
 }
 
-func TestServiceCreateConvertsZeroIntFieldsToNull(t *testing.T) {
+func TestServiceCreateRejectsInvalidNumericFields(t *testing.T) {
 	service, db := testsupport.NewBookService(t)
 
-	zero := 0
-	neg := -1
+	for _, test := range []struct {
+		name  string
+		input books.CreateBookRequest
+		want  error
+	}{
+		{name: "pages", input: books.CreateBookRequest{Title: "Bad Pages", Pages: new(0)}, want: books.ErrInvalidPages},
+		{name: "year", input: books.CreateBookRequest{Title: "Bad Year", PublishedYear: new(0)}, want: books.ErrInvalidPublishedYear},
+		{name: "month without year", input: books.CreateBookRequest{Title: "Bad Month", PublishedMonth: new(1)}, want: books.ErrInvalidPublishedMonth},
+		{name: "invalid month", input: books.CreateBookRequest{Title: "Bad Month", PublishedYear: new(2024), PublishedMonth: new(13)}, want: books.ErrInvalidPublishedMonth},
+		{name: "day without month", input: books.CreateBookRequest{Title: "Bad Day", PublishedYear: new(2024), PublishedDay: new(1)}, want: books.ErrInvalidPublishedDay},
+		{name: "invalid calendar day", input: books.CreateBookRequest{Title: "Bad Day", PublishedYear: new(2023), PublishedMonth: new(2), PublishedDay: new(29)}, want: books.ErrInvalidPublishedDay},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := service.Create(context.Background(), test.input)
+			if !errors.Is(err, test.want) {
+				t.Fatalf("expected %v, got %v", test.want, err)
+			}
+		})
+	}
+	testsupport.AssertBookCount(t, db, 0)
+}
 
-	created, err := service.Create(context.Background(), books.CreateBookRequest{
-		Title:          "Zero Ints",
-		Pages:          &zero,
-		PublishedYear:  &zero,
-		PublishedMonth: &neg,
-		PublishedDay:   &zero,
-	})
-	if err != nil {
+func TestServiceCreateRejectsInvalidPurchasedAt(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+	_, err := service.Create(context.Background(), books.CreateBookRequest{Title: "Bad Date", PurchasedAt: new("2025-02-29")})
+	if !errors.Is(err, books.ErrInvalidPurchasedAt) {
+		t.Fatalf("expected ErrInvalidPurchasedAt, got %v", err)
+	}
+	testsupport.AssertBookCount(t, db, 0)
+}
+
+func TestServiceCreateRejectsCaseInsensitiveDuplicate(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+
+	if _, err := service.Create(context.Background(), books.CreateBookRequest{Title: "Dune"}); err != nil {
 		t.Fatal(err)
 	}
-
-	testsupport.AssertBookRowFields(t, db, created.ID, testsupport.BookRowAssertion{
-		Title: "Zero Ints",
-	})
+	if _, err := service.Create(context.Background(), books.CreateBookRequest{Title: "dUnE"}); !errors.Is(err, books.ErrTitleConflict) {
+		t.Fatalf("expected ErrTitleConflict, got %v", err)
+	}
+	testsupport.AssertBookCount(t, db, 1)
 }
 
 // ── List ──────────────────────────────────────────────────────────────────────
