@@ -27,6 +27,12 @@ CREATE TABLE books (
     ),
     pages INTEGER NULL CHECK (pages IS NULL OR (typeof(pages) = 'integer' AND pages >= 1)),
     notes TEXT NULL,
+    summary TEXT NULL,
+    series_name TEXT NULL,
+    series_position REAL NULL CHECK (series_position IS NULL OR (typeof(series_position) IN ('integer', 'real') AND series_position > 0)),
+    location TEXT NULL,
+    condition TEXT NULL CHECK (condition IS NULL OR condition IN ('new', 'very_good', 'good', 'acceptable', 'poor')),
+    acquisition_source TEXT NULL,
     published_year INTEGER NULL CHECK (published_year IS NULL OR (typeof(published_year) = 'integer' AND published_year >= 1)),
     published_month INTEGER NULL CHECK (
         published_month IS NULL OR (typeof(published_month) = 'integer' AND published_year IS NOT NULL AND published_month BETWEEN 1 AND 12)

@@ -43,6 +43,8 @@ func writeCreateBookError(w http.ResponseWriter, err error) {
 		errors.Is(err, books.ErrInvalidFormat) ||
 		errors.Is(err, books.ErrInvalidPurchasedAt) ||
 		errors.Is(err, books.ErrInvalidPages) ||
+		errors.Is(err, books.ErrInvalidCondition) ||
+		errors.Is(err, books.ErrInvalidSeriesPosition) ||
 		errors.Is(err, books.ErrInvalidPublishedYear) ||
 		errors.Is(err, books.ErrInvalidPublishedMonth) ||
 		errors.Is(err, books.ErrInvalidPublishedDay) {

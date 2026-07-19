@@ -23,23 +23,35 @@ func TestSQLiteRepositoryCreatePersistsAllFields(t *testing.T) {
 	purchased := "2025-06-15"
 	pages := 400
 	notes := "Great book"
+	summary := "A practical Go guide"
+	seriesName := "Programming Languages"
+	seriesPosition := 1.5
+	location := "Office shelf"
+	condition := books.ConditionVeryGood
+	acquisitionSource := "Local bookstore"
 	year := 2024
 	month := 6
 	day := 15
 
 	created, err := repository.Create(ctx, books.CreateBookRequest{
-		Title:          "The Go Programming Language",
-		ISBN:           &isbn,
-		Language:       &lang,
-		Publisher:      &pub,
-		Edition:        &ed,
-		Format:         &format,
-		PurchasedAt:    &purchased,
-		Pages:          &pages,
-		Notes:          &notes,
-		PublishedYear:  &year,
-		PublishedMonth: &month,
-		PublishedDay:   &day,
+		Title:             "The Go Programming Language",
+		ISBN:              &isbn,
+		Language:          &lang,
+		Publisher:         &pub,
+		Edition:           &ed,
+		Format:            &format,
+		PurchasedAt:       &purchased,
+		Pages:             &pages,
+		Notes:             &notes,
+		Summary:           &summary,
+		SeriesName:        &seriesName,
+		SeriesPosition:    &seriesPosition,
+		Location:          &location,
+		Condition:         &condition,
+		AcquisitionSource: &acquisitionSource,
+		PublishedYear:     &year,
+		PublishedMonth:    &month,
+		PublishedDay:      &day,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -50,19 +62,26 @@ func TestSQLiteRepositoryCreatePersistsAllFields(t *testing.T) {
 	}
 
 	f := string(format)
+	c := string(condition)
 	testsupport.AssertBookRowFields(t, db, created.ID, testsupport.BookRowAssertion{
-		Title:          "The Go Programming Language",
-		ISBN:           &isbn,
-		Language:       &lang,
-		Publisher:      &pub,
-		Edition:        &ed,
-		Format:         &f,
-		PurchasedAt:    &purchased,
-		Pages:          &pages,
-		Notes:          &notes,
-		PublishedYear:  &year,
-		PublishedMonth: &month,
-		PublishedDay:   &day,
+		Title:             "The Go Programming Language",
+		ISBN:              &isbn,
+		Language:          &lang,
+		Publisher:         &pub,
+		Edition:           &ed,
+		Format:            &f,
+		PurchasedAt:       &purchased,
+		Pages:             &pages,
+		Notes:             &notes,
+		Summary:           &summary,
+		SeriesName:        &seriesName,
+		SeriesPosition:    &seriesPosition,
+		Location:          &location,
+		Condition:         &c,
+		AcquisitionSource: &acquisitionSource,
+		PublishedYear:     &year,
+		PublishedMonth:    &month,
+		PublishedDay:      &day,
 	})
 }
 
@@ -129,23 +148,35 @@ func TestSQLiteRepositoryListReadsPersistedBooks(t *testing.T) {
 	purchased := "2025-06-15"
 	pages := 400
 	notes := "Great book"
+	summary := "A practical Go guide"
+	seriesName := "Programming Languages"
+	seriesPosition := 1.5
+	location := "Office shelf"
+	condition := books.ConditionVeryGood
+	acquisitionSource := "Local bookstore"
 	year := 2024
 	month := 6
 	day := 15
 
 	created, err := repository.Create(ctx, books.CreateBookRequest{
-		Title:          "The Go Programming Language",
-		ISBN:           &isbn,
-		Language:       &lang,
-		Publisher:      &pub,
-		Edition:        &ed,
-		Format:         &format,
-		PurchasedAt:    &purchased,
-		Pages:          &pages,
-		Notes:          &notes,
-		PublishedYear:  &year,
-		PublishedMonth: &month,
-		PublishedDay:   &day,
+		Title:             "The Go Programming Language",
+		ISBN:              &isbn,
+		Language:          &lang,
+		Publisher:         &pub,
+		Edition:           &ed,
+		Format:            &format,
+		PurchasedAt:       &purchased,
+		Pages:             &pages,
+		Notes:             &notes,
+		Summary:           &summary,
+		SeriesName:        &seriesName,
+		SeriesPosition:    &seriesPosition,
+		Location:          &location,
+		Condition:         &condition,
+		AcquisitionSource: &acquisitionSource,
+		PublishedYear:     &year,
+		PublishedMonth:    &month,
+		PublishedDay:      &day,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -201,6 +232,30 @@ func TestSQLiteRepositoryListReadsPersistedBooks(t *testing.T) {
 		t.Fatalf("expected Notes %q, got %#v", notes, got.Notes)
 	}
 
+	if got.Summary == nil || *got.Summary != summary {
+		t.Fatalf("expected Summary %q, got %#v", summary, got.Summary)
+	}
+
+	if got.SeriesName == nil || *got.SeriesName != seriesName {
+		t.Fatalf("expected SeriesName %q, got %#v", seriesName, got.SeriesName)
+	}
+
+	if got.SeriesPosition == nil || *got.SeriesPosition != seriesPosition {
+		t.Fatalf("expected SeriesPosition %v, got %#v", seriesPosition, got.SeriesPosition)
+	}
+
+	if got.Location == nil || *got.Location != location {
+		t.Fatalf("expected Location %q, got %#v", location, got.Location)
+	}
+
+	if got.Condition == nil || *got.Condition != condition {
+		t.Fatalf("expected Condition %q, got %#v", condition, got.Condition)
+	}
+
+	if got.AcquisitionSource == nil || *got.AcquisitionSource != acquisitionSource {
+		t.Fatalf("expected AcquisitionSource %q, got %#v", acquisitionSource, got.AcquisitionSource)
+	}
+
 	if got.PublishedYear == nil || *got.PublishedYear != year {
 		t.Fatalf("expected PublishedYear %d, got %#v", year, got.PublishedYear)
 	}
@@ -226,6 +281,9 @@ func TestSQLiteRepositoryListByListIDReturnsBooksInList(t *testing.T) {
 	bookID2 := testsupport.InsertBookRow(t, db, "Foundation", nil)
 	testsupport.InsertBookListRow(t, db, listID, bookID1)
 	testsupport.InsertBookListRow(t, db, listID, bookID2)
+	if _, err := db.Exec(`UPDATE books SET summary = 'Desert epic', series_position = 1.5 WHERE id = ?`, bookID1); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := db.Exec(`UPDATE book_lists SET updated_at = '2026-01-03T00:00:00Z' WHERE book_id = ?`, bookID1); err != nil {
 		t.Fatal(err)
 	}
@@ -239,6 +297,10 @@ func TestSQLiteRepositoryListByListIDReturnsBooksInList(t *testing.T) {
 	}
 	if bookList[0].Title != "Dune" {
 		t.Fatalf("expected Dune, got %q", bookList[0].Title)
+	}
+	if bookList[0].Summary == nil || *bookList[0].Summary != "Desert epic" ||
+		bookList[0].SeriesPosition == nil || *bookList[0].SeriesPosition != 1.5 {
+		t.Fatalf("expected extended metadata for Dune, got %#v", bookList[0])
 	}
 	if bookList[1].Title != "Foundation" {
 		t.Fatalf("expected Foundation, got %q", bookList[1].Title)

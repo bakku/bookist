@@ -3,6 +3,7 @@ package books_test
 import (
 	"context"
 	"errors"
+	"math"
 	"testing"
 
 	"bakku.dev/bookist/internal/books"
@@ -59,23 +60,35 @@ func TestServiceCreateTrimsAndPersistsInput(t *testing.T) {
 	purchased := " 2025-06-15 "
 	pages := 400
 	notes := " Great "
+	summary := " A practical Go guide "
+	seriesName := " Programming Languages "
+	seriesPosition := 1.5
+	location := " Office shelf "
+	condition := books.Condition(" very_good ")
+	acquisitionSource := " Local bookstore "
 	year := 2024
 	month := 6
 	day := 15
 
 	created, err := service.Create(context.Background(), books.CreateBookRequest{
-		Title:          " The Go Programming Language ",
-		ISBN:           &isbn,
-		Language:       &lang,
-		Publisher:      &pub,
-		Edition:        &ed,
-		Format:         &format,
-		PurchasedAt:    &purchased,
-		Pages:          &pages,
-		Notes:          &notes,
-		PublishedYear:  &year,
-		PublishedMonth: &month,
-		PublishedDay:   &day,
+		Title:             " The Go Programming Language ",
+		ISBN:              &isbn,
+		Language:          &lang,
+		Publisher:         &pub,
+		Edition:           &ed,
+		Format:            &format,
+		PurchasedAt:       &purchased,
+		Pages:             &pages,
+		Notes:             &notes,
+		Summary:           &summary,
+		SeriesName:        &seriesName,
+		SeriesPosition:    &seriesPosition,
+		Location:          &location,
+		Condition:         &condition,
+		AcquisitionSource: &acquisitionSource,
+		PublishedYear:     &year,
+		PublishedMonth:    &month,
+		PublishedDay:      &day,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -117,6 +130,30 @@ func TestServiceCreateTrimsAndPersistsInput(t *testing.T) {
 		t.Fatalf("expected trimmed Notes 'Great', got %#v", created.Notes)
 	}
 
+	if created.Summary == nil || *created.Summary != "A practical Go guide" {
+		t.Fatalf("expected trimmed Summary, got %#v", created.Summary)
+	}
+
+	if created.SeriesName == nil || *created.SeriesName != "Programming Languages" {
+		t.Fatalf("expected trimmed SeriesName, got %#v", created.SeriesName)
+	}
+
+	if created.SeriesPosition == nil || *created.SeriesPosition != 1.5 {
+		t.Fatalf("expected fractional SeriesPosition, got %#v", created.SeriesPosition)
+	}
+
+	if created.Location == nil || *created.Location != "Office shelf" {
+		t.Fatalf("expected trimmed Location, got %#v", created.Location)
+	}
+
+	if created.Condition == nil || *created.Condition != books.ConditionVeryGood {
+		t.Fatalf("expected trimmed Condition very_good, got %#v", created.Condition)
+	}
+
+	if created.AcquisitionSource == nil || *created.AcquisitionSource != "Local bookstore" {
+		t.Fatalf("expected trimmed AcquisitionSource, got %#v", created.AcquisitionSource)
+	}
+
 	if created.PublishedYear == nil || *created.PublishedYear != 2024 {
 		t.Fatalf("expected PublishedYear 2024, got %#v", created.PublishedYear)
 	}
@@ -130,19 +167,26 @@ func TestServiceCreateTrimsAndPersistsInput(t *testing.T) {
 	}
 
 	f := string(books.FormatPaperback)
+	c := string(books.ConditionVeryGood)
 	testsupport.AssertBookRowFields(t, db, created.ID, testsupport.BookRowAssertion{
-		Title:          "The Go Programming Language",
-		ISBN:           new("9783161484100"),
-		Language:       new("EN"),
-		Publisher:      new("O'Reilly"),
-		Edition:        new("2nd"),
-		Format:         &f,
-		PurchasedAt:    new("2025-06-15"),
-		Pages:          new(400),
-		Notes:          new("Great"),
-		PublishedYear:  new(2024),
-		PublishedMonth: new(6),
-		PublishedDay:   new(15),
+		Title:             "The Go Programming Language",
+		ISBN:              new("9783161484100"),
+		Language:          new("EN"),
+		Publisher:         new("O'Reilly"),
+		Edition:           new("2nd"),
+		Format:            &f,
+		PurchasedAt:       new("2025-06-15"),
+		Pages:             new(400),
+		Notes:             new("Great"),
+		Summary:           new("A practical Go guide"),
+		SeriesName:        new("Programming Languages"),
+		SeriesPosition:    new(1.5),
+		Location:          new("Office shelf"),
+		Condition:         &c,
+		AcquisitionSource: new("Local bookstore"),
+		PublishedYear:     new(2024),
+		PublishedMonth:    new(6),
+		PublishedDay:      new(15),
 	})
 }
 
@@ -223,15 +267,23 @@ func TestServiceCreateConvertsBlankStringFieldsToNull(t *testing.T) {
 	pub := " "
 	ed := " "
 	notes := " "
+	summary := " "
+	seriesName := " "
+	location := " "
+	acquisitionSource := " "
 	purchased := " "
 
 	created, err := service.Create(context.Background(), books.CreateBookRequest{
-		Title:       "Blank Fields",
-		Language:    &lang,
-		Publisher:   &pub,
-		Edition:     &ed,
-		Notes:       &notes,
-		PurchasedAt: &purchased,
+		Title:             "Blank Fields",
+		Language:          &lang,
+		Publisher:         &pub,
+		Edition:           &ed,
+		Notes:             &notes,
+		Summary:           &summary,
+		SeriesName:        &seriesName,
+		Location:          &location,
+		AcquisitionSource: &acquisitionSource,
+		PurchasedAt:       &purchased,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -240,6 +292,45 @@ func TestServiceCreateConvertsBlankStringFieldsToNull(t *testing.T) {
 	testsupport.AssertBookRowFields(t, db, created.ID, testsupport.BookRowAssertion{
 		Title: "Blank Fields",
 	})
+}
+
+func TestServiceCreateRejectsInvalidCondition(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+
+	for _, condition := range []books.Condition{"", " ", "like_new"} {
+		_, err := service.Create(context.Background(), books.CreateBookRequest{
+			Title:     "Bad Condition " + string(condition),
+			Condition: &condition,
+		})
+		if !errors.Is(err, books.ErrInvalidCondition) {
+			t.Fatalf("expected ErrInvalidCondition for %q, got %v", condition, err)
+		}
+	}
+	testsupport.AssertBookCount(t, db, 0)
+}
+
+func TestServiceCreateAcceptsValidConditions(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+
+	for _, condition := range []books.Condition{
+		books.ConditionNew,
+		books.ConditionVeryGood,
+		books.ConditionGood,
+		books.ConditionAcceptable,
+		books.ConditionPoor,
+	} {
+		created, err := service.Create(context.Background(), books.CreateBookRequest{
+			Title:     "Condition " + string(condition),
+			Condition: &condition,
+		})
+		if err != nil {
+			t.Fatalf("expected condition %q to be accepted: %v", condition, err)
+		}
+		if created.Condition == nil || *created.Condition != condition {
+			t.Fatalf("expected condition %q, got %#v", condition, created.Condition)
+		}
+	}
+	testsupport.AssertBookCount(t, db, 5)
 }
 
 func TestServiceCreateRejectsInvalidNumericFields(t *testing.T) {
@@ -251,6 +342,9 @@ func TestServiceCreateRejectsInvalidNumericFields(t *testing.T) {
 		want  error
 	}{
 		{name: "pages", input: books.CreateBookRequest{Title: "Bad Pages", Pages: new(0)}, want: books.ErrInvalidPages},
+		{name: "zero series position", input: books.CreateBookRequest{Title: "Bad Position", SeriesPosition: new(0.0)}, want: books.ErrInvalidSeriesPosition},
+		{name: "negative series position", input: books.CreateBookRequest{Title: "Bad Position", SeriesPosition: new(-1.5)}, want: books.ErrInvalidSeriesPosition},
+		{name: "non-finite series position", input: books.CreateBookRequest{Title: "Bad Position", SeriesPosition: new(math.Inf(1))}, want: books.ErrInvalidSeriesPosition},
 		{name: "year", input: books.CreateBookRequest{Title: "Bad Year", PublishedYear: new(0)}, want: books.ErrInvalidPublishedYear},
 		{name: "month without year", input: books.CreateBookRequest{Title: "Bad Month", PublishedMonth: new(1)}, want: books.ErrInvalidPublishedMonth},
 		{name: "invalid month", input: books.CreateBookRequest{Title: "Bad Month", PublishedYear: new(2024), PublishedMonth: new(13)}, want: books.ErrInvalidPublishedMonth},

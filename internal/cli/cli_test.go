@@ -112,7 +112,7 @@ func TestLeafHelpShowsCommandOptionsAndExitsSuccessfully(t *testing.T) {
 		{name: "serve", args: []string{"serve", "--help"}, expected: []string{"bookist serve - Start the Bookist server", "--addr string", "--db string"}},
 		{name: "migrate", args: []string{"migrate", "--help"}, expected: []string{"bookist migrate - Run database migrations", "--db string"}},
 		{name: "books list", args: []string{"books", "list", "--help"}, expected: []string{"bookist books list - List books", "--format string", "Output format (tsv|pretty|json) (default: pretty)", "--server string"}},
-		{name: "books add", args: []string{"books", "add", "-h"}, expected: []string{"bookist books add - Add a book", "--author string", "--title string"}},
+		{name: "books add", args: []string{"books", "add", "-h"}, expected: []string{"bookist books add - Add a book", "--author string", "--title string", "--condition string", "--series-position float"}},
 		{name: "books add long single dash", args: []string{"books", "add", "-help"}, expected: []string{"bookist books add - Add a book", "--author string", "--title string"}},
 		{name: "authors list", args: []string{"authors", "list", "--help"}, expected: []string{"bookist authors list - List authors", "--format string", "Output format (tsv|pretty|json) (default: pretty)", "--server string"}},
 		{name: "authors add", args: []string{"authors", "add", "--help"}, expected: []string{"bookist authors add - Add an author", "--name string"}},

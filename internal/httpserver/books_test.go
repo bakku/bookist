@@ -28,6 +28,12 @@ func TestBookAPICreate(t *testing.T) {
 		"purchased_at":"2025-06-15",
 		"pages":412,
 		"notes":"Classic",
+		"summary":"A desert epic",
+		"series_name":"Dune",
+		"series_position":1.5,
+		"location":"Living room",
+		"condition":"very_good",
+		"acquisition_source":"Bookshop",
 		"published_year":1965,
 		"published_month":8,
 		"published_day":1}`)
@@ -66,24 +72,36 @@ func TestBookAPICreate(t *testing.T) {
 	purchasedAt := "2025-06-15"
 	pages := 412
 	notes := "Classic"
+	summary := "A desert epic"
+	seriesName := "Dune"
+	seriesPosition := 1.5
+	location := "Living room"
+	condition := "very_good"
+	acquisitionSource := "Bookshop"
 	publishedYear := 1965
 	publishedMonth := 8
 	publishedDay := 1
 
 	testsupport.AssertBookCount(t, app.db, 1)
 	testsupport.AssertBookRowFields(t, app.db, created.ID, testsupport.BookRowAssertion{
-		Title:          "Dune",
-		ISBN:           &isbn,
-		Language:       &language,
-		Publisher:      &publisher,
-		Edition:        &edition,
-		Format:         &format,
-		PurchasedAt:    &purchasedAt,
-		Pages:          &pages,
-		Notes:          &notes,
-		PublishedYear:  &publishedYear,
-		PublishedMonth: &publishedMonth,
-		PublishedDay:   &publishedDay,
+		Title:             "Dune",
+		ISBN:              &isbn,
+		Language:          &language,
+		Publisher:         &publisher,
+		Edition:           &edition,
+		Format:            &format,
+		PurchasedAt:       &purchasedAt,
+		Pages:             &pages,
+		Notes:             &notes,
+		Summary:           &summary,
+		SeriesName:        &seriesName,
+		SeriesPosition:    &seriesPosition,
+		Location:          &location,
+		Condition:         &condition,
+		AcquisitionSource: &acquisitionSource,
+		PublishedYear:     &publishedYear,
+		PublishedMonth:    &publishedMonth,
+		PublishedDay:      &publishedDay,
 	})
 }
 
@@ -168,6 +186,33 @@ func TestBookAPICreateRejectsInvalidFormat(t *testing.T) {
 	testsupport.AssertBookCount(t, app.db, 0)
 }
 
+func TestBookAPICreateNormalizesBlankExtendedTextToNull(t *testing.T) {
+	app := newTestApp(t)
+	body := bytes.NewBufferString(`{
+		"title":"Minimal",
+		"summary":" ",
+		"series_name":" ",
+		"location":" ",
+		"acquisition_source":" "}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/books", body)
+	resp := httptest.NewRecorder()
+
+	app.handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, resp.Code, resp.Body.String())
+	}
+
+	var created books.Book
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Summary != nil || created.SeriesName != nil || created.SeriesPosition != nil ||
+		created.Location != nil || created.Condition != nil || created.AcquisitionSource != nil {
+		t.Fatalf("expected nullable extended metadata, got %#v", created)
+	}
+	testsupport.AssertBookRowFields(t, app.db, created.ID, testsupport.BookRowAssertion{Title: "Minimal"})
+}
+
 func TestBookAPICreateReturnsConflictForDuplicateTitle(t *testing.T) {
 	app := newTestApp(t)
 	testsupport.InsertBookRow(t, app.db, "Dune", nil)
@@ -184,6 +229,9 @@ func TestBookAPICreateRejectsInvalidDatesAndNumbers(t *testing.T) {
 	for _, body := range []string{
 		`{"title":"Bad Purchase","purchased_at":"2025-02-29"}`,
 		`{"title":"Bad Pages","pages":0}`,
+		`{"title":"Bad Position","series_position":0}`,
+		`{"title":"Bad Condition","condition":"like_new"}`,
+		`{"title":"Blank Condition","condition":" "}`,
 		`{"title":"Bad Month","published_month":1}`,
 		`{"title":"Bad Day","published_year":2023,"published_month":2,"published_day":29}`,
 	} {
@@ -208,11 +256,13 @@ func TestBookAPIList(t *testing.T) {
 	id := uuid.NewString()
 	_, err := app.db.ExecContext(context.Background(), `
 		INSERT INTO books (id, title, isbn, language, publisher, edition, format,
-		                   purchased_at, pages, notes, published_year, published_month,
-		                   published_day, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		                   purchased_at, pages, notes, summary, series_name,
+		                   series_position, location, condition, acquisition_source,
+		                   published_year, published_month, published_day, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id, "Dune", "9780441172719", "en", "Chilton", "1st", "paperback", "2025-06-15",
-		412, "Classic", 1965, 8, 1, now, now)
+		412, "Classic", "A desert epic", "Dune", 1.5, "Living room", "very_good", "Bookshop",
+		1965, 8, 1, now, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,6 +314,21 @@ func TestBookAPIList(t *testing.T) {
 	}
 	if got.Notes == nil || *got.Notes != "Classic" {
 		t.Fatalf("expected notes 'Classic', got %#v", got.Notes)
+	}
+	if got.Summary == nil || *got.Summary != "A desert epic" {
+		t.Fatalf("expected summary, got %#v", got.Summary)
+	}
+	if got.SeriesName == nil || *got.SeriesName != "Dune" || got.SeriesPosition == nil || *got.SeriesPosition != 1.5 {
+		t.Fatalf("expected series metadata, got %#v", got)
+	}
+	if got.Location == nil || *got.Location != "Living room" {
+		t.Fatalf("expected location, got %#v", got.Location)
+	}
+	if got.Condition == nil || *got.Condition != books.ConditionVeryGood {
+		t.Fatalf("expected condition very_good, got %#v", got.Condition)
+	}
+	if got.AcquisitionSource == nil || *got.AcquisitionSource != "Bookshop" {
+		t.Fatalf("expected acquisition source, got %#v", got.AcquisitionSource)
 	}
 	if got.PublishedYear == nil || *got.PublishedYear != 1965 {
 		t.Fatalf("expected published_year 1965, got %#v", got.PublishedYear)

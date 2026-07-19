@@ -3,6 +3,7 @@ package books
 import (
 	"context"
 	"errors"
+	"math"
 	"strings"
 	"time"
 
@@ -16,6 +17,8 @@ var ErrAuthorNotFound = errors.New("author not found")
 var ErrInvalidFormat = errors.New("format must be one of: hardback, paperback, epub")
 var ErrInvalidPurchasedAt = errors.New("purchased_at must be a date in YYYY-MM-DD format")
 var ErrInvalidPages = errors.New("pages must be at least 1")
+var ErrInvalidCondition = errors.New("condition must be one of: new, very_good, good, acceptable, poor")
+var ErrInvalidSeriesPosition = errors.New("series_position must be greater than 0")
 var ErrInvalidPublishedYear = errors.New("published_year must be at least 1")
 var ErrInvalidPublishedMonth = errors.New("published_month must be between 1 and 12 and requires published_year")
 var ErrInvalidPublishedDay = errors.New("published_day must form a valid date and requires published_year and published_month")
@@ -179,6 +182,57 @@ func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, er
 		} else {
 			input.Notes = &v
 		}
+	}
+
+	if input.Summary != nil {
+		v := strings.TrimSpace(*input.Summary)
+		if v == "" {
+			input.Summary = nil
+		} else {
+			input.Summary = &v
+		}
+	}
+
+	if input.SeriesName != nil {
+		v := strings.TrimSpace(*input.SeriesName)
+		if v == "" {
+			input.SeriesName = nil
+		} else {
+			input.SeriesName = &v
+		}
+	}
+
+	if input.Location != nil {
+		v := strings.TrimSpace(*input.Location)
+		if v == "" {
+			input.Location = nil
+		} else {
+			input.Location = &v
+		}
+	}
+
+	if input.Condition != nil {
+		condition := Condition(strings.TrimSpace(string(*input.Condition)))
+		switch condition {
+		case ConditionNew, ConditionVeryGood, ConditionGood, ConditionAcceptable, ConditionPoor:
+			input.Condition = &condition
+		default:
+			return Book{}, ErrInvalidCondition
+		}
+	}
+
+	if input.AcquisitionSource != nil {
+		v := strings.TrimSpace(*input.AcquisitionSource)
+		if v == "" {
+			input.AcquisitionSource = nil
+		} else {
+			input.AcquisitionSource = &v
+		}
+	}
+
+	if input.SeriesPosition != nil &&
+		(!(*input.SeriesPosition > 0) || math.IsInf(*input.SeriesPosition, 0) || math.IsNaN(*input.SeriesPosition)) {
+		return Book{}, ErrInvalidSeriesPosition
 	}
 
 	if input.Pages != nil && *input.Pages < 1 {

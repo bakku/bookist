@@ -124,6 +124,49 @@ func TestInitialSchemaEnforcesNaturalKeysAndBookValidation(t *testing.T) {
 	}
 }
 
+func TestInitialSchemaSupportsExtendedBookMetadata(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	now := "2026-01-02T03:04:05Z"
+
+	minimalID := testsupport.InsertBookRow(t, db, "Minimal", nil)
+	var summary, seriesName, location, condition, acquisitionSource sql.NullString
+	var seriesPosition sql.NullFloat64
+	if err := db.QueryRow(`
+		SELECT summary, series_name, series_position, location, condition, acquisition_source
+		FROM books WHERE id = ?
+	`, minimalID).Scan(&summary, &seriesName, &seriesPosition, &location, &condition, &acquisitionSource); err != nil {
+		t.Fatal(err)
+	}
+	if summary.Valid || seriesName.Valid || seriesPosition.Valid || location.Valid || condition.Valid || acquisitionSource.Valid {
+		t.Fatal("expected extended metadata to default to NULL")
+	}
+
+	for _, value := range []string{"new", "very_good", "good", "acceptable", "poor"} {
+		_, err := db.Exec(`
+			INSERT INTO books (id, title, summary, series_name, series_position, location, condition, acquisition_source, created_at, updated_at)
+			VALUES (?, ?, 'Summary', 'Series', 1.5, 'Shelf', ?, 'Gift', ?, ?)
+		`, uuid.NewString(), "Condition "+value, value, now, now)
+		if err != nil {
+			t.Fatalf("expected condition %q and fractional position to be accepted: %v", value, err)
+		}
+	}
+
+	for _, test := range []struct {
+		title  string
+		column string
+		value  any
+	}{
+		{title: "invalid condition", column: "condition", value: "like_new"},
+		{title: "zero series position", column: "series_position", value: 0},
+		{title: "negative series position", column: "series_position", value: -1.5},
+	} {
+		query := `INSERT INTO books (id, title, ` + test.column + `, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`
+		if _, err := db.Exec(query, uuid.NewString(), test.title, test.value, now, now); err == nil {
+			t.Fatalf("expected %s to violate a constraint", test.title)
+		}
+	}
+}
+
 func TestInitialSchemaEnforcesRelationshipMetadataAndUniqueness(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)

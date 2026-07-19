@@ -58,10 +58,16 @@ func TestBooksListJSONPreservesNullableFields(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]books.Book{
 			{
-				ID:      "id-1",
-				Title:   "Dune",
-				ISBN:    new("9780441172719"),
-				Authors: []authors.Author{{ID: "author-1", Name: "Frank Herbert"}},
+				ID:                "id-1",
+				Title:             "Dune",
+				ISBN:              new("9780441172719"),
+				Authors:           []authors.Author{{ID: "author-1", Name: "Frank Herbert"}},
+				Summary:           new("A desert epic"),
+				SeriesName:        new("Dune"),
+				SeriesPosition:    new(1.5),
+				Location:          new("Living room"),
+				Condition:         new(books.ConditionVeryGood),
+				AcquisitionSource: new("Bookshop"),
 			},
 			{ID: "id-2", Title: "Kindred", ISBN: nil},
 		})
@@ -89,7 +95,14 @@ func TestBooksListJSONPreservesNullableFields(t *testing.T) {
 	if len(listed[0].Authors) != 1 || listed[0].Authors[0].Name != "Frank Herbert" {
 		t.Fatalf("expected complete book JSON with authors, got %#v", listed[0])
 	}
-	if listed[1].ISBN != nil || listed[1].Publisher != nil {
+	if listed[0].Summary == nil || *listed[0].Summary != "A desert epic" ||
+		listed[0].SeriesPosition == nil || *listed[0].SeriesPosition != 1.5 ||
+		listed[0].Condition == nil || *listed[0].Condition != books.ConditionVeryGood {
+		t.Fatalf("expected extended metadata in JSON, got %#v", listed[0])
+	}
+	if listed[1].ISBN != nil || listed[1].Publisher != nil || listed[1].Summary != nil ||
+		listed[1].SeriesName != nil || listed[1].SeriesPosition != nil || listed[1].Location != nil ||
+		listed[1].Condition != nil || listed[1].AcquisitionSource != nil {
 		t.Fatalf("expected nullable fields to remain nil, got %#v", listed[1])
 	}
 }
@@ -119,7 +132,9 @@ func TestBooksAddWithNewFields(t *testing.T) {
 	exitCode := cli.Run([]string{
 		"books", "add", "--title", "Full Book", "--language", "en", "--publisher", "O'Reilly",
 		"--edition", "2nd", "--format", "paperback", "--purchased-at", "2025-06-15",
-		"--pages", "400", "--notes", "Great read", "--published-year", "2024",
+		"--pages", "400", "--notes", "Great read", "--summary", "A practical guide",
+		"--series-name", "Programming", "--series-position", "1.5", "--location", "Office shelf",
+		"--condition", "very_good", "--acquisition-source", "Bookshop", "--published-year", "2024",
 		"--published-month", "6", "--published-day", "15", "--server", server.URL},
 		&stdout, &stderr)
 
@@ -165,6 +180,26 @@ func TestBooksAddWithNewFields(t *testing.T) {
 		t.Fatalf("expected notes 'Great read', got %#v", got.Notes)
 	}
 
+	if got.Summary == nil || *got.Summary != "A practical guide" {
+		t.Fatalf("expected summary, got %#v", got.Summary)
+	}
+
+	if got.SeriesName == nil || *got.SeriesName != "Programming" || got.SeriesPosition == nil || *got.SeriesPosition != 1.5 {
+		t.Fatalf("expected series metadata, got %#v", got)
+	}
+
+	if got.Location == nil || *got.Location != "Office shelf" {
+		t.Fatalf("expected location, got %#v", got.Location)
+	}
+
+	if got.Condition == nil || *got.Condition != books.ConditionVeryGood {
+		t.Fatalf("expected condition very_good, got %#v", got.Condition)
+	}
+
+	if got.AcquisitionSource == nil || *got.AcquisitionSource != "Bookshop" {
+		t.Fatalf("expected acquisition source, got %#v", got.AcquisitionSource)
+	}
+
 	if got.PublishedYear == nil || *got.PublishedYear != 2024 {
 		t.Fatalf("expected published_year 2024, got %#v", got.PublishedYear)
 	}
@@ -198,8 +233,22 @@ func TestBooksAddSendsNullForOmittedOptionalFields(t *testing.T) {
 	}
 	if posted.ISBN != nil || posted.Language != nil || posted.Publisher != nil || posted.Edition != nil ||
 		posted.Format != nil || posted.PurchasedAt != nil || posted.Pages != nil || posted.Notes != nil ||
+		posted.Summary != nil || posted.SeriesName != nil || posted.SeriesPosition != nil ||
+		posted.Location != nil || posted.Condition != nil || posted.AcquisitionSource != nil ||
 		posted.PublishedYear != nil || posted.PublishedMonth != nil || posted.PublishedDay != nil {
 		t.Fatalf("expected omitted optional fields to be nil, got %#v", posted)
+	}
+}
+
+func TestBooksAddRejectsInvalidFloatFlag(t *testing.T) {
+	var stdout, stderr strings.Builder
+	exitCode := cli.Run([]string{"books", "add", "--title", "Invalid", "--series-position", "first"}, &stdout, &stderr)
+
+	if exitCode != 2 {
+		t.Fatalf("expected exit code 2, got %d", exitCode)
+	}
+	if !strings.Contains(stderr.String(), "invalid value \"first\" for flag -series-position") {
+		t.Fatalf("expected invalid series position error, got %q", stderr.String())
 	}
 }
 

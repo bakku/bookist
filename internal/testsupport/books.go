@@ -41,18 +41,24 @@ func InsertBookRow(t testing.TB, db *sql.DB, title string, isbn *string) string 
 }
 
 type BookRowAssertion struct {
-	Title          string
-	ISBN           *string
-	Language       *string
-	Publisher      *string
-	Edition        *string
-	Format         *string
-	PurchasedAt    *string
-	Pages          *int
-	Notes          *string
-	PublishedYear  *int
-	PublishedMonth *int
-	PublishedDay   *int
+	Title             string
+	ISBN              *string
+	Language          *string
+	Publisher         *string
+	Edition           *string
+	Format            *string
+	PurchasedAt       *string
+	Pages             *int
+	Notes             *string
+	Summary           *string
+	SeriesName        *string
+	SeriesPosition    *float64
+	Location          *string
+	Condition         *string
+	AcquisitionSource *string
+	PublishedYear     *int
+	PublishedMonth    *int
+	PublishedDay      *int
 }
 
 func AssertBookRow(t testing.TB, db *sql.DB, id string, wantTitle string, wantISBN *string) {
@@ -99,6 +105,12 @@ func AssertBookRowFields(t testing.TB, db *sql.DB, id string, want BookRowAssert
 	var format sql.NullString
 	var purchasedAt sql.NullString
 	var notes sql.NullString
+	var summary sql.NullString
+	var seriesName sql.NullString
+	var seriesPosition sql.NullFloat64
+	var location sql.NullString
+	var condition sql.NullString
+	var acquisitionSource sql.NullString
 	var pages sql.NullInt64
 	var publishedYear sql.NullInt64
 	var publishedMonth sql.NullInt64
@@ -108,13 +120,15 @@ func AssertBookRowFields(t testing.TB, db *sql.DB, id string, want BookRowAssert
 
 	err := db.QueryRowContext(context.Background(), `
 		SELECT title, isbn, language, publisher, edition, format, purchased_at,
-		    pages, notes, published_year, published_month, published_day,
+		    pages, notes, summary, series_name, series_position, location,
+		    condition, acquisition_source, published_year, published_month, published_day,
 		    created_at, updated_at
 		FROM books
 		WHERE id = ?
 	`, id).Scan(&title, &isbn, &language, &publisher, &edition,
-		&format, &purchasedAt, &pages, &notes, &publishedYear,
-		&publishedMonth, &publishedDay, &createdAt, &updatedAt)
+		&format, &purchasedAt, &pages, &notes, &summary, &seriesName, &seriesPosition,
+		&location, &condition, &acquisitionSource, &publishedYear, &publishedMonth,
+		&publishedDay, &createdAt, &updatedAt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,10 +144,16 @@ func AssertBookRowFields(t testing.TB, db *sql.DB, id string, want BookRowAssert
 	assertNullString(t, "format", format, want.Format)
 	assertNullString(t, "purchased_at", purchasedAt, want.PurchasedAt)
 	assertNullInt(t, "pages", pages, want.Pages)
+	assertNullString(t, "notes", notes, want.Notes)
+	assertNullString(t, "summary", summary, want.Summary)
+	assertNullString(t, "series_name", seriesName, want.SeriesName)
+	assertNullFloat(t, "series_position", seriesPosition, want.SeriesPosition)
+	assertNullString(t, "location", location, want.Location)
+	assertNullString(t, "condition", condition, want.Condition)
+	assertNullString(t, "acquisition_source", acquisitionSource, want.AcquisitionSource)
 	assertNullInt(t, "published_year", publishedYear, want.PublishedYear)
 	assertNullInt(t, "published_month", publishedMonth, want.PublishedMonth)
 	assertNullInt(t, "published_day", publishedDay, want.PublishedDay)
-	assertNullString(t, "notes", notes, want.Notes)
 
 	if _, err := time.Parse(time.RFC3339, createdAt); err != nil {
 		t.Fatalf("expected RFC3339 created_at, got %q", createdAt)
@@ -141,6 +161,18 @@ func AssertBookRowFields(t testing.TB, db *sql.DB, id string, want BookRowAssert
 
 	if _, err := time.Parse(time.RFC3339, updatedAt); err != nil {
 		t.Fatalf("expected RFC3339 updated_at, got %q", updatedAt)
+	}
+}
+
+func assertNullFloat(t testing.TB, name string, got sql.NullFloat64, want *float64) {
+	t.Helper()
+
+	if want == nil && got.Valid {
+		t.Fatalf("expected %s to be NULL, got %v", name, got.Float64)
+	}
+
+	if want != nil && (!got.Valid || got.Float64 != *want) {
+		t.Fatalf("expected %s %v, got %#v", name, *want, got)
 	}
 }
 

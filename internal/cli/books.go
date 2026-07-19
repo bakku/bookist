@@ -142,6 +142,12 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	var format optionalStringFlag
 	var purchasedAt optionalStringFlag
 	var notes optionalStringFlag
+	var summary optionalStringFlag
+	var seriesName optionalStringFlag
+	var seriesPosition optionalFloatFlag
+	var location optionalStringFlag
+	var condition optionalStringFlag
+	var acquisitionSource optionalStringFlag
 	var pages optionalIntFlag
 	var publishedYear optionalIntFlag
 	var publishedMonth optionalIntFlag
@@ -154,6 +160,12 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags.Var(&format, "format", "Book format (hardback|paperback|epub)")
 	flags.Var(&purchasedAt, "purchased-at", "Date purchased (YYYY-MM-DD)")
 	flags.Var(&notes, "notes", "Personal notes")
+	flags.Var(&summary, "summary", "Book summary")
+	flags.Var(&seriesName, "series-name", "Book series name")
+	flags.Var(&seriesPosition, "series-position", "Book position in its series")
+	flags.Var(&location, "location", "Book storage location")
+	flags.Var(&condition, "condition", "Book condition (new|very_good|good|acceptable|poor)")
+	flags.Var(&acquisitionSource, "acquisition-source", "Book acquisition source")
 	flags.Var(&pages, "pages", "Number of pages")
 	flags.Var(&publishedYear, "published-year", "Publication year")
 	flags.Var(&publishedMonth, "published-month", "Publication month (1-12)")
@@ -169,22 +181,32 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	input := books.CreateBookRequest{
-		Title:          *title,
-		ISBN:           isbn.value,
-		Language:       language.value,
-		Publisher:      publisher.value,
-		Edition:        edition.value,
-		PurchasedAt:    purchasedAt.value,
-		Pages:          pages.value,
-		Notes:          notes.value,
-		PublishedYear:  publishedYear.value,
-		PublishedMonth: publishedMonth.value,
-		PublishedDay:   publishedDay.value,
+		Title:             *title,
+		ISBN:              isbn.value,
+		Language:          language.value,
+		Publisher:         publisher.value,
+		Edition:           edition.value,
+		PurchasedAt:       purchasedAt.value,
+		Pages:             pages.value,
+		Notes:             notes.value,
+		Summary:           summary.value,
+		SeriesName:        seriesName.value,
+		SeriesPosition:    seriesPosition.value,
+		Location:          location.value,
+		AcquisitionSource: acquisitionSource.value,
+		PublishedYear:     publishedYear.value,
+		PublishedMonth:    publishedMonth.value,
+		PublishedDay:      publishedDay.value,
 	}
 
 	if format.value != nil {
 		f := books.Format(*format.value)
 		input.Format = &f
+	}
+
+	if condition.value != nil {
+		c := books.Condition(*condition.value)
+		input.Condition = &c
 	}
 
 	if len(authorFlags) > 0 {

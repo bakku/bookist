@@ -22,8 +22,9 @@ func NewSQLiteRepository(db *sql.DB) *SQLiteRepository {
 func (r *SQLiteRepository) List(ctx context.Context) ([]Book, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, title, isbn, language, publisher, edition, format, 
-		    purchased_at, pages, notes, published_year, published_month, 
-		    published_day, created_at, updated_at
+		    purchased_at, pages, notes, summary, series_name, series_position,
+		    location, condition, acquisition_source, published_year,
+		    published_month, published_day, created_at, updated_at
 		FROM books
 		ORDER BY updated_at DESC, id ASC
 	`)
@@ -50,8 +51,10 @@ func (r *SQLiteRepository) List(ctx context.Context) ([]Book, error) {
 func (r *SQLiteRepository) ListByListID(ctx context.Context, listID string) ([]Book, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT b.id, b.title, b.isbn, b.language, b.publisher, b.edition, b.format,
-		       b.purchased_at, b.pages, b.notes, b.published_year, b.published_month,
-		       b.published_day, b.created_at, b.updated_at
+		       b.purchased_at, b.pages, b.notes, b.summary, b.series_name,
+		       b.series_position, b.location, b.condition, b.acquisition_source,
+		       b.published_year, b.published_month, b.published_day,
+		       b.created_at, b.updated_at
 		FROM books b
 		JOIN book_lists bl ON bl.book_id = b.id
 		WHERE bl.list_id = ?
@@ -138,6 +141,36 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 		notes = sql.NullString{String: *input.Notes, Valid: true}
 	}
 
+	summary := sql.NullString{}
+	if input.Summary != nil {
+		summary = sql.NullString{String: *input.Summary, Valid: true}
+	}
+
+	seriesName := sql.NullString{}
+	if input.SeriesName != nil {
+		seriesName = sql.NullString{String: *input.SeriesName, Valid: true}
+	}
+
+	seriesPosition := sql.NullFloat64{}
+	if input.SeriesPosition != nil {
+		seriesPosition = sql.NullFloat64{Float64: *input.SeriesPosition, Valid: true}
+	}
+
+	location := sql.NullString{}
+	if input.Location != nil {
+		location = sql.NullString{String: *input.Location, Valid: true}
+	}
+
+	condition := sql.NullString{}
+	if input.Condition != nil {
+		condition = sql.NullString{String: string(*input.Condition), Valid: true}
+	}
+
+	acquisitionSource := sql.NullString{}
+	if input.AcquisitionSource != nil {
+		acquisitionSource = sql.NullString{String: *input.AcquisitionSource, Valid: true}
+	}
+
 	pages := sql.NullInt64{}
 	if input.Pages != nil {
 		pages = sql.NullInt64{Int64: int64(*input.Pages), Valid: true}
@@ -162,14 +195,18 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 
 	row := tx.QueryRowContext(ctx, `
 		INSERT INTO books (id, title, isbn, language, publisher, edition, format, 
-		                   purchased_at, pages, notes, published_year, published_month, 
-		                   published_day, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		                   purchased_at, pages, notes, summary, series_name,
+		                   series_position, location, condition, acquisition_source,
+		                   published_year, published_month, published_day,
+		                   created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		RETURNING id, title, isbn, language, publisher, edition, format, purchased_at, 
-			pages, notes, published_year, published_month, published_day, 
+			pages, notes, summary, series_name, series_position, location, condition,
+			acquisition_source, published_year, published_month, published_day,
 			created_at, updated_at
 	`, bookID, input.Title, isbn, language, publisher, edition, format, purchasedAt,
-		pages, notes, publishedYear, publishedMonth, publishedDay, createdAt, updatedAt)
+		pages, notes, summary, seriesName, seriesPosition, location, condition,
+		acquisitionSource, publishedYear, publishedMonth, publishedDay, createdAt, updatedAt)
 
 	book, err := scanBook(row)
 	if err != nil {
@@ -212,13 +249,22 @@ func scanBook(scanner bookScanner) (Book, error) {
 	var purchasedAt sql.NullString
 	var pages sql.NullInt64
 	var notes sql.NullString
+	var summary sql.NullString
+	var seriesName sql.NullString
+	var seriesPosition sql.NullFloat64
+	var location sql.NullString
+	var condition sql.NullString
+	var acquisitionSource sql.NullString
 	var publishedYear sql.NullInt64
 	var publishedMonth sql.NullInt64
 	var publishedDay sql.NullInt64
 	var createdAt string
 	var updatedAt string
 
-	if err := scanner.Scan(&book.ID, &book.Title, &isbn, &language, &publisher, &edition, &format, &purchasedAt, &pages, &notes, &publishedYear, &publishedMonth, &publishedDay, &createdAt, &updatedAt); err != nil {
+	if err := scanner.Scan(&book.ID, &book.Title, &isbn, &language, &publisher, &edition,
+		&format, &purchasedAt, &pages, &notes, &summary, &seriesName, &seriesPosition,
+		&location, &condition, &acquisitionSource, &publishedYear, &publishedMonth,
+		&publishedDay, &createdAt, &updatedAt); err != nil {
 		return Book{}, err
 	}
 
@@ -254,6 +300,31 @@ func scanBook(scanner bookScanner) (Book, error) {
 
 	if notes.Valid {
 		book.Notes = &notes.String
+	}
+
+	if summary.Valid {
+		book.Summary = &summary.String
+	}
+
+	if seriesName.Valid {
+		book.SeriesName = &seriesName.String
+	}
+
+	if seriesPosition.Valid {
+		book.SeriesPosition = &seriesPosition.Float64
+	}
+
+	if location.Valid {
+		book.Location = &location.String
+	}
+
+	if condition.Valid {
+		c := Condition(condition.String)
+		book.Condition = &c
+	}
+
+	if acquisitionSource.Valid {
+		book.AcquisitionSource = &acquisitionSource.String
 	}
 
 	if publishedYear.Valid {
