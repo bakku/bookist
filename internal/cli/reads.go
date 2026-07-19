@@ -96,13 +96,14 @@ func runReadsList(args []string, stdout io.Writer, stderr io.Writer) int {
 			read.ID,
 			stringValue(read.StartedAt),
 			stringValue(read.FinishedAt),
+			stringValue(read.AbandonedAt),
 			floatValue(read.Rating),
 			stringValue(read.Notes),
 		})
 	}
 
 	if err := writeListOutput(stdout, format, listed,
-		[]string{"ID", "STARTED_AT", "FINISHED_AT", "RATING", "NOTES"}, rows); err != nil {
+		[]string{"ID", "STARTED_AT", "FINISHED_AT", "ABANDONED_AT", "RATING", "NOTES"}, rows); err != nil {
 		_, _ = fmt.Fprintf(stderr, "list reads: write output: %v\n", err)
 		return 1
 	}
@@ -118,11 +119,13 @@ func runReadsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	var startedAt optionalStringFlag
 	var finishedAt optionalStringFlag
+	var abandonedAt optionalStringFlag
 	var rating optionalFloatFlag
 	var notes optionalStringFlag
 
 	flags.Var(&startedAt, "started-at", "Date reading started (YYYY-MM-DD)")
 	flags.Var(&finishedAt, "finished-at", "Date reading finished (YYYY-MM-DD)")
+	flags.Var(&abandonedAt, "abandoned-at", "Date reading abandoned (YYYY-MM-DD)")
 	flags.Var(&rating, "rating", "Rating from 1 to 5 in increments of 0.5")
 	flags.Var(&notes, "notes", "Read notes")
 
@@ -148,10 +151,11 @@ func runReadsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	input := reads.CreateReadRequest{
-		StartedAt:  startedAt.value,
-		FinishedAt: finishedAt.value,
-		Rating:     rating.value,
-		Notes:      notes.value,
+		StartedAt:   startedAt.value,
+		FinishedAt:  finishedAt.value,
+		AbandonedAt: abandonedAt.value,
+		Rating:      rating.value,
+		Notes:       notes.value,
 	}
 
 	body, err := json.Marshal(input)

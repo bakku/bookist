@@ -130,6 +130,18 @@ CREATE TABLE reads (
             END
         )
     ),
+    abandoned_at TEXT NULL CHECK (
+        abandoned_at IS NULL OR (
+            length(abandoned_at) = 10 AND abandoned_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND
+            CAST(substr(abandoned_at, 1, 4) AS INTEGER) >= 1 AND
+            CAST(substr(abandoned_at, 6, 2) AS INTEGER) BETWEEN 1 AND 12 AND
+            CAST(substr(abandoned_at, 9, 2) AS INTEGER) BETWEEN 1 AND CASE CAST(substr(abandoned_at, 6, 2) AS INTEGER)
+                WHEN 2 THEN 28 + (CAST(substr(abandoned_at, 1, 4) AS INTEGER) % 4 = 0 AND
+                    (CAST(substr(abandoned_at, 1, 4) AS INTEGER) % 100 <> 0 OR CAST(substr(abandoned_at, 1, 4) AS INTEGER) % 400 = 0))
+                WHEN 4 THEN 30 WHEN 6 THEN 30 WHEN 9 THEN 30 WHEN 11 THEN 30 ELSE 31
+            END
+        )
+    ),
     rating REAL NULL CHECK (
         rating IS NULL OR
         (rating >= 1 AND rating <= 5 AND rating * 2 = CAST(rating * 2 AS INTEGER))
@@ -137,7 +149,9 @@ CREATE TABLE reads (
     notes TEXT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    CHECK (started_at IS NULL OR finished_at IS NULL OR finished_at >= started_at)
+    CHECK (finished_at IS NULL OR abandoned_at IS NULL),
+    CHECK (started_at IS NULL OR finished_at IS NULL OR finished_at >= started_at),
+    CHECK (started_at IS NULL OR abandoned_at IS NULL OR abandoned_at >= started_at)
 );
 CREATE INDEX reads_book_id_idx ON reads(book_id);
 

@@ -20,8 +20,7 @@ func TestReadAPICreate(t *testing.T) {
 
 	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
 	body := bytes.NewBufferString(`{
-		"started_at":"2026-01-01",
-		"finished_at":"2026-01-03",
+		"abandoned_at":"2026-01-03",
 		"rating":4.5,
 		"notes":"Excellent"
 	}`)
@@ -39,7 +38,7 @@ func TestReadAPICreate(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		t.Fatal(err)
 	}
-	if response["book_id"] != bookID || response["rating"] != 4.5 || response["notes"] != "Excellent" {
+	if response["book_id"] != bookID || response["abandoned_at"] != "2026-01-03" || response["rating"] != 4.5 || response["notes"] != "Excellent" {
 		t.Fatalf("unexpected response: %#v", response)
 	}
 	if response["created_at"] == nil {
@@ -49,19 +48,19 @@ func TestReadAPICreate(t *testing.T) {
 		t.Fatal("updated_at must be exposed")
 	}
 
-	var startedAt, finishedAt, notes sql.NullString
+	var startedAt, finishedAt, abandonedAt, notes sql.NullString
 	var rating sql.NullFloat64
 	var createdAt, updatedAt string
 
 	err := app.db.QueryRowContext(context.Background(), `
-		SELECT started_at, finished_at, rating, notes, created_at, updated_at
+		SELECT started_at, finished_at, abandoned_at, rating, notes, created_at, updated_at
 		FROM reads WHERE id = ?
-	`, response["id"]).Scan(&startedAt, &finishedAt, &rating, &notes, &createdAt, &updatedAt)
+	`, response["id"]).Scan(&startedAt, &finishedAt, &abandonedAt, &rating, &notes, &createdAt, &updatedAt)
 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if startedAt.String != "2026-01-01" || finishedAt.String != "2026-01-03" || rating.Float64 != 4.5 || notes.String != "Excellent" {
+	if startedAt.Valid || finishedAt.Valid || abandonedAt.String != "2026-01-03" || rating.Float64 != 4.5 || notes.String != "Excellent" {
 		t.Fatal("unexpected persisted values")
 	}
 	if createdAt == "" || updatedAt == "" {
@@ -97,6 +96,9 @@ func TestReadAPICreateRejectsInvalidValues(t *testing.T) {
 	tests := []string{
 		`{"started_at":"not-a-date"}`,
 		`{"started_at":"2026-02-02","finished_at":"2026-02-01"}`,
+		`{"abandoned_at":"2026-02-30"}`,
+		`{"started_at":"2026-02-02","abandoned_at":"2026-02-01"}`,
+		`{"finished_at":"2026-02-02","abandoned_at":"2026-02-03"}`,
 		`{"rating":0.5}`,
 		`{"rating":4.2}`,
 		`{"rating":5.5}`,
@@ -111,6 +113,13 @@ func TestReadAPICreateRejectsInvalidValues(t *testing.T) {
 			app.handler.ServeHTTP(resp, req)
 			if resp.Code != http.StatusBadRequest {
 				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
+			}
+			var count int
+			if err := app.db.QueryRow(`SELECT COUNT(*) FROM reads`).Scan(&count); err != nil {
+				t.Fatal(err)
+			}
+			if count != 0 {
+				t.Fatalf("expected no persisted reads, got %d", count)
 			}
 		})
 	}
@@ -128,7 +137,7 @@ func TestReadAPIList(t *testing.T) {
 		Rating: new(4.0), Notes: new("Good"), CreatedAt: "2026-01-01T00:00:00Z",
 	})
 	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{
-		ID: newerID, BookID: bookID, StartedAt: new("2026-01-01"), FinishedAt: new("2026-01-03"),
+		ID: newerID, BookID: bookID, StartedAt: new("2026-01-01"), AbandonedAt: new("2026-01-03"),
 		Rating: new(4.5), Notes: new("Excellent"), CreatedAt: "2026-01-02T00:00:00Z",
 	})
 	req := httptest.NewRequest(http.MethodGet, "/api/books/"+bookID+"/reads", nil)
@@ -146,8 +155,11 @@ func TestReadAPIList(t *testing.T) {
 	if len(raw) != 2 || raw[0]["id"] != newerID || raw[1]["id"] != olderID {
 		t.Fatalf("expected newest reads first, got %#v", raw)
 	}
+	if raw[0]["abandoned_at"] != "2026-01-03" || raw[0]["finished_at"] != nil || raw[1]["abandoned_at"] != nil {
+		t.Fatalf("unexpected terminal dates: %#v", raw)
+	}
 	for _, item := range raw {
-		for _, field := range []string{"id", "book_id", "started_at", "finished_at", "rating", "notes", "created_at", "updated_at"} {
+		for _, field := range []string{"id", "book_id", "started_at", "finished_at", "abandoned_at", "rating", "notes", "created_at", "updated_at"} {
 			if _, exists := item[field]; !exists {
 				t.Fatalf("expected field %q in %#v", field, item)
 			}

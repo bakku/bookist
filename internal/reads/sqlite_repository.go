@@ -24,12 +24,12 @@ func (r *SQLiteRepository) Create(ctx context.Context, bookID string, input Crea
 
 	row := r.db.QueryRowContext(ctx, `
 		INSERT INTO reads (
-			id, book_id, started_at, finished_at, rating, notes, created_at, updated_at
+			id, book_id, started_at, finished_at, abandoned_at, rating, notes, created_at, updated_at
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		RETURNING id, book_id, started_at, finished_at, rating, notes, created_at, updated_at
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		RETURNING id, book_id, started_at, finished_at, abandoned_at, rating, notes, created_at, updated_at
 	`, uuid.NewString(), bookID, nullString(input.StartedAt), nullString(input.FinishedAt),
-		nullFloat64(input.Rating), nullString(input.Notes), now, now)
+		nullString(input.AbandonedAt), nullFloat64(input.Rating), nullString(input.Notes), now, now)
 
 	read, err := scanRead(row)
 	if err != nil {
@@ -52,7 +52,7 @@ func (r *SQLiteRepository) ListByBookID(ctx context.Context, bookID string) ([]R
 	}
 
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, book_id, started_at, finished_at, rating, notes, created_at, updated_at
+		SELECT id, book_id, started_at, finished_at, abandoned_at, rating, notes, created_at, updated_at
 		FROM reads
 		WHERE book_id = ?
 		ORDER BY updated_at DESC, id ASC
@@ -88,12 +88,13 @@ func scanRead(scanner readScanner) (Read, error) {
 	var result Read
 	var startedAt sql.NullString
 	var finishedAt sql.NullString
+	var abandonedAt sql.NullString
 	var rating sql.NullFloat64
 	var notes sql.NullString
 	var createdAt string
 	var updatedAt string
 
-	if err := scanner.Scan(&result.ID, &result.BookID, &startedAt, &finishedAt, &rating, &notes, &createdAt, &updatedAt); err != nil {
+	if err := scanner.Scan(&result.ID, &result.BookID, &startedAt, &finishedAt, &abandonedAt, &rating, &notes, &createdAt, &updatedAt); err != nil {
 		return Read{}, err
 	}
 
@@ -102,6 +103,9 @@ func scanRead(scanner readScanner) (Read, error) {
 	}
 	if finishedAt.Valid {
 		result.FinishedAt = &finishedAt.String
+	}
+	if abandonedAt.Valid {
+		result.AbandonedAt = &abandonedAt.String
 	}
 	if rating.Valid {
 		result.Rating = &rating.Float64

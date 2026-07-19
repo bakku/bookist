@@ -50,7 +50,10 @@ func writeCreateReadError(w http.ResponseWriter, err error) {
 
 	if errors.Is(err, reads.ErrInvalidStartedAt) ||
 		errors.Is(err, reads.ErrInvalidFinishedAt) ||
+		errors.Is(err, reads.ErrInvalidAbandonedAt) ||
+		errors.Is(err, reads.ErrConflictingTerminalDates) ||
 		errors.Is(err, reads.ErrFinishedBeforeStarted) ||
+		errors.Is(err, reads.ErrAbandonedBeforeStarted) ||
 		errors.Is(err, reads.ErrInvalidRating) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

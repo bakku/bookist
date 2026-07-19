@@ -119,7 +119,7 @@ func TestLeafHelpShowsCommandOptionsAndExitsSuccessfully(t *testing.T) {
 		{name: "lists list", args: []string{"lists", "list", "--help"}, expected: []string{"bookist lists list - List book lists", "--format string", "Output format (tsv|pretty|json) (default: pretty)", "--server string"}},
 		{name: "lists add-book", args: []string{"lists", "add-book", "--help"}, expected: []string{"bookist lists add-book - Add a book to a list", "--book string", "--list string"}},
 		{name: "reads list", args: []string{"reads", "list", "--help"}, expected: []string{"bookist reads list - List reads for a book", "--book string", "--format string"}},
-		{name: "reads add", args: []string{"reads", "add", "--help"}, expected: []string{"bookist reads add - Record a read for a book", "--book string", "--rating float"}},
+		{name: "reads add", args: []string{"reads", "add", "--help"}, expected: []string{"bookist reads add - Record a read for a book", "--abandoned-at string", "--book string", "--rating float"}},
 	}
 
 	for _, test := range tests {

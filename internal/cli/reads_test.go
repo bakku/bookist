@@ -16,7 +16,7 @@ import (
 
 func TestReadsListResolvesBookAndPrintsTableFormats(t *testing.T) {
 	startedAt := "2026-01-01"
-	finishedAt := "2026-01-03"
+	abandonedAt := "2026-01-03"
 	rating := 4.5
 	notes := "Excellent"
 
@@ -27,7 +27,7 @@ func TestReadsListResolvesBookAndPrintsTableFormats(t *testing.T) {
 		case "/api/books/book-1/reads":
 			_ = json.NewEncoder(w).Encode([]reads.Read{{
 				ID: "read-1", BookID: "book-1", StartedAt: &startedAt,
-				FinishedAt: &finishedAt, Rating: &rating, Notes: &notes,
+				AbandonedAt: &abandonedAt, Rating: &rating, Notes: &notes,
 			}})
 		default:
 			http.NotFound(w, r)
@@ -41,9 +41,9 @@ func TestReadsListResolvesBookAndPrintsTableFormats(t *testing.T) {
 		format   string
 		expected string
 	}{
-		{name: "default pretty", expected: "ID      STARTED_AT  FINISHED_AT  RATING  NOTES\nread-1  2026-01-01  2026-01-03   4.5     Excellent\n"},
-		{name: "explicit TSV", format: "tsv", expected: "read-1\t2026-01-01\t2026-01-03\t4.5\tExcellent\n"},
-		{name: "pretty", format: "pretty", expected: "ID      STARTED_AT  FINISHED_AT  RATING  NOTES\nread-1  2026-01-01  2026-01-03   4.5     Excellent\n"},
+		{name: "default pretty", expected: "ID      STARTED_AT  FINISHED_AT  ABANDONED_AT  RATING  NOTES\nread-1  2026-01-01               2026-01-03    4.5     Excellent\n"},
+		{name: "explicit TSV", format: "tsv", expected: "read-1\t2026-01-01\t\t2026-01-03\t4.5\tExcellent\n"},
+		{name: "pretty", format: "pretty", expected: "ID      STARTED_AT  FINISHED_AT  ABANDONED_AT  RATING  NOTES\nread-1  2026-01-01               2026-01-03    4.5     Excellent\n"},
 	}
 
 	for _, test := range tests {
@@ -75,7 +75,7 @@ func TestReadsListJSONUsesFullReadRepresentation(t *testing.T) {
 	if exitCode != 0 || stderr != "" {
 		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
 	}
-	if !strings.Contains(stdout, `"started_at":null`) || !strings.Contains(stdout, `"book_id":"`+bookID+`"`) ||
+	if !strings.Contains(stdout, `"started_at":null`) || !strings.Contains(stdout, `"abandoned_at":null`) || !strings.Contains(stdout, `"book_id":"`+bookID+`"`) ||
 		!strings.Contains(stdout, `"created_at":"2026-01-02T03:04:05Z"`) || !strings.Contains(stdout, `"updated_at":"2026-01-02T03:04:05Z"`) {
 		t.Fatalf("unexpected JSON output: %s", stdout)
 	}
@@ -101,7 +101,7 @@ func TestReadsAddPostsToBookEndpoint(t *testing.T) {
 
 	exitCode, stdout, stderr := runCLI([]string{
 		"reads", "add", "--book", bookID, "--started-at", "2026-01-01",
-		"--finished-at", "2026-01-03", "--rating", "4.5", "--notes", "Excellent",
+		"--abandoned-at", "2026-01-03", "--rating", "4.5", "--notes", "Excellent",
 		"--server", server.URL,
 	})
 
@@ -111,7 +111,7 @@ func TestReadsAddPostsToBookEndpoint(t *testing.T) {
 	if capturedPath != "/api/books/"+bookID+"/reads" {
 		t.Fatalf("unexpected path %q", capturedPath)
 	}
-	if captured.StartedAt == nil || *captured.StartedAt != "2026-01-01" || captured.Rating == nil || *captured.Rating != 4.5 {
+	if captured.StartedAt == nil || *captured.StartedAt != "2026-01-01" || captured.AbandonedAt == nil || *captured.AbandonedAt != "2026-01-03" || captured.Rating == nil || *captured.Rating != 4.5 {
 		t.Fatalf("unexpected request: %#v", captured)
 	}
 	if stdout != "read-1\t"+bookID+"\n" {

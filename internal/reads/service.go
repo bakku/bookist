@@ -12,7 +12,10 @@ import (
 var ErrBookNotFound = errors.New("book not found")
 var ErrInvalidStartedAt = errors.New("started_at must be a date in YYYY-MM-DD format")
 var ErrInvalidFinishedAt = errors.New("finished_at must be a date in YYYY-MM-DD format")
+var ErrInvalidAbandonedAt = errors.New("abandoned_at must be a date in YYYY-MM-DD format")
+var ErrConflictingTerminalDates = errors.New("finished_at and abandoned_at must not both be set")
 var ErrFinishedBeforeStarted = errors.New("finished_at must not be before started_at")
+var ErrAbandonedBeforeStarted = errors.New("abandoned_at must not be before started_at")
 var ErrInvalidRating = errors.New("rating must be between 1 and 5 in increments of 0.5")
 
 type Repository interface {
@@ -41,8 +44,21 @@ func (s *Service) Create(ctx context.Context, bookID string, input CreateReadReq
 	}
 	input.FinishedAt = finishedAt
 
+	abandonedAt, err := normalizeDate(input.AbandonedAt, ErrInvalidAbandonedAt)
+	if err != nil {
+		return Read{}, err
+	}
+	input.AbandonedAt = abandonedAt
+
+	if input.FinishedAt != nil && input.AbandonedAt != nil {
+		return Read{}, ErrConflictingTerminalDates
+	}
+
 	if input.StartedAt != nil && input.FinishedAt != nil && *input.FinishedAt < *input.StartedAt {
 		return Read{}, ErrFinishedBeforeStarted
+	}
+	if input.StartedAt != nil && input.AbandonedAt != nil && *input.AbandonedAt < *input.StartedAt {
+		return Read{}, ErrAbandonedBeforeStarted
 	}
 
 	if input.Rating != nil {
