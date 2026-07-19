@@ -13,7 +13,8 @@ const (
 
 func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 	if len(args) == 0 {
-		args = []string{"serve"}
+		printRootHelp(stdout)
+		return 0
 	}
 
 	switch args[0] {

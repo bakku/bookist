@@ -59,7 +59,7 @@ func runBooksList(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
-	formatValue := flags.String("format", string(outputFormatTSV), "Output format (tsv|pretty|json)")
+	formatValue := flags.String("format", string(outputFormatPretty), "Output format (tsv|pretty|json)")
 
 	help := commandHelp{
 		name:        "bookist books list",
@@ -152,7 +152,7 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags.Var(&publisher, "publisher", "Book publisher")
 	flags.Var(&edition, "edition", "Book edition")
 	flags.Var(&format, "format", "Book format (hardback|paperback|epub)")
-	flags.Var(&purchasedAt, "purchased-at", "Date purchased (ISO 8601)")
+	flags.Var(&purchasedAt, "purchased-at", "Date purchased (YYYY-MM-DD)")
 	flags.Var(&notes, "notes", "Personal notes")
 	flags.Var(&pages, "pages", "Number of pages")
 	flags.Var(&publishedYear, "published-year", "Publication year")
@@ -190,7 +190,7 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	if len(authorFlags) > 0 {
 		authorIDs, err := resolveAuthorIDs(*serverURL, authorFlags)
 		if err != nil {
-			fmt.Fprintf(stderr, "%v\n", err)
+			_, _ = fmt.Fprintf(stderr, "%v\n", err)
 			return 1
 		}
 		input.AuthorIDs = authorIDs
@@ -238,23 +238,8 @@ func resolveAuthorIDs(serverURL string, values []string) ([]string, error) {
 		return nil, nil
 	}
 
-	existingAuthors, err := fetchAuthors(serverURL)
-	if err != nil {
-		return nil, fmt.Errorf("fetch authors: %v", err)
-	}
-
-	byID := make(map[string]authors.Author)
-	byName := make(map[string]authors.Author)
-
-	for _, a := range existingAuthors {
-		byID[a.ID] = a
-
-		if _, exists := byName[a.Name]; !exists {
-			byName[a.Name] = a
-		}
-	}
-
 	var result []string
+	var byName map[string]authors.Author
 
 	for _, val := range values {
 		val = strings.TrimSpace(val)
@@ -263,22 +248,32 @@ func resolveAuthorIDs(serverURL string, values []string) ([]string, error) {
 		}
 
 		parsed, err := uuid.Parse(val)
-		if err == nil {
-			id := parsed.String()
 
-			if _, ok := byID[id]; ok {
-				result = append(result, id)
-			} else {
-				return nil, fmt.Errorf("author not found: %s", id)
-			}
+		if err == nil && parsed.String() == strings.ToLower(val) {
+			result = append(result, parsed.String())
 		} else {
-			if a, ok := byName[val]; ok {
+			if byName == nil {
+				existingAuthors, err := fetchAuthors(serverURL)
+				if err != nil {
+					return nil, fmt.Errorf("fetch authors: %v", err)
+				}
+
+				byName = make(map[string]authors.Author, len(existingAuthors))
+
+				for _, a := range existingAuthors {
+					byName[strings.ToLower(a.Name)] = a
+				}
+			}
+
+			if a, ok := byName[strings.ToLower(val)]; ok {
 				result = append(result, a.ID)
 			} else {
+				// Textual author references create the missing author for convenient book entry.
 				created, err := createAuthor(serverURL, val)
 				if err != nil {
 					return nil, fmt.Errorf("create author %q: %v", val, err)
 				}
+
 				result = append(result, created.ID)
 			}
 		}

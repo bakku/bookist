@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"bakku.dev/bookist/internal/authors"
@@ -24,7 +25,7 @@ func (r *SQLiteRepository) List(ctx context.Context) ([]Book, error) {
 		    purchased_at, pages, notes, published_year, published_month, 
 		    published_day, created_at, updated_at
 		FROM books
-		ORDER BY id ASC
+		ORDER BY updated_at DESC, id ASC
 	`)
 	if err != nil {
 		return nil, err
@@ -54,7 +55,7 @@ func (r *SQLiteRepository) ListByListID(ctx context.Context, listID string) ([]B
 		FROM books b
 		JOIN book_lists bl ON bl.book_id = b.id
 		WHERE bl.list_id = ?
-		ORDER BY b.title ASC
+		ORDER BY bl.updated_at DESC, bl.id ASC
 	`, listID)
 	if err != nil {
 		return nil, err
@@ -80,6 +81,12 @@ func (r *SQLiteRepository) ListByListID(ctx context.Context, listID string) ([]B
 	}
 
 	return bookList, nil
+}
+
+func (r *SQLiteRepository) TitleExists(ctx context.Context, title string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM books WHERE title = ? COLLATE NOCASE)`, title).Scan(&exists)
+	return exists, err
 }
 
 func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) (Book, error) {
@@ -166,14 +173,17 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 
 	book, err := scanBook(row)
 	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed: books.title") {
+			return Book{}, ErrTitleConflict
+		}
 		return Book{}, err
 	}
 
 	for _, authorID := range input.AuthorIDs {
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO book_authors (book_id, author_id)
-			VALUES (?, ?)
-		`, book.ID, authorID)
+			INSERT INTO book_authors (id, book_id, author_id, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?)
+		`, uuid.NewString(), book.ID, authorID, createdAt, updatedAt)
 		if err != nil {
 			return Book{}, err
 		}

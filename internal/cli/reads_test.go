@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"bakku.dev/bookist/internal/books"
 	"bakku.dev/bookist/internal/reads"
@@ -40,7 +41,8 @@ func TestReadsListResolvesBookAndPrintsTableFormats(t *testing.T) {
 		format   string
 		expected string
 	}{
-		{name: "default TSV", expected: "read-1\t2026-01-01\t2026-01-03\t4.5\tExcellent\n"},
+		{name: "default pretty", expected: "ID      STARTED_AT  FINISHED_AT  RATING  NOTES\nread-1  2026-01-01  2026-01-03   4.5     Excellent\n"},
+		{name: "explicit TSV", format: "tsv", expected: "read-1\t2026-01-01\t2026-01-03\t4.5\tExcellent\n"},
 		{name: "pretty", format: "pretty", expected: "ID      STARTED_AT  FINISHED_AT  RATING  NOTES\nread-1  2026-01-01  2026-01-03   4.5     Excellent\n"},
 	}
 
@@ -58,11 +60,12 @@ func TestReadsListResolvesBookAndPrintsTableFormats(t *testing.T) {
 	}
 }
 
-func TestReadsListJSONPreservesNullsAndOmitsTimestamps(t *testing.T) {
+func TestReadsListJSONUsesFullReadRepresentation(t *testing.T) {
 	const bookID = "550e8400-e29b-41d4-a716-446655440000"
+	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode([]reads.Read{{ID: "read-1", BookID: bookID}})
+		_ = json.NewEncoder(w).Encode([]reads.Read{{ID: "read-1", BookID: bookID, CreatedAt: now, UpdatedAt: now}})
 	}))
 
 	defer server.Close()
@@ -72,7 +75,8 @@ func TestReadsListJSONPreservesNullsAndOmitsTimestamps(t *testing.T) {
 	if exitCode != 0 || stderr != "" {
 		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
 	}
-	if !strings.Contains(stdout, `"started_at":null`) || strings.Contains(stdout, "book_id") || strings.Contains(stdout, "created_at") || strings.Contains(stdout, "updated_at") {
+	if !strings.Contains(stdout, `"started_at":null`) || !strings.Contains(stdout, `"book_id":"`+bookID+`"`) ||
+		!strings.Contains(stdout, `"created_at":"2026-01-02T03:04:05Z"`) || !strings.Contains(stdout, `"updated_at":"2026-01-02T03:04:05Z"`) {
 		t.Fatalf("unexpected JSON output: %s", stdout)
 	}
 }

@@ -76,17 +76,12 @@ func TestSQLiteRepositoryListReadsPersistedLists(t *testing.T) {
 	if len(listed) != 2 {
 		t.Fatalf("expected 2 lists, got %d", len(listed))
 	}
-	if listed[0].ID != id1 {
-		t.Fatalf("expected first list ID %s, got %s", id1, listed[0].ID)
+	wantFirst, wantSecond := id1, id2
+	if id2 < id1 {
+		wantFirst, wantSecond = id2, id1
 	}
-	if listed[0].Name != "Nightstand" {
-		t.Fatalf("expected Nightstand, got %q", listed[0].Name)
-	}
-	if listed[1].ID != id2 {
-		t.Fatalf("expected second list ID %s, got %s", id2, listed[1].ID)
-	}
-	if listed[1].Name != "Want to Buy" {
-		t.Fatalf("expected Want to Buy, got %q", listed[1].Name)
+	if listed[0].ID != wantFirst || listed[1].ID != wantSecond {
+		t.Fatalf("expected ID tie-break ordering [%s %s], got [%s %s]", wantFirst, wantSecond, listed[0].ID, listed[1].ID)
 	}
 }
 

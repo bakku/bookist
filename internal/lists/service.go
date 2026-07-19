@@ -7,6 +7,7 @@ import (
 )
 
 var ErrNameRequired = errors.New("name is required")
+var ErrNameConflict = errors.New("a list with this name already exists")
 var ErrListNotFound = errors.New("list not found")
 var ErrBookNotFound = errors.New("book not found")
 var ErrBookAlreadyInList = errors.New("book is already in this list")
@@ -14,6 +15,7 @@ var ErrBookAlreadyInList = errors.New("book is already in this list")
 type Repository interface {
 	Create(ctx context.Context, input CreateListRequest) (List, error)
 	List(ctx context.Context) ([]List, error)
+	NameExists(ctx context.Context, name string) (bool, error)
 	GetByID(ctx context.Context, id string) (List, error)
 	AddBookToList(ctx context.Context, listID, bookID string) error
 }
@@ -30,6 +32,13 @@ func (s *Service) Create(ctx context.Context, input CreateListRequest) (List, er
 	input.Name = strings.TrimSpace(input.Name)
 	if input.Name == "" {
 		return List{}, ErrNameRequired
+	}
+	exists, err := s.repository.NameExists(ctx, input.Name)
+	if err != nil {
+		return List{}, err
+	}
+	if exists {
+		return List{}, ErrNameConflict
 	}
 
 	if input.Description != nil {

@@ -83,11 +83,12 @@ func AssertListCount(t testing.TB, db *sql.DB, want int) {
 
 func InsertBookListRow(t testing.TB, db *sql.DB, listID string, bookID string) {
 	t.Helper()
+	now := "2026-01-02T03:04:05Z"
 
 	_, err := db.ExecContext(context.Background(), `
-		INSERT INTO book_lists (list_id, book_id)
-		VALUES (?, ?)
-	`, listID, bookID)
+		INSERT INTO book_lists (id, list_id, book_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+	`, uuid.NewString(), listID, bookID, now, now)
 	if err != nil {
 		t.Fatal(err)
 	}

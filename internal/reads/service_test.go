@@ -7,6 +7,7 @@ import (
 
 	"bakku.dev/bookist/internal/reads"
 	"bakku.dev/bookist/internal/testsupport"
+	"github.com/google/uuid"
 )
 
 // ── Create ────────────────────────────────────────────────────────────────────
@@ -92,8 +93,9 @@ func TestServiceCreateRejectsInvalidInput(t *testing.T) {
 func TestServiceListByBookIDReturnsReads(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	readID := uuid.NewString()
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
-		ID: "read-1", BookID: bookID, StartedAt: new("2026-01-01"),
+		ID: readID, BookID: bookID, StartedAt: new("2026-01-01"),
 		FinishedAt: new("2026-01-03"), Rating: new(4.5), Notes: new("Excellent"),
 		CreatedAt: "2026-01-04T00:00:00Z",
 	})
@@ -106,7 +108,7 @@ func TestServiceListByBookIDReturnsReads(t *testing.T) {
 	if len(listed) != 1 {
 		t.Fatalf("expected 1 read, got %d", len(listed))
 	}
-	if listed[0].ID != "read-1" || listed[0].Rating == nil || *listed[0].Rating != 4.5 {
+	if listed[0].ID != readID || listed[0].Rating == nil || *listed[0].Rating != 4.5 {
 		t.Fatalf("unexpected read: %#v", listed[0])
 	}
 }

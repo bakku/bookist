@@ -28,7 +28,7 @@ func TestBooksListTableFormats(t *testing.T) {
 		format   string
 		expected string
 	}{
-		{name: "default TSV", expected: "id-1\tDune\t9780441172719\nid-2\tKindred\t\n"},
+		{name: "default pretty", expected: "ID    TITLE    ISBN\nid-1  Dune     9780441172719\nid-2  Kindred\n"},
 		{name: "explicit TSV", format: "tsv", expected: "id-1\tDune\t9780441172719\nid-2\tKindred\t\n"},
 		{name: "pretty", format: "pretty", expected: "ID    TITLE    ISBN\nid-1  Dune     9780441172719\nid-2  Kindred\n"},
 	}
@@ -242,7 +242,7 @@ func TestBooksAddWithAuthorNameExistsLinksAuthor(t *testing.T) {
 	defer server.Close()
 
 	var stdout, stderr strings.Builder
-	exitCode := cli.Run([]string{"books", "add", "--title", "My Book", "--author", "Existing Author", "--server", server.URL}, &stdout, &stderr)
+	exitCode := cli.Run([]string{"books", "add", "--title", "My Book", "--author", "existing author", "--server", server.URL}, &stdout, &stderr)
 
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr.String())
@@ -338,14 +338,17 @@ func TestBooksAddWithAuthorUUIDExistsLinksAuthor(t *testing.T) {
 	}
 }
 
-func TestBooksAddWithAuthorUUIDNotFoundExitsNonZero(t *testing.T) {
+func TestBooksAddPassesAuthorUUIDThroughWithoutLookup(t *testing.T) {
+	var posted books.CreateBookRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/authors":
-			json.NewEncoder(w).Encode([]authors.Author{})
+			t.Fatal("unexpected author lookup")
 
 		case "/api/books":
-			t.Fatal("unexpected POST /api/books")
+			_ = json.NewDecoder(r.Body).Decode(&posted)
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(books.Book{ID: "book-id", Title: posted.Title})
 		}
 	}))
 	defer server.Close()
@@ -353,10 +356,10 @@ func TestBooksAddWithAuthorUUIDNotFoundExitsNonZero(t *testing.T) {
 	var stdout, stderr strings.Builder
 	exitCode := cli.Run([]string{"books", "add", "--title", "My Book", "--author", "550e8400-e29b-41d4-a716-446655440000", "--server", server.URL}, &stdout, &stderr)
 
-	if exitCode == 0 {
-		t.Fatalf("expected non-zero exit code, got 0")
+	if exitCode != 0 {
+		t.Fatalf("expected success, got %d: %s", exitCode, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "author not found") {
-		t.Fatalf("expected stderr to contain 'author not found', got %q", stderr.String())
+	if len(posted.AuthorIDs) != 1 || posted.AuthorIDs[0] != "550e8400-e29b-41d4-a716-446655440000" {
+		t.Fatalf("expected UUID to pass through, got %#v", posted.AuthorIDs)
 	}
 }

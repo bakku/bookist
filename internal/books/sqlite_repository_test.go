@@ -226,6 +226,9 @@ func TestSQLiteRepositoryListByListIDReturnsBooksInList(t *testing.T) {
 	bookID2 := testsupport.InsertBookRow(t, db, "Foundation", nil)
 	testsupport.InsertBookListRow(t, db, listID, bookID1)
 	testsupport.InsertBookListRow(t, db, listID, bookID2)
+	if _, err := db.Exec(`UPDATE book_lists SET updated_at = '2026-01-03T00:00:00Z' WHERE book_id = ?`, bookID1); err != nil {
+		t.Fatal(err)
+	}
 
 	bookList, err := repository.ListByListID(ctx, listID)
 	if err != nil {

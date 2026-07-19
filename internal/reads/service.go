@@ -5,7 +5,8 @@ import (
 	"errors"
 	"math"
 	"strings"
-	"time"
+
+	"bakku.dev/bookist/internal/validation"
 )
 
 var ErrBookNotFound = errors.New("book not found")
@@ -76,7 +77,7 @@ func normalizeDate(value *string, invalidError error) (*string, error) {
 	if date == "" {
 		return nil, nil
 	}
-	if _, err := time.Parse(time.DateOnly, date); err != nil {
+	if !validation.IsCalendarDate(date) {
 		return nil, invalidError
 	}
 

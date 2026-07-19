@@ -40,8 +40,17 @@ func (s *Server) handleAPICreateBook(w http.ResponseWriter, r *http.Request) {
 func writeCreateBookError(w http.ResponseWriter, err error) {
 	if errors.Is(err, books.ErrTitleRequired) ||
 		errors.Is(err, books.ErrAuthorNotFound) ||
-		errors.Is(err, books.ErrInvalidFormat) {
+		errors.Is(err, books.ErrInvalidFormat) ||
+		errors.Is(err, books.ErrInvalidPurchasedAt) ||
+		errors.Is(err, books.ErrInvalidPages) ||
+		errors.Is(err, books.ErrInvalidPublishedYear) ||
+		errors.Is(err, books.ErrInvalidPublishedMonth) ||
+		errors.Is(err, books.ErrInvalidPublishedDay) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if errors.Is(err, books.ErrTitleConflict) {
+		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}
 

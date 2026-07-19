@@ -182,11 +182,12 @@ func AssertBookCount(t testing.TB, db *sql.DB, want int) {
 
 func InsertBookAuthorRow(t testing.TB, db *sql.DB, bookID string, authorID string) {
 	t.Helper()
+	now := "2026-01-02T03:04:05Z"
 
 	_, err := db.ExecContext(context.Background(), `
-		INSERT INTO book_authors (book_id, author_id)
-		VALUES (?, ?)
-	`, bookID, authorID)
+		INSERT INTO book_authors (id, book_id, author_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+	`, uuid.NewString(), bookID, authorID, now, now)
 	if err != nil {
 		t.Fatal(err)
 	}

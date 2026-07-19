@@ -114,7 +114,7 @@ func runAuthorsList(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("authors list", flag.ContinueOnError)
 
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
-	formatValue := flags.String("format", string(outputFormatTSV), "Output format (tsv|pretty|json)")
+	formatValue := flags.String("format", string(outputFormatPretty), "Output format (tsv|pretty|json)")
 
 	help := commandHelp{
 		name:        "bookist authors list",

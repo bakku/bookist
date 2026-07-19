@@ -64,6 +64,19 @@ func TestServiceCreateConvertsBlankDescriptionToNil(t *testing.T) {
 	}
 }
 
+func TestServiceCreateRejectsCaseInsensitiveDuplicate(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	service := lists.NewService(lists.NewSQLiteRepository(db))
+
+	if _, err := service.Create(context.Background(), lists.CreateListRequest{Name: "Nightstand"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Create(context.Background(), lists.CreateListRequest{Name: "NIGHTSTAND"}); !errors.Is(err, lists.ErrNameConflict) {
+		t.Fatalf("expected ErrNameConflict, got %v", err)
+	}
+	testsupport.AssertListCount(t, db, 1)
+}
+
 // ── List ──────────────────────────────────────────────────────────────────────
 
 func TestServiceListDelegates(t *testing.T) {
