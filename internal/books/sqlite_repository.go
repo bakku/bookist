@@ -3,7 +3,6 @@ package books
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
@@ -20,6 +19,21 @@ func NewSQLiteRepository(db *sql.DB) *SQLiteRepository {
 
 func (r *SQLiteRepository) List(ctx context.Context) ([]Book, error) {
 	return r.Search(ctx, "")
+}
+
+func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (Book, error) {
+	book, err := scanBook(r.db.QueryRowContext(ctx, `
+		SELECT id, title, isbn, language, publisher, edition, format,
+		       purchased_at, purchase_price, pages, notes, summary, series_name, series_position,
+		       location, condition, acquisition_source, published_year,
+		       published_month, published_day, cover_image_key, created_at, updated_at
+		FROM books
+		WHERE id = ?
+	`, id))
+	if err == sql.ErrNoRows {
+		return Book{}, ErrBookNotFound
+	}
+	return book, err
 }
 
 func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]Book, error) {
@@ -243,19 +257,19 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 	return book, nil
 }
 
-func (r *SQLiteRepository) Delete(ctx context.Context, id int64) (*string, error) {
-	var coverImageKey sql.NullString
-	err := r.db.QueryRowContext(ctx, `DELETE FROM books WHERE id = ? RETURNING cover_image_key`, id).Scan(&coverImageKey)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrBookNotFound
-	}
+func (r *SQLiteRepository) Delete(ctx context.Context, id int64) error {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM books WHERE id = ?`, id)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if coverImageKey.Valid {
-		return &coverImageKey.String, nil
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
 	}
-	return nil, nil
+	if rowsAffected == 0 {
+		return ErrBookNotFound
+	}
+	return nil
 }
 
 type bookScanner interface {

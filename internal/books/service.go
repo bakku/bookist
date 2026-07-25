@@ -17,8 +17,9 @@ type Repository interface {
 	Search(ctx context.Context, query string) ([]Book, error)
 	ListByListID(ctx context.Context, listID int64) ([]Book, error)
 	SearchByListID(ctx context.Context, listID int64, query string) ([]Book, error)
+	GetByID(ctx context.Context, id int64) (Book, error)
 	Create(ctx context.Context, input CreateBookRequest) (Book, error)
-	Delete(ctx context.Context, id int64) (*string, error)
+	Delete(ctx context.Context, id int64) error
 }
 
 type Service struct {
@@ -57,12 +58,15 @@ func (s *Service) SearchByListID(ctx context.Context, listID int64, query string
 }
 
 func (s *Service) Delete(ctx context.Context, id int64) error {
-	coverKey, err := s.repository.Delete(ctx, id)
+	book, err := s.repository.GetByID(ctx, id)
 	if err != nil {
 		return err
 	}
-	if coverKey != nil {
-		if err := s.coverStore.Delete(*coverKey); err != nil {
+	if err := s.repository.Delete(ctx, id); err != nil {
+		return err
+	}
+	if book.CoverImageKey != nil {
+		if err := s.coverStore.Delete(*book.CoverImageKey); err != nil {
 			return fmt.Errorf("delete cover: %w", err)
 		}
 	}

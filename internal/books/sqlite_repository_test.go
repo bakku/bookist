@@ -143,13 +143,43 @@ func TestSQLiteRepositoryCreateWithNoAuthorIDsPersistsBookOnly(t *testing.T) {
 	testsupport.AssertBookAuthors(t, db, created.ID)
 }
 
+// ── GetByID ───────────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryGetByIDReturnsPersistedBook(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	coverImageKey := "0123456789abcdef0123456789abcdef.png"
+	created, err := repository.Create(context.Background(), books.CreateBookRequest{
+		Title: "Dune", CoverImageKey: &coverImageKey,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := repository.GetByID(context.Background(), created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != created.ID || got.Title != "Dune" || got.CoverImageKey == nil || *got.CoverImageKey != coverImageKey {
+		t.Fatalf("unexpected book: %#v", got)
+	}
+}
+
+func TestSQLiteRepositoryGetByIDReturnsErrBookNotFound(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	_, err := books.NewSQLiteRepository(db).GetByID(context.Background(), 999999)
+	if !errors.Is(err, books.ErrBookNotFound) {
+		t.Fatalf("expected ErrBookNotFound, got %v", err)
+	}
+}
+
 // ── Delete ────────────────────────────────────────────────────────────────────
 
 func TestSQLiteRepositoryDeleteReturnsErrBookNotFoundForUnknownID(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	repository := books.NewSQLiteRepository(db)
 
-	_, err := repository.Delete(context.Background(), 999999)
+	err := repository.Delete(context.Background(), 999999)
 	if !errors.Is(err, books.ErrBookNotFound) {
 		t.Fatalf("expected ErrBookNotFound, got %v", err)
 	}
@@ -165,7 +195,7 @@ func TestSQLiteRepositoryDeleteCascadesBookRelationships(t *testing.T) {
 	testsupport.InsertBookListRow(t, db, listID, bookID)
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{ID: 1, BookID: bookID, CreatedAt: "2026-01-01T00:00:00Z"})
 
-	if _, err := repository.Delete(context.Background(), bookID); err != nil {
+	if err := repository.Delete(context.Background(), bookID); err != nil {
 		t.Fatal(err)
 	}
 
