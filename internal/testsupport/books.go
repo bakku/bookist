@@ -277,3 +277,8 @@ func AssertBookAuthors(t testing.TB, db *sql.DB, bookID int64, wantAuthorIDs ...
 		}
 	}
 }
+
+func AssertBookHasNoAuthors(t testing.TB, db *sql.DB, bookID int64) {
+	t.Helper()
+	AssertBookAuthors(t, db, bookID)
+}

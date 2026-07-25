@@ -78,6 +78,23 @@ func (r *SQLiteRepository) ListByBookID(ctx context.Context, bookID int64) ([]Re
 	return result, nil
 }
 
+func (r *SQLiteRepository) Delete(ctx context.Context, id int64) error {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM reads WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrReadNotFound
+	}
+
+	return nil
+}
+
 type readScanner interface {
 	Scan(dest ...any) error
 }

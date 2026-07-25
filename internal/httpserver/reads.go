@@ -54,6 +54,26 @@ func (s *Server) handleAPICreateRead(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, result)
 }
 
+func (s *Server) handleAPIDeleteRead(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid read ID", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.reads.Delete(r.Context(), id); err != nil {
+		if errors.Is(err, reads.ErrReadNotFound) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+
+		http.Error(w, "failed to delete read", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func writeCreateReadError(w http.ResponseWriter, err error) {
 	if errors.Is(err, reads.ErrBookNotFound) {
 		http.Error(w, err.Error(), http.StatusNotFound)

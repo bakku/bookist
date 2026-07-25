@@ -99,6 +99,23 @@ func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (List, error) 
 	return list, nil
 }
 
+func (r *SQLiteRepository) Delete(ctx context.Context, id int64) error {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM lists WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrListNotFound
+	}
+
+	return nil
+}
+
 func (r *SQLiteRepository) AddBookToList(ctx context.Context, listID, bookID int64) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := r.db.ExecContext(ctx, `
@@ -125,6 +142,47 @@ func (r *SQLiteRepository) AddBookToList(ctx context.Context, listID, bookID int
 	}
 
 	return nil
+}
+
+func (r *SQLiteRepository) RemoveBookFromList(ctx context.Context, listID, bookID int64) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	result, err := tx.ExecContext(ctx, `DELETE FROM book_lists WHERE list_id = ? AND book_id = ?`, listID, bookID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected > 0 {
+		return tx.Commit()
+	}
+
+	var listExists bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM lists WHERE id = ?)`, listID).Scan(&listExists); err != nil {
+		return err
+	}
+	if !listExists {
+		return ErrListNotFound
+	}
+
+	var bookExists bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM books WHERE id = ?)`, bookID).Scan(&bookExists); err != nil {
+		return err
+	}
+	if !bookExists {
+		return ErrBookNotFound
+	}
+
+	return ErrBookNotInList
 }
 
 type listScanner interface {

@@ -2,26 +2,11 @@ package reads
 
 import (
 	"context"
-	"errors"
 	"math"
 	"strings"
 
 	"bakku.dev/bookist/internal/validation"
 )
-
-var ErrBookNotFound = errors.New("book not found")
-var ErrInvalidStartedAt = errors.New("started_at must be a date in YYYY-MM-DD format")
-var ErrInvalidFinishedAt = errors.New("finished_at must be a date in YYYY-MM-DD format")
-var ErrInvalidAbandonedAt = errors.New("abandoned_at must be a date in YYYY-MM-DD format")
-var ErrConflictingTerminalDates = errors.New("finished_at and abandoned_at must not both be set")
-var ErrFinishedBeforeStarted = errors.New("finished_at must not be before started_at")
-var ErrAbandonedBeforeStarted = errors.New("abandoned_at must not be before started_at")
-var ErrInvalidRating = errors.New("rating must be between 1 and 5 in increments of 0.5")
-
-type Repository interface {
-	Create(ctx context.Context, bookID int64, input CreateReadRequest) (Read, error)
-	ListByBookID(ctx context.Context, bookID int64) ([]Read, error)
-}
 
 type Service struct {
 	repository Repository
@@ -82,6 +67,10 @@ func (s *Service) Create(ctx context.Context, bookID int64, input CreateReadRequ
 
 func (s *Service) ListByBookID(ctx context.Context, bookID int64) ([]Read, error) {
 	return s.repository.ListByBookID(ctx, bookID)
+}
+
+func (s *Service) Delete(ctx context.Context, id int64) error {
+	return s.repository.Delete(ctx, id)
 }
 
 func normalizeDate(value *string, invalidError error) (*string, error) {

@@ -136,3 +136,27 @@ func TestServiceListByBookIDReturnsReads(t *testing.T) {
 		t.Fatalf("unexpected read: %#v", listed[0])
 	}
 }
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+func TestServiceDeleteRemovesRead(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	readID := int64(100)
+	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
+		ID: readID, BookID: bookID, StartedAt: new("2026-01-01"),
+		CreatedAt: "2026-01-01T00:00:00Z",
+	})
+
+	if err := reads.NewService(reads.NewSQLiteRepository(db)).Delete(context.Background(), readID); err != nil {
+		t.Fatal(err)
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM reads WHERE id = ?`, readID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("expected read to be deleted, got %d rows", count)
+	}
+}

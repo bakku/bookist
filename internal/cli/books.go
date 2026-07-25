@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
 	"bakku.dev/bookist/internal/covers"
 )
@@ -32,6 +31,9 @@ func runBooks(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	case "add":
 		return runBooksAdd(args[1:], stdout, stderr)
+
+	case "rm":
+		return runBooksRM(args[1:], stdout, stderr)
 
 	case "help", "-h", "--help":
 		printBooksHelp(stdout)
@@ -52,8 +54,47 @@ func printBooksHelp(w io.Writer) {
 		commands: []helpCommand{
 			{name: "ls", description: "List books"},
 			{name: "add", description: "Add a book"},
+			{name: "rm", description: "Remove a book"},
 		},
 	}, nil)
+}
+
+func runBooksRM(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("books rm", flag.ContinueOnError)
+	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	help := commandHelp{
+		name:        "bookist books rm",
+		usage:       "bookist books rm [options] <title-or-ID>",
+		description: "Remove a book",
+	}
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
+	}
+	if flags.NArg() != 1 {
+		_, _ = fmt.Fprintln(stderr, "Error: books rm requires exactly one title or ID")
+		_, _ = fmt.Fprintln(stderr)
+		printCommandHelp(stderr, help, flags)
+		return 2
+	}
+
+	bookID, err := resolveBookID(*serverURL, flags.Arg(0))
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "%v\n", err)
+		return 1
+	}
+
+	endpoint, err := joinURL(*serverURL, "/api/books/"+strconv.FormatInt(bookID, 10))
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
+		return 2
+	}
+	if err := deleteEndpoint(endpoint); err != nil {
+		_, _ = fmt.Fprintf(stderr, "remove book: %v\n", err)
+		return 1
+	}
+
+	_, _ = fmt.Fprintf(stdout, "removed book %d\n", bookID)
+	return 0
 }
 
 func runBooksLS(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -346,7 +387,11 @@ func resolveAuthorIDs(serverURL string, values []string) ([]int64, error) {
 	}
 
 	var result []int64
-	byName := make(map[string][]authors.Author)
+	type authorResolution struct {
+		id    int64
+		found bool
+	}
+	byName := make(map[string]authorResolution)
 
 	for _, val := range values {
 		val = strings.TrimSpace(val)
@@ -363,26 +408,17 @@ func resolveAuthorIDs(serverURL string, values []string) ([]int64, error) {
 			result = append(result, id)
 		} else {
 			key := strings.ToLower(val)
-			matches, lookedUp := byName[key]
+			resolved, lookedUp := byName[key]
 			if !lookedUp {
-				existingAuthors, err := fetchAuthors(serverURL, val)
+				authorID, found, err := resolveAuthorName(serverURL, val)
 				if err != nil {
-					return nil, fmt.Errorf("fetch authors: %v", err)
+					return nil, err
 				}
-
-				for _, a := range existingAuthors {
-					if strings.EqualFold(a.Name, val) {
-						matches = append(matches, a)
-					}
-				}
-				byName[key] = matches
+				resolved = authorResolution{id: authorID, found: found}
+				byName[key] = resolved
 			}
-
-			if len(matches) > 1 {
-				return nil, fmt.Errorf("author %q exists multiple times; pass an author ID instead", val)
-			}
-			if len(matches) == 1 {
-				result = append(result, matches[0].ID)
+			if resolved.found {
+				result = append(result, resolved.id)
 			} else {
 				// Textual author references create the missing author for convenient book entry.
 				created, err := createAuthor(serverURL, val)
@@ -391,7 +427,7 @@ func resolveAuthorIDs(serverURL string, values []string) ([]int64, error) {
 				}
 
 				result = append(result, created.ID)
-				byName[key] = []authors.Author{created}
+				byName[key] = authorResolution{id: created.ID, found: true}
 			}
 		}
 	}

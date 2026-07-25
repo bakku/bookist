@@ -2,6 +2,7 @@ package lists_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 
@@ -138,6 +139,47 @@ func TestSQLiteRepositoryGetByIDReturnsErrListNotFound(t *testing.T) {
 	}
 }
 
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryDeleteRemovesListAndCascadesMemberships(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+	listID := testsupport.InsertListRow(t, db, "Want to Buy")
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	if err := repository.AddBookToList(ctx, listID, bookID); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := repository.Delete(ctx, listID); err != nil {
+		t.Fatal(err)
+	}
+
+	var listCount, membershipCount, bookCount int
+	if err := db.QueryRow(`SELECT count(*) FROM lists WHERE id = ?`, listID).Scan(&listCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM book_lists WHERE list_id = ?`, listID).Scan(&membershipCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM books WHERE id = ?`, bookID).Scan(&bookCount); err != nil {
+		t.Fatal(err)
+	}
+	if listCount != 0 || membershipCount != 0 || bookCount != 1 {
+		t.Fatalf("expected list and membership deleted but book preserved, got list=%d membership=%d book=%d", listCount, membershipCount, bookCount)
+	}
+}
+
+func TestSQLiteRepositoryDeleteReturnsErrListNotFound(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+
+	err := repository.Delete(context.Background(), 999999)
+	if !errors.Is(err, lists.ErrListNotFound) {
+		t.Fatalf("expected ErrListNotFound, got %v", err)
+	}
+}
+
 // ── AddBookToList ─────────────────────────────────────────────────────────────
 
 func TestSQLiteRepositoryAddBookToListPersistsRow(t *testing.T) {
@@ -198,5 +240,81 @@ func TestSQLiteRepositoryAddBookToListReturnsErrBookNotFound(t *testing.T) {
 	err := repository.AddBookToList(ctx, listID, 999999)
 	if !errors.Is(err, lists.ErrBookNotFound) {
 		t.Fatalf("expected ErrBookNotFound, got %v", err)
+	}
+}
+
+// ── RemoveBookFromList ────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryRemoveBookFromListRemovesExactMembershipOnly(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+	listID := testsupport.InsertListRow(t, db, "Want to Buy")
+	otherListID := testsupport.InsertListRow(t, db, "Nightstand")
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	otherBookID := testsupport.InsertBookRow(t, db, "Neuromancer", nil)
+
+	for _, membership := range [][2]int64{{listID, bookID}, {listID, otherBookID}, {otherListID, bookID}} {
+		if err := repository.AddBookToList(ctx, membership[0], membership[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := repository.RemoveBookFromList(ctx, listID, bookID); err != nil {
+		t.Fatal(err)
+	}
+
+	var removedCount, unrelatedCount int
+	if err := db.QueryRow(`SELECT count(*) FROM book_lists WHERE list_id = ? AND book_id = ?`, listID, bookID).Scan(&removedCount); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT count(*) FROM book_lists`).Scan(&unrelatedCount); err != nil {
+		t.Fatal(err)
+	}
+	if removedCount != 0 || unrelatedCount != 2 {
+		t.Fatalf("expected exact membership removed and 2 unrelated rows preserved, got removed=%d total=%d", removedCount, unrelatedCount)
+	}
+}
+
+func TestSQLiteRepositoryRemoveBookFromListClassifiesMissingRows(t *testing.T) {
+	tests := []struct {
+		name      string
+		setup     func(t *testing.T, db *sql.DB) (int64, int64)
+		wantError error
+	}{
+		{
+			name: "list takes precedence when both are missing",
+			setup: func(t *testing.T, db *sql.DB) (int64, int64) {
+				return 999998, 999999
+			},
+			wantError: lists.ErrListNotFound,
+		},
+		{
+			name: "book missing",
+			setup: func(t *testing.T, db *sql.DB) (int64, int64) {
+				return testsupport.InsertListRow(t, db, "Want to Buy"), 999999
+			},
+			wantError: lists.ErrBookNotFound,
+		},
+		{
+			name: "membership missing",
+			setup: func(t *testing.T, db *sql.DB) (int64, int64) {
+				return testsupport.InsertListRow(t, db, "Want to Buy"), testsupport.InsertBookRow(t, db, "Dune", nil)
+			},
+			wantError: lists.ErrBookNotInList,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := testsupport.OpenMigratedDB(t)
+			repository := lists.NewSQLiteRepository(db)
+			listID, bookID := tt.setup(t, db)
+
+			err := repository.RemoveBookFromList(context.Background(), listID, bookID)
+			if !errors.Is(err, tt.wantError) {
+				t.Fatalf("expected %v, got %v", tt.wantError, err)
+			}
+		})
 	}
 }

@@ -122,6 +122,53 @@ func TestSQLiteRepositoryListByBookIDReturnsBookNotFound(t *testing.T) {
 	}
 }
 
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryDeleteReturnsReadNotFound(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+
+	err := reads.NewSQLiteRepository(db).Delete(context.Background(), 999999)
+	if !errors.Is(err, reads.ErrReadNotFound) {
+		t.Fatalf("expected ErrReadNotFound, got %v", err)
+	}
+}
+
+func TestSQLiteRepositoryDeletePreservesSiblingReadAndBooks(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	otherBookID := testsupport.InsertBookRow(t, db, "Foundation", nil)
+	deletedReadID := int64(100)
+	siblingReadID := int64(101)
+	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
+		ID: deletedReadID, BookID: bookID, StartedAt: new("2026-01-01"),
+		CreatedAt: "2026-01-01T00:00:00Z",
+	})
+	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
+		ID: siblingReadID, BookID: bookID, StartedAt: new("2026-02-01"),
+		CreatedAt: "2026-02-01T00:00:00Z",
+	})
+
+	if err := reads.NewSQLiteRepository(db).Delete(context.Background(), deletedReadID); err != nil {
+		t.Fatal(err)
+	}
+
+	var siblingCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM reads WHERE id = ?`, siblingReadID).Scan(&siblingCount); err != nil {
+		t.Fatal(err)
+	}
+	if siblingCount != 1 {
+		t.Fatalf("expected sibling read to remain, got %d rows", siblingCount)
+	}
+
+	var bookCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM books WHERE id IN (?, ?)`, bookID, otherBookID).Scan(&bookCount); err != nil {
+		t.Fatal(err)
+	}
+	if bookCount != 2 {
+		t.Fatalf("expected both books to remain, got %d rows", bookCount)
+	}
+}
+
 // ── Constraints ───────────────────────────────────────────────────────────────
 
 func TestReadsTableEnforcesRatingAndDateConstraints(t *testing.T) {

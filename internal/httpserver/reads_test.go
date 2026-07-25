@@ -203,3 +203,44 @@ func TestReadAPIListReturns404ForUnknownBook(t *testing.T) {
 		t.Fatalf("expected status %d, got %d", http.StatusNotFound, resp.Code)
 	}
 }
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+func TestReadAPIDeleteLeavesBookAndOtherReads(t *testing.T) {
+	app := newTestApp(t)
+	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
+	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{ID: 100, BookID: bookID, CreatedAt: "2026-01-01T00:00:00Z"})
+	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{ID: 101, BookID: bookID, CreatedAt: "2026-01-02T00:00:00Z"})
+
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, "/api/reads/100", nil))
+
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusNoContent, resp.Code, resp.Body.String())
+	}
+	assertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM reads WHERE id = 100`)
+	assertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM reads WHERE id = 101`)
+	assertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM books WHERE id = ?`, bookID)
+}
+
+func TestReadAPIDeleteRejectsInvalidID(t *testing.T) {
+	for _, id := range []string{"not-a-number", "0", "-1"} {
+		t.Run(id, func(t *testing.T) {
+			app := newTestApp(t)
+			resp := httptest.NewRecorder()
+			app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, "/api/reads/"+id, nil))
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
+			}
+		})
+	}
+}
+
+func TestReadAPIDeleteReturns404ForUnknownRead(t *testing.T) {
+	app := newTestApp(t)
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, "/api/reads/999999", nil))
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, resp.Code, resp.Body.String())
+	}
+}

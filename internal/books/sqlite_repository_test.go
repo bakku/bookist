@@ -2,6 +2,7 @@ package books_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"bakku.dev/bookist/internal/books"
@@ -140,6 +141,85 @@ func TestSQLiteRepositoryCreateWithNoAuthorIDsPersistsBookOnly(t *testing.T) {
 
 	testsupport.AssertBookRow(t, db, created.ID, "Solo Book", nil)
 	testsupport.AssertBookAuthors(t, db, created.ID)
+}
+
+// ── GetByID ───────────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryGetByIDReturnsPersistedBook(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	coverImageKey := "0123456789abcdef0123456789abcdef.png"
+	created, err := repository.Create(context.Background(), books.CreateBookRequest{
+		Title: "Dune", CoverImageKey: &coverImageKey,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := repository.GetByID(context.Background(), created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != created.ID || got.Title != "Dune" || got.CoverImageKey == nil || *got.CoverImageKey != coverImageKey {
+		t.Fatalf("unexpected book: %#v", got)
+	}
+}
+
+func TestSQLiteRepositoryGetByIDReturnsErrBookNotFound(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	_, err := books.NewSQLiteRepository(db).GetByID(context.Background(), 999999)
+	if !errors.Is(err, books.ErrBookNotFound) {
+		t.Fatalf("expected ErrBookNotFound, got %v", err)
+	}
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryDeleteReturnsErrBookNotFoundForUnknownID(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+
+	err := repository.Delete(context.Background(), 999999)
+	if !errors.Is(err, books.ErrBookNotFound) {
+		t.Fatalf("expected ErrBookNotFound, got %v", err)
+	}
+}
+
+func TestSQLiteRepositoryDeleteCascadesBookRelationships(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	authorID := testsupport.InsertAuthorRow(t, db, "Frank Herbert")
+	listID := testsupport.InsertListRow(t, db, "Favorites")
+	testsupport.InsertBookAuthorRow(t, db, bookID, authorID)
+	testsupport.InsertBookListRow(t, db, listID, bookID)
+	testsupport.InsertReadRow(t, db, testsupport.ReadRow{ID: 1, BookID: bookID, CreatedAt: "2026-01-01T00:00:00Z"})
+
+	if err := repository.Delete(context.Background(), bookID); err != nil {
+		t.Fatal(err)
+	}
+
+	var booksCount, bookAuthorsCount, bookListsCount, readsCount, authorsCount, listsCount int
+	err := db.QueryRow(`
+		SELECT
+			(SELECT count(*) FROM books WHERE id = ?),
+			(SELECT count(*) FROM book_authors WHERE book_id = ?),
+			(SELECT count(*) FROM book_lists WHERE book_id = ?),
+			(SELECT count(*) FROM reads WHERE book_id = ?),
+			(SELECT count(*) FROM authors WHERE id = ?),
+			(SELECT count(*) FROM lists WHERE id = ?)
+	`, bookID, bookID, bookID, bookID, authorID, listID).Scan(
+		&booksCount, &bookAuthorsCount, &bookListsCount, &readsCount, &authorsCount, &listsCount,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if booksCount != 0 || bookAuthorsCount != 0 || bookListsCount != 0 || readsCount != 0 {
+		t.Fatalf("expected book and relationships deleted, got books=%d book_authors=%d book_lists=%d reads=%d", booksCount, bookAuthorsCount, bookListsCount, readsCount)
+	}
+	if authorsCount != 1 || listsCount != 1 {
+		t.Fatalf("expected author and list retained, got authors=%d lists=%d", authorsCount, listsCount)
+	}
 }
 
 // ── List ──────────────────────────────────────────────────────────────────────

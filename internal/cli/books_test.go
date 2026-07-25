@@ -591,3 +591,81 @@ func TestBooksAddRejectsInvalidAuthorIntegerIDs(t *testing.T) {
 		})
 	}
 }
+
+// ── Books Remove ──────────────────────────────────────────────────────────────
+
+func TestBooksRemoveDeletesByIDAndPrintsResult(t *testing.T) {
+	var method, path string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"books", "rm", "--server", server.URL, "12"})
+	if exitCode != 0 || stderr != "" || stdout != "removed book 12\n" {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
+	}
+	if method != http.MethodDelete || path != "/api/books/12" {
+		t.Fatalf("expected DELETE /api/books/12, got %s %s", method, path)
+	}
+}
+
+func TestBooksRemoveResolvesExactTitle(t *testing.T) {
+	var deletedPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			if r.URL.Query().Get("q") != "dUnE" {
+				t.Fatalf("unexpected query %q", r.URL.Query().Get("q"))
+			}
+			_ = json.NewEncoder(w).Encode([]books.Book{{ID: 1, Title: "Dune Messiah"}, {ID: 2, Title: "Dune"}})
+			return
+		}
+		deletedPath = r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	exitCode, _, stderr := runCLI([]string{"books", "rm", "--server", server.URL, "dUnE"})
+	if exitCode != 0 || stderr != "" || deletedPath != "/api/books/2" {
+		t.Fatalf("unexpected result: exit=%d path=%q stderr=%q", exitCode, deletedPath, stderr)
+	}
+}
+
+func TestBooksRemoveRejectsAmbiguousTitle(t *testing.T) {
+	deleteCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			deleteCount++
+		}
+		_ = json.NewEncoder(w).Encode([]books.Book{{ID: 1, Title: "Dune"}, {ID: 2, Title: "dune"}})
+	}))
+	defer server.Close()
+
+	exitCode, _, stderr := runCLI([]string{"books", "rm", "--server", server.URL, "Dune"})
+	if exitCode == 0 || !strings.Contains(stderr, `book "Dune" exists multiple times; pass a book ID instead`) {
+		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
+	}
+	if deleteCount != 0 {
+		t.Fatal("expected ambiguity to prevent DELETE")
+	}
+}
+
+func TestBooksRemoveRequiresOptionsBeforeReference(t *testing.T) {
+	exitCode, _, stderr := runCLI([]string{"books", "rm", "12", "--server", "http://example.test"})
+	if exitCode != 2 || !strings.Contains(stderr, "requires exactly one") {
+		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
+	}
+}
+
+func TestBooksRemoveRequiresNoContentResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"books", "rm", "--server", server.URL, "1"})
+	if exitCode != 1 || stdout != "" || !strings.Contains(stderr, "remove book: server returned 200 OK") {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
+	}
+}

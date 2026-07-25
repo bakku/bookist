@@ -2,6 +2,7 @@ package authors_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"bakku.dev/bookist/internal/authors"
@@ -151,4 +152,45 @@ func TestSQLiteRepositoryListByBookIDsReturnsAuthorsGroupedByBook(t *testing.T) 
 	if len(result[bookID2]) != 1 {
 		t.Fatalf("expected 1 author for book2, got %d", len(result[bookID2]))
 	}
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryDeletePersistsDeletion(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := authors.NewSQLiteRepository(db)
+	id := testsupport.InsertAuthorRow(t, db, "Jane Austen")
+
+	if err := repository.Delete(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+
+	testsupport.AssertAuthorCount(t, db, 0)
+}
+
+func TestSQLiteRepositoryDeleteReturnsErrAuthorNotFound(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := authors.NewSQLiteRepository(db)
+
+	err := repository.Delete(context.Background(), 999999)
+	if !errors.Is(err, authors.ErrAuthorNotFound) {
+		t.Fatalf("expected ErrAuthorNotFound, got %v", err)
+	}
+}
+
+func TestSQLiteRepositoryDeleteCascadesRelationshipAndPreservesBook(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := authors.NewSQLiteRepository(db)
+	bookID := testsupport.InsertBookRow(t, db, "Pride and Prejudice", nil)
+	authorID := testsupport.InsertAuthorRow(t, db, "Jane Austen")
+	testsupport.InsertBookAuthorRow(t, db, bookID, authorID)
+
+	if err := repository.Delete(ctx, authorID); err != nil {
+		t.Fatal(err)
+	}
+
+	testsupport.AssertBookHasNoAuthors(t, db, bookID)
+	testsupport.AssertBookRow(t, db, bookID, "Pride and Prejudice", nil)
 }

@@ -12,25 +12,6 @@ import (
 	"bakku.dev/bookist/internal/validation"
 )
 
-var ErrTitleRequired = errors.New("title is required")
-var ErrAuthorNotFound = errors.New("author not found")
-var ErrInvalidFormat = errors.New("format must be one of: hardback, paperback, epub")
-var ErrInvalidPurchasedAt = errors.New("purchased_at must be a date in YYYY-MM-DD format")
-var ErrInvalidPages = errors.New("pages must be at least 1")
-var ErrInvalidCondition = errors.New("condition must be one of: new, very_good, good, acceptable, poor")
-var ErrInvalidSeriesPosition = errors.New("series_position must be greater than 0")
-var ErrInvalidPublishedYear = errors.New("published_year must be at least 1")
-var ErrInvalidPublishedMonth = errors.New("published_month must be between 1 and 12 and requires published_year")
-var ErrInvalidPublishedDay = errors.New("published_day must form a valid date and requires published_year and published_month")
-
-type Repository interface {
-	List(ctx context.Context) ([]Book, error)
-	Search(ctx context.Context, query string) ([]Book, error)
-	ListByListID(ctx context.Context, listID int64) ([]Book, error)
-	SearchByListID(ctx context.Context, listID int64, query string) ([]Book, error)
-	Create(ctx context.Context, input CreateBookRequest) (Book, error)
-}
-
 type Service struct {
 	repository Repository
 	authorRepo authors.Repository
@@ -64,6 +45,22 @@ func (s *Service) ListByListID(ctx context.Context, listID int64) ([]Book, error
 func (s *Service) SearchByListID(ctx context.Context, listID int64, query string) ([]Book, error) {
 	books, err := s.repository.SearchByListID(ctx, listID, strings.TrimSpace(query))
 	return s.withAuthors(ctx, books, err)
+}
+
+func (s *Service) Delete(ctx context.Context, id int64) error {
+	book, err := s.repository.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := s.repository.Delete(ctx, id); err != nil {
+		return err
+	}
+	if book.CoverImageKey != nil {
+		if err := s.coverStore.Delete(*book.CoverImageKey); err != nil {
+			return fmt.Errorf("delete cover: %w", err)
+		}
+	}
+	return nil
 }
 
 func (s *Service) withAuthors(ctx context.Context, books []Book, err error) ([]Book, error) {

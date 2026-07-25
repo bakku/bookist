@@ -21,6 +21,21 @@ func (r *SQLiteRepository) List(ctx context.Context) ([]Book, error) {
 	return r.Search(ctx, "")
 }
 
+func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (Book, error) {
+	book, err := scanBook(r.db.QueryRowContext(ctx, `
+		SELECT id, title, isbn, language, publisher, edition, format,
+		       purchased_at, purchase_price, pages, notes, summary, series_name, series_position,
+		       location, condition, acquisition_source, published_year,
+		       published_month, published_day, cover_image_key, created_at, updated_at
+		FROM books
+		WHERE id = ?
+	`, id))
+	if err == sql.ErrNoRows {
+		return Book{}, ErrBookNotFound
+	}
+	return book, err
+}
+
 func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]Book, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, title, isbn, language, publisher, edition, format, 
@@ -240,6 +255,21 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 	book.Authors = []authors.Author{}
 
 	return book, nil
+}
+
+func (r *SQLiteRepository) Delete(ctx context.Context, id int64) error {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM books WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrBookNotFound
+	}
+	return nil
 }
 
 type bookScanner interface {

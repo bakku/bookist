@@ -140,6 +140,50 @@ func TestListAPISearchesNamesCaseInsensitively(t *testing.T) {
 	}
 }
 
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+func TestListAPIDeleteRemovesOnlyListRelationships(t *testing.T) {
+	app := newTestApp(t)
+	listID := testsupport.InsertListRow(t, app.db, "Favorites")
+	otherListID := testsupport.InsertListRow(t, app.db, "Nightstand")
+	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
+	testsupport.InsertBookListRow(t, app.db, listID, bookID)
+	testsupport.InsertBookListRow(t, app.db, otherListID, bookID)
+
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/lists/%d", listID), nil))
+
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusNoContent, resp.Code, resp.Body.String())
+	}
+	assertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM lists WHERE id = ?`, listID)
+	assertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM book_lists WHERE list_id = ?`, listID)
+	assertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM books WHERE id = ?`, bookID)
+	assertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM book_lists WHERE list_id = ? AND book_id = ?`, otherListID, bookID)
+}
+
+func TestListAPIDeleteRejectsInvalidID(t *testing.T) {
+	for _, id := range []string{"not-a-number", "0", "-1"} {
+		t.Run(id, func(t *testing.T) {
+			app := newTestApp(t)
+			resp := httptest.NewRecorder()
+			app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, "/api/lists/"+id, nil))
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
+			}
+		})
+	}
+}
+
+func TestListAPIDeleteReturns404ForUnknownList(t *testing.T) {
+	app := newTestApp(t)
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, "/api/lists/999999", nil))
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, resp.Code, resp.Body.String())
+	}
+}
+
 // ── AddBookToList ─────────────────────────────────────────────────────────────
 
 func TestListAPIAddBookToList(t *testing.T) {
@@ -231,6 +275,93 @@ func TestListAPIAddBookToListRejectsInvalidIDs(t *testing.T) {
 			app.handler.ServeHTTP(resp, req)
 			if resp.Code != http.StatusBadRequest {
 				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
+			}
+		})
+	}
+}
+
+// ── RemoveBookFromList ────────────────────────────────────────────────────────
+
+func TestListAPIRemoveBookFromListIsIsolated(t *testing.T) {
+	app := newTestApp(t)
+	listID := testsupport.InsertListRow(t, app.db, "Favorites")
+	otherListID := testsupport.InsertListRow(t, app.db, "Nightstand")
+	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
+	otherBookID := testsupport.InsertBookRow(t, app.db, "Foundation", nil)
+	testsupport.InsertBookListRow(t, app.db, listID, bookID)
+	testsupport.InsertBookListRow(t, app.db, listID, otherBookID)
+	testsupport.InsertBookListRow(t, app.db, otherListID, bookID)
+
+	path := fmt.Sprintf("/api/lists/%d/books/%d", listID, bookID)
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, path, nil))
+
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusNoContent, resp.Code, resp.Body.String())
+	}
+	assertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM book_lists WHERE list_id = ? AND book_id = ?`, listID, bookID)
+	assertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM book_lists WHERE list_id = ? AND book_id = ?`, listID, otherBookID)
+	assertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM book_lists WHERE list_id = ? AND book_id = ?`, otherListID, bookID)
+	assertSQLCount(t, app.db, 2, `SELECT COUNT(*) FROM books WHERE id IN (?, ?)`, bookID, otherBookID)
+	assertSQLCount(t, app.db, 2, `SELECT COUNT(*) FROM lists WHERE id IN (?, ?)`, listID, otherListID)
+}
+
+func TestListAPIRemoveBookRejectsInvalidIDs(t *testing.T) {
+	for _, path := range []string{
+		"/api/lists/not-a-number/books/1",
+		"/api/lists/0/books/1",
+		"/api/lists/-1/books/1",
+		"/api/lists/1/books/not-a-number",
+		"/api/lists/1/books/0",
+		"/api/lists/1/books/-1",
+	} {
+		t.Run(path, func(t *testing.T) {
+			app := newTestApp(t)
+			resp := httptest.NewRecorder()
+			app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, path, nil))
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
+			}
+		})
+	}
+}
+
+func TestListAPIRemoveBookReturns404ForMissingResourcesOrMembership(t *testing.T) {
+	tests := []struct {
+		name string
+		path func(t *testing.T, app testApp) string
+	}{
+		{
+			name: "unknown list",
+			path: func(t *testing.T, app testApp) string {
+				bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
+				return fmt.Sprintf("/api/lists/999999/books/%d", bookID)
+			},
+		},
+		{
+			name: "unknown book",
+			path: func(t *testing.T, app testApp) string {
+				listID := testsupport.InsertListRow(t, app.db, "Favorites")
+				return fmt.Sprintf("/api/lists/%d/books/999999", listID)
+			},
+		},
+		{
+			name: "absent membership",
+			path: func(t *testing.T, app testApp) string {
+				listID := testsupport.InsertListRow(t, app.db, "Favorites")
+				bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
+				return fmt.Sprintf("/api/lists/%d/books/%d", listID, bookID)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := newTestApp(t)
+			resp := httptest.NewRecorder()
+			app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, tt.path(t, app), nil))
+			if resp.Code != http.StatusNotFound {
+				t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, resp.Code, resp.Body.String())
 			}
 		})
 	}

@@ -2,19 +2,8 @@ package authors
 
 import (
 	"context"
-	"errors"
 	"strings"
 )
-
-var ErrNameRequired = errors.New("name is required")
-
-type Repository interface {
-	Create(ctx context.Context, input CreateAuthorRequest) (Author, error)
-	List(ctx context.Context) ([]Author, error)
-	Search(ctx context.Context, query string) ([]Author, error)
-	GetByIDs(ctx context.Context, ids []int64) ([]Author, error)
-	ListByBookIDs(ctx context.Context, bookIDs []int64) (map[int64][]Author, error)
-}
 
 type Service struct {
 	repository Repository
@@ -47,4 +36,8 @@ func (s *Service) GetByIDs(ctx context.Context, ids []int64) ([]Author, error) {
 
 func (s *Service) ListByBookIDs(ctx context.Context, bookIDs []int64) (map[int64][]Author, error) {
 	return s.repository.ListByBookIDs(ctx, bookIDs)
+}
+
+func (s *Service) Delete(ctx context.Context, id int64) error {
+	return s.repository.Delete(ctx, id)
 }
