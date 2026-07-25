@@ -71,3 +71,17 @@ func TestServiceSearchTrimsQuery(t *testing.T) {
 		t.Fatalf("expected only Jane Austen, got %#v", matched)
 	}
 }
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+func TestServiceDeletePersistsDeletion(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	service := authors.NewService(authors.NewSQLiteRepository(db))
+	id := testsupport.InsertAuthorRow(t, db, "Jane Austen")
+
+	if err := service.Delete(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+
+	testsupport.AssertAuthorCount(t, db, 0)
+}

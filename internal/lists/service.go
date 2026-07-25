@@ -11,6 +11,7 @@ var ErrNameConflict = errors.New("a list with this name already exists")
 var ErrListNotFound = errors.New("list not found")
 var ErrBookNotFound = errors.New("book not found")
 var ErrBookAlreadyInList = errors.New("book is already in this list")
+var ErrBookNotInList = errors.New("book is not in this list")
 
 type Repository interface {
 	Create(ctx context.Context, input CreateListRequest) (List, error)
@@ -18,7 +19,9 @@ type Repository interface {
 	Search(ctx context.Context, query string) ([]List, error)
 	NameExists(ctx context.Context, name string) (bool, error)
 	GetByID(ctx context.Context, id int64) (List, error)
+	Delete(ctx context.Context, id int64) error
 	AddBookToList(ctx context.Context, listID, bookID int64) error
+	RemoveBookFromList(ctx context.Context, listID, bookID int64) error
 }
 
 type Service struct {
@@ -66,6 +69,14 @@ func (s *Service) GetByID(ctx context.Context, id int64) (List, error) {
 	return s.repository.GetByID(ctx, id)
 }
 
+func (s *Service) Delete(ctx context.Context, id int64) error {
+	return s.repository.Delete(ctx, id)
+}
+
 func (s *Service) AddBookToList(ctx context.Context, listID, bookID int64) error {
 	return s.repository.AddBookToList(ctx, listID, bookID)
+}
+
+func (s *Service) RemoveBookFromList(ctx context.Context, listID, bookID int64) error {
+	return s.repository.RemoveBookFromList(ctx, listID, bookID)
 }

@@ -31,6 +31,9 @@ func runBooks(args []string, stdout io.Writer, stderr io.Writer) int {
 	case "add":
 		return runBooksAdd(args[1:], stdout, stderr)
 
+	case "rm":
+		return runBooksRM(args[1:], stdout, stderr)
+
 	case "help", "-h", "--help":
 		printBooksHelp(stdout)
 		return 0
@@ -50,8 +53,47 @@ func printBooksHelp(w io.Writer) {
 		commands: []helpCommand{
 			{name: "ls", description: "List books"},
 			{name: "add", description: "Add a book"},
+			{name: "rm", description: "Remove a book"},
 		},
 	}, nil)
+}
+
+func runBooksRM(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("books rm", flag.ContinueOnError)
+	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	help := commandHelp{
+		name:        "bookist books rm",
+		usage:       "bookist books rm [options] <title-or-ID>",
+		description: "Remove a book",
+	}
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
+	}
+	if flags.NArg() != 1 {
+		_, _ = fmt.Fprintln(stderr, "Error: books rm requires exactly one title or ID")
+		_, _ = fmt.Fprintln(stderr)
+		printCommandHelp(stderr, help, flags)
+		return 2
+	}
+
+	bookID, err := resolveBookID(*serverURL, flags.Arg(0))
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "%v\n", err)
+		return 1
+	}
+
+	endpoint, err := joinURL(*serverURL, "/api/books/"+strconv.FormatInt(bookID, 10))
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
+		return 2
+	}
+	if err := deleteEndpoint(endpoint); err != nil {
+		_, _ = fmt.Fprintf(stderr, "remove book: %v\n", err)
+		return 1
+	}
+
+	_, _ = fmt.Fprintf(stdout, "removed book %d\n", bookID)
+	return 0
 }
 
 func runBooksLS(args []string, stdout io.Writer, stderr io.Writer) int {

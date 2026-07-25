@@ -13,6 +13,7 @@ import (
 
 var ErrTitleRequired = errors.New("title is required")
 var ErrAuthorNotFound = errors.New("author not found")
+var ErrBookNotFound = errors.New("book not found")
 var ErrInvalidFormat = errors.New("format must be one of: hardback, paperback, epub")
 var ErrInvalidPurchasedAt = errors.New("purchased_at must be a date in YYYY-MM-DD format")
 var ErrInvalidPages = errors.New("pages must be at least 1")
@@ -28,6 +29,7 @@ type Repository interface {
 	ListByListID(ctx context.Context, listID int64) ([]Book, error)
 	SearchByListID(ctx context.Context, listID int64, query string) ([]Book, error)
 	Create(ctx context.Context, input CreateBookRequest) (Book, error)
+	Delete(ctx context.Context, id int64) error
 }
 
 type Service struct {
@@ -57,6 +59,10 @@ func (s *Service) ListByListID(ctx context.Context, listID int64) ([]Book, error
 func (s *Service) SearchByListID(ctx context.Context, listID int64, query string) ([]Book, error) {
 	books, err := s.repository.SearchByListID(ctx, listID, strings.TrimSpace(query))
 	return s.withAuthors(ctx, books, err)
+}
+
+func (s *Service) Delete(ctx context.Context, id int64) error {
+	return s.repository.Delete(ctx, id)
 }
 
 func (s *Service) withAuthors(ctx context.Context, books []Book, err error) ([]Book, error) {

@@ -129,6 +129,19 @@ func TestServiceGetByIDReturnsList(t *testing.T) {
 	}
 }
 
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+func TestServiceDeleteDelegates(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	service := lists.NewService(lists.NewSQLiteRepository(db))
+	id := testsupport.InsertListRow(t, db, "Want to Buy")
+
+	if err := service.Delete(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	testsupport.AssertListCount(t, db, 0)
+}
+
 // ── AddBookToList ─────────────────────────────────────────────────────────────
 
 func TestServiceAddBookToListDelegates(t *testing.T) {
@@ -144,4 +157,28 @@ func TestServiceAddBookToListDelegates(t *testing.T) {
 	}
 
 	testsupport.AssertBookListRow(t, db, listID, bookID)
+}
+
+// ── RemoveBookFromList ────────────────────────────────────────────────────────
+
+func TestServiceRemoveBookFromListDelegates(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	service := lists.NewService(lists.NewSQLiteRepository(db))
+	listID := testsupport.InsertListRow(t, db, "Want to Buy")
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+
+	if err := service.AddBookToList(context.Background(), listID, bookID); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.RemoveBookFromList(context.Background(), listID, bookID); err != nil {
+		t.Fatal(err)
+	}
+
+	var count int
+	if err := db.QueryRow(`SELECT count(*) FROM book_lists WHERE list_id = ? AND book_id = ?`, listID, bookID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("expected membership to be removed, got %d rows", count)
+	}
 }

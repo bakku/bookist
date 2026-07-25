@@ -3,6 +3,7 @@ package httpserver_test
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -85,5 +86,49 @@ func TestAuthorAPISearchesNamesCaseInsensitively(t *testing.T) {
 	}
 	if len(listed) != 1 || listed[0].Name != "Jane Austen" {
 		t.Fatalf("expected only Jane Austen, got %#v", listed)
+	}
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+func TestAuthorAPIDeleteRemovesOnlyAuthorRelationships(t *testing.T) {
+	app := newTestApp(t)
+	authorID := testsupport.InsertAuthorRow(t, app.db, "Frank Herbert")
+	otherAuthorID := testsupport.InsertAuthorRow(t, app.db, "Isaac Asimov")
+	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
+	testsupport.InsertBookAuthorRow(t, app.db, bookID, authorID)
+	testsupport.InsertBookAuthorRow(t, app.db, bookID, otherAuthorID)
+
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/authors/%d", authorID), nil))
+
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusNoContent, resp.Code, resp.Body.String())
+	}
+	assertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM authors WHERE id = ?`, authorID)
+	assertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM book_authors WHERE author_id = ?`, authorID)
+	assertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM books WHERE id = ?`, bookID)
+	assertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM book_authors WHERE book_id = ? AND author_id = ?`, bookID, otherAuthorID)
+}
+
+func TestAuthorAPIDeleteRejectsInvalidID(t *testing.T) {
+	for _, id := range []string{"not-a-number", "0", "-1"} {
+		t.Run(id, func(t *testing.T) {
+			app := newTestApp(t)
+			resp := httptest.NewRecorder()
+			app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, "/api/authors/"+id, nil))
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
+			}
+		})
+	}
+}
+
+func TestAuthorAPIDeleteReturns404ForUnknownAuthor(t *testing.T) {
+	app := newTestApp(t)
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, "/api/authors/999999", nil))
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, resp.Code, resp.Body.String())
 	}
 }

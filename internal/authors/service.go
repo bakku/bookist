@@ -7,6 +7,7 @@ import (
 )
 
 var ErrNameRequired = errors.New("name is required")
+var ErrAuthorNotFound = errors.New("author not found")
 
 type Repository interface {
 	Create(ctx context.Context, input CreateAuthorRequest) (Author, error)
@@ -14,6 +15,7 @@ type Repository interface {
 	Search(ctx context.Context, query string) ([]Author, error)
 	GetByIDs(ctx context.Context, ids []int64) ([]Author, error)
 	ListByBookIDs(ctx context.Context, bookIDs []int64) (map[int64][]Author, error)
+	Delete(ctx context.Context, id int64) error
 }
 
 type Service struct {
@@ -47,4 +49,8 @@ func (s *Service) GetByIDs(ctx context.Context, ids []int64) ([]Author, error) {
 
 func (s *Service) ListByBookIDs(ctx context.Context, bookIDs []int64) (map[int64][]Author, error) {
 	return s.repository.ListByBookIDs(ctx, bookIDs)
+}
+
+func (s *Service) Delete(ctx context.Context, id int64) error {
+	return s.repository.Delete(ctx, id)
 }

@@ -37,6 +37,26 @@ func (s *Server) handleAPICreateAuthor(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, author)
 }
 
+func (s *Server) handleAPIDeleteAuthor(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid author ID", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.authors.Delete(r.Context(), id); err != nil {
+		if errors.Is(err, authors.ErrAuthorNotFound) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+
+		http.Error(w, "failed to delete author", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func writeCreateAuthorError(w http.ResponseWriter, err error) {
 	if errors.Is(err, authors.ErrNameRequired) {
 		http.Error(w, err.Error(), http.StatusBadRequest)

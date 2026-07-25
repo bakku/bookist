@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"bakku.dev/bookist/internal/authors"
@@ -88,6 +89,9 @@ func runAuthors(args []string, stdout io.Writer, stderr io.Writer) int {
 	case "add":
 		return runAuthorsAdd(args[1:], stdout, stderr)
 
+	case "rm":
+		return runAuthorsRM(args[1:], stdout, stderr)
+
 	case "help", "-h", "--help":
 		printAuthorsHelp(stdout)
 		return 0
@@ -107,8 +111,78 @@ func printAuthorsHelp(w io.Writer) {
 		commands: []helpCommand{
 			{name: "ls", description: "List authors"},
 			{name: "add", description: "Add an author"},
+			{name: "rm", description: "Remove an author"},
 		},
 	}, nil)
+}
+
+func runAuthorsRM(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("authors rm", flag.ContinueOnError)
+	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	help := commandHelp{
+		name:        "bookist authors rm",
+		usage:       "bookist authors rm [options] <name-or-ID>",
+		description: "Remove an author",
+	}
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
+	}
+	if flags.NArg() != 1 {
+		_, _ = fmt.Fprintln(stderr, "Error: authors rm requires exactly one name or ID")
+		_, _ = fmt.Fprintln(stderr)
+		printCommandHelp(stderr, help, flags)
+		return 2
+	}
+
+	authorID, err := resolveAuthorID(*serverURL, flags.Arg(0))
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "%v\n", err)
+		return 1
+	}
+
+	endpoint, err := joinURL(*serverURL, "/api/authors/"+strconv.FormatInt(authorID, 10))
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
+		return 2
+	}
+	if err := deleteEndpoint(endpoint); err != nil {
+		_, _ = fmt.Fprintf(stderr, "remove author: %v\n", err)
+		return 1
+	}
+
+	_, _ = fmt.Fprintf(stdout, "removed author %d\n", authorID)
+	return 0
+}
+
+func resolveAuthorID(serverURL, value string) (int64, error) {
+	value = strings.TrimSpace(value)
+	id, isID, err := parseIDReference(value)
+	if err != nil {
+		return 0, err
+	}
+	if isID {
+		return id, nil
+	}
+
+	existing, err := fetchAuthors(serverURL, value)
+	if err != nil {
+		return 0, fmt.Errorf("fetch authors: %v", err)
+	}
+
+	var matches []authors.Author
+	for _, author := range existing {
+		if strings.EqualFold(author.Name, value) {
+			matches = append(matches, author)
+		}
+	}
+	if len(matches) > 1 {
+		return 0, fmt.Errorf("author %q exists multiple times; pass an author ID instead", value)
+	}
+	if len(matches) == 1 {
+		return matches[0].ID, nil
+	}
+
+	return 0, fmt.Errorf("author not found: %s", value)
 }
 
 func runAuthorsLS(args []string, stdout io.Writer, stderr io.Writer) int {

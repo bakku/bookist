@@ -237,6 +237,23 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 	return book, nil
 }
 
+func (r *SQLiteRepository) Delete(ctx context.Context, id int64) error {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM books WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrBookNotFound
+	}
+
+	return nil
+}
+
 type bookScanner interface {
 	Scan(dest ...any) error
 }

@@ -1,6 +1,7 @@
 package httpserver_test
 
 import (
+	"context"
 	"database/sql"
 	"net/http"
 	"testing"
@@ -12,6 +13,18 @@ import (
 	"bakku.dev/bookist/internal/reads"
 	"bakku.dev/bookist/internal/testsupport"
 )
+
+func assertSQLCount(t *testing.T, db *sql.DB, want int, query string, args ...any) {
+	t.Helper()
+
+	var got int
+	if err := db.QueryRowContext(context.Background(), query, args...).Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("expected count %d, got %d", want, got)
+	}
+}
 
 type testApp struct {
 	handler http.Handler

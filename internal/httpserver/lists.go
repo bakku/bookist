@@ -37,6 +37,26 @@ func (s *Server) handleAPICreateList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, list)
 }
 
+func (s *Server) handleAPIDeleteList(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid list ID", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.lists.Delete(r.Context(), id); err != nil {
+		if errors.Is(err, lists.ErrListNotFound) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+
+		http.Error(w, "failed to delete list", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) handleAPIListBooksInList(w http.ResponseWriter, r *http.Request) {
 	listID, err := parseID(r.PathValue("id"))
 	if err != nil {
@@ -87,6 +107,34 @@ func (s *Server) handleAPIAddBookToList(w http.ResponseWriter, r *http.Request) 
 	err = s.lists.AddBookToList(r.Context(), listID, input.BookID)
 	if err != nil {
 		writeAddBookToListError(w, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleAPIRemoveBookFromList(w http.ResponseWriter, r *http.Request) {
+	listID, err := parseID(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid list ID", http.StatusBadRequest)
+		return
+	}
+
+	bookID, err := parseID(r.PathValue("bookID"))
+	if err != nil {
+		http.Error(w, "invalid book ID", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.lists.RemoveBookFromList(r.Context(), listID, bookID); err != nil {
+		if errors.Is(err, lists.ErrListNotFound) ||
+			errors.Is(err, lists.ErrBookNotFound) ||
+			errors.Is(err, lists.ErrBookNotInList) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+
+		http.Error(w, "failed to remove book from list", http.StatusInternalServerError)
 		return
 	}
 

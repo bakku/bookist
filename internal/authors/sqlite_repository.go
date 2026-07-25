@@ -158,6 +158,23 @@ func (r *SQLiteRepository) ListByBookIDs(ctx context.Context, bookIDs []int64) (
 	return result, nil
 }
 
+func (r *SQLiteRepository) Delete(ctx context.Context, id int64) error {
+	result, err := r.db.ExecContext(ctx, `DELETE FROM authors WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrAuthorNotFound
+	}
+
+	return nil
+}
+
 type authorScanner interface {
 	Scan(dest ...any) error
 }

@@ -37,6 +37,26 @@ func (s *Server) handleAPICreateBook(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, book)
 }
 
+func (s *Server) handleAPIDeleteBook(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid book ID", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.books.Delete(r.Context(), id); err != nil {
+		if errors.Is(err, books.ErrBookNotFound) {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+
+		http.Error(w, "failed to delete book", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func writeCreateBookError(w http.ResponseWriter, err error) {
 	if errors.Is(err, books.ErrTitleRequired) ||
 		errors.Is(err, books.ErrAuthorNotFound) ||

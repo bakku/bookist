@@ -360,3 +360,53 @@ func TestBookAPISearchesTitlesCaseInsensitively(t *testing.T) {
 		t.Fatalf("expected only Dune, got %#v", listed)
 	}
 }
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+func TestBookAPIDeleteCascadesRelationshipsAndReads(t *testing.T) {
+	app := newTestApp(t)
+	authorID := testsupport.InsertAuthorRow(t, app.db, "Frank Herbert")
+	listID := testsupport.InsertListRow(t, app.db, "Favorites")
+	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
+	otherBookID := testsupport.InsertBookRow(t, app.db, "Foundation", nil)
+	testsupport.InsertBookAuthorRow(t, app.db, bookID, authorID)
+	testsupport.InsertBookListRow(t, app.db, listID, bookID)
+	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{ID: 100, BookID: bookID, CreatedAt: "2026-01-01T00:00:00Z"})
+
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/books/%d", bookID), nil)
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusNoContent || resp.Body.Len() != 0 {
+		t.Fatalf("expected status %d with empty body, got %d: %s", http.StatusNoContent, resp.Code, resp.Body.String())
+	}
+	assertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM books WHERE id = ?`, bookID)
+	assertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM book_authors WHERE book_id = ?`, bookID)
+	assertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM book_lists WHERE book_id = ?`, bookID)
+	assertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM reads WHERE book_id = ?`, bookID)
+	assertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM books WHERE id = ?`, otherBookID)
+	assertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM authors WHERE id = ?`, authorID)
+	assertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM lists WHERE id = ?`, listID)
+}
+
+func TestBookAPIDeleteRejectsInvalidID(t *testing.T) {
+	for _, id := range []string{"not-a-number", "0", "-1"} {
+		t.Run(id, func(t *testing.T) {
+			app := newTestApp(t)
+			resp := httptest.NewRecorder()
+			app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, "/api/books/"+id, nil))
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
+			}
+		})
+	}
+}
+
+func TestBookAPIDeleteReturns404ForUnknownBook(t *testing.T) {
+	app := newTestApp(t)
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, "/api/books/999999", nil))
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, resp.Code, resp.Body.String())
+	}
+}

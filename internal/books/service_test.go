@@ -391,6 +391,19 @@ func TestServiceCreateRejectsInvalidPurchasedAt(t *testing.T) {
 	testsupport.AssertBookCount(t, db, 0)
 }
 
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+func TestServiceDeleteRemovesPersistedBook(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+
+	if err := service.Delete(context.Background(), bookID); err != nil {
+		t.Fatal(err)
+	}
+
+	testsupport.AssertBookCount(t, db, 0)
+}
+
 // ── List ──────────────────────────────────────────────────────────────────────
 
 func TestServiceListHydratesAuthors(t *testing.T) {
