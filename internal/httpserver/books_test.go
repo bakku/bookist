@@ -314,6 +314,90 @@ func TestBookAPICreateRejectsInvalidDatesAndNumbers(t *testing.T) {
 	}
 }
 
+// ── Update ────────────────────────────────────────────────────────────────────
+
+func TestBookAPIUpdateAndClear(t *testing.T) {
+	app := newTestApp(t)
+	isbn := "9780441172719"
+	bookID := testsupport.InsertBookRow(t, app.db, "Dune", &isbn)
+
+	resp := patchJSON(t, app.handler, fmt.Sprintf("/api/books/%d", bookID), `{"title":" Dune Messiah ","isbn":null}`)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, resp.Code, resp.Body.String())
+	}
+	var updated books.Book
+	if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated.ID != bookID || updated.Title != "Dune Messiah" || updated.ISBN != nil {
+		t.Fatalf("unexpected response: %#v", updated)
+	}
+	testsupport.AssertBookRow(t, app.db, bookID, "Dune Messiah", nil)
+}
+
+func TestBookAPIUpdateRejectsInvalidRequests(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		path   string
+		body   string
+		status int
+	}{
+		{name: "invalid ID", path: "/api/books/nope", body: `{"title":"New"}`, status: http.StatusBadRequest},
+		{name: "empty", path: "/api/books/1", body: `{}`, status: http.StatusBadRequest},
+		{name: "unknown field", path: "/api/books/1", body: `{"unknown":true}`, status: http.StatusBadRequest},
+		{name: "second value", path: "/api/books/1", body: `{"title":"New"} {}`, status: http.StatusBadRequest},
+		{name: "blank optional", path: "/api/books/1", body: `{"publisher":" "}`, status: http.StatusBadRequest},
+		{name: "invalid pages", path: "/api/books/1", body: `{"pages":0}`, status: http.StatusBadRequest},
+		{name: "not found", path: "/api/books/999999", body: `{"title":"New"}`, status: http.StatusNotFound},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			app := newTestApp(t)
+			testsupport.InsertBookRow(t, app.db, "Dune", nil)
+			resp := patchJSON(t, app.handler, test.path, test.body)
+			if resp.Code != test.status {
+				t.Fatalf("expected status %d, got %d: %s", test.status, resp.Code, resp.Body.String())
+			}
+		})
+	}
+}
+
+func TestBookAPIUpdateRejectsInvalidCover(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		image  []byte
+		status int
+	}{
+		{name: "unsupported", image: []byte("plain text"), status: http.StatusUnsupportedMediaType},
+		{name: "too large", image: append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 10<<20)...), status: http.StatusRequestEntityTooLarge},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			app := newTestApp(t)
+			bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
+			body, err := json.Marshal(map[string]any{"cover": test.image})
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp := patchJSON(t, app.handler, fmt.Sprintf("/api/books/%d", bookID), string(body))
+			if resp.Code != test.status {
+				t.Fatalf("expected status %d, got %d: %s", test.status, resp.Code, resp.Body.String())
+			}
+			testsupport.AssertBookRow(t, app.db, bookID, "Dune", nil)
+		})
+	}
+}
+
+func TestBookAPIUpdateRequiresJSONContentType(t *testing.T) {
+	app := newTestApp(t)
+	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/books/%d", bookID), bytes.NewBufferString(`{"title":"New"}`))
+	req.Header.Set("Content-Type", "text/plain")
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusUnsupportedMediaType, resp.Code, resp.Body.String())
+	}
+}
+
 // ── List ──────────────────────────────────────────────────────────────────────
 
 func TestBookAPIList(t *testing.T) {

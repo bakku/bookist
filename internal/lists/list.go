@@ -1,6 +1,10 @@
 package lists
 
-import "time"
+import (
+	"time"
+
+	"bakku.dev/bookist/internal/optional"
+)
 
 type List struct {
 	ID          int64     `json:"id"`
@@ -13,6 +17,11 @@ type List struct {
 type CreateListRequest struct {
 	Name        string  `json:"name"`
 	Description *string `json:"description"`
+}
+
+type UpdateListRequest struct {
+	Name        optional.Value[string] `json:"name"`
+	Description optional.Value[string] `json:"description"`
 }
 
 type AddBookToListRequest struct {

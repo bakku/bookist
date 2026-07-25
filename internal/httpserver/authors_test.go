@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"bakku.dev/bookist/internal/authors"
@@ -40,6 +41,79 @@ func TestAuthorAPICreate(t *testing.T) {
 
 	testsupport.AssertAuthorCount(t, app.db, 1)
 	testsupport.AssertAuthorRow(t, app.db, created.ID, "Jane Austen")
+}
+
+// ── Update ────────────────────────────────────────────────────────────────────
+
+func TestAuthorAPIUpdate(t *testing.T) {
+	app := newTestApp(t)
+	authorID := testsupport.InsertAuthorRow(t, app.db, "Ursula Le Guin")
+
+	resp := patchJSON(t, app.handler, fmt.Sprintf("/api/authors/%d", authorID), `{"name":" Ursula K. Le Guin "}`)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, resp.Code, resp.Body.String())
+	}
+	var updated authors.Author
+	if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated.ID != authorID || updated.Name != "Ursula K. Le Guin" {
+		t.Fatalf("unexpected response: %#v", updated)
+	}
+	testsupport.AssertAuthorRow(t, app.db, authorID, "Ursula K. Le Guin")
+}
+
+func TestAuthorAPIUpdateRejectsInvalidRequests(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		path   string
+		body   string
+		status int
+	}{
+		{name: "invalid ID", path: "/api/authors/-1", body: `{"name":"New"}`, status: http.StatusBadRequest},
+		{name: "empty", path: "/api/authors/1", body: `{}`, status: http.StatusBadRequest},
+		{name: "unknown field", path: "/api/authors/1", body: `{"books":[]}`, status: http.StatusBadRequest},
+		{name: "null name", path: "/api/authors/1", body: `{"name":null}`, status: http.StatusBadRequest},
+		{name: "blank name", path: "/api/authors/1", body: `{"name":" "}`, status: http.StatusBadRequest},
+		{name: "not found", path: "/api/authors/999999", body: `{"name":"New"}`, status: http.StatusNotFound},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			app := newTestApp(t)
+			testsupport.InsertAuthorRow(t, app.db, "Original")
+			resp := patchJSON(t, app.handler, test.path, test.body)
+			if resp.Code != test.status {
+				t.Fatalf("expected status %d, got %d: %s", test.status, resp.Code, resp.Body.String())
+			}
+		})
+	}
+}
+
+func TestAuthorAPIUpdateReturns500ForUnexpectedError(t *testing.T) {
+	app := newTestApp(t)
+	authorID := testsupport.InsertAuthorRow(t, app.db, "Original")
+	if _, err := app.db.Exec(`
+		CREATE TRIGGER reject_author_update BEFORE UPDATE ON authors
+		BEGIN
+			SELECT RAISE(ABORT, 'update rejected');
+		END
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := patchJSON(t, app.handler, fmt.Sprintf("/api/authors/%d", authorID), `{"name":"New"}`)
+	if resp.Code != http.StatusInternalServerError {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusInternalServerError, resp.Code, resp.Body.String())
+	}
+	testsupport.AssertAuthorRow(t, app.db, authorID, "Original")
+}
+
+func TestAuthorAPIUpdateRejectsOversizedBody(t *testing.T) {
+	app := newTestApp(t)
+	authorID := testsupport.InsertAuthorRow(t, app.db, "Original")
+	resp := patchJSON(t, app.handler, fmt.Sprintf("/api/authors/%d", authorID), `{"name":"`+strings.Repeat("a", (1<<20)+1)+`"}`)
+	if resp.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusRequestEntityTooLarge, resp.Code, resp.Body.String())
+	}
 }
 
 // ── List ──────────────────────────────────────────────────────────────────────

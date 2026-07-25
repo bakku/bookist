@@ -11,3 +11,5 @@ var ErrConflictingTerminalDates = errors.New("finished_at and abandoned_at must 
 var ErrFinishedBeforeStarted = errors.New("finished_at must not be before started_at")
 var ErrAbandonedBeforeStarted = errors.New("abandoned_at must not be before started_at")
 var ErrInvalidRating = errors.New("rating must be between 1 and 5 in increments of 0.5")
+var ErrNoFieldsToUpdate = errors.New("no fields to update")
+var ErrBlankOptionalString = errors.New("optional string fields must not be blank; use null to clear")

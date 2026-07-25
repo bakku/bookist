@@ -38,6 +38,15 @@ type testApp struct {
 	coverDir string
 }
 
+func patchJSON(t *testing.T, handler http.Handler, path, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPatch, path, bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+	return resp
+}
+
 func newTestApp(t *testing.T) testApp {
 	t.Helper()
 

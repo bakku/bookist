@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"bakku.dev/bookist/internal/authors"
+	"bakku.dev/bookist/internal/optional"
 	"bakku.dev/bookist/internal/validation"
 )
 
@@ -305,6 +306,163 @@ func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, er
 	setCoverURL(&book)
 
 	return book, nil
+}
+
+func (s *Service) Update(ctx context.Context, id int64, input UpdateBookRequest) (Book, error) {
+	if !input.hasFields() {
+		return Book{}, ErrNoFieldsToUpdate
+	}
+
+	current, err := s.repository.GetByID(ctx, id)
+	if err != nil {
+		return Book{}, err
+	}
+
+	if input.Title.Present {
+		if input.Title.Value == nil {
+			return Book{}, ErrTitleRequired
+		}
+		*input.Title.Value = strings.TrimSpace(*input.Title.Value)
+		if *input.Title.Value == "" {
+			return Book{}, ErrTitleRequired
+		}
+	}
+	for _, value := range []*optional.Value[string]{
+		&input.ISBN, &input.Language, &input.Publisher, &input.Edition, &input.PurchasedAt,
+		&input.PurchasePrice, &input.Notes, &input.Summary, &input.SeriesName, &input.Location,
+		&input.AcquisitionSource,
+	} {
+		if value.Present && value.Value != nil {
+			*value.Value = strings.TrimSpace(*value.Value)
+			if *value.Value == "" {
+				return Book{}, ErrBlankOptionalString
+			}
+		}
+	}
+
+	if input.Format.Present && input.Format.Value != nil {
+		format := Format(strings.TrimSpace(string(*input.Format.Value)))
+		switch format {
+		case FormatHardback, FormatPaperback, FormatEpub:
+			input.Format.Value = &format
+		default:
+			return Book{}, ErrInvalidFormat
+		}
+	}
+	if input.Condition.Present && input.Condition.Value != nil {
+		condition := Condition(strings.TrimSpace(string(*input.Condition.Value)))
+		switch condition {
+		case ConditionNew, ConditionVeryGood, ConditionGood, ConditionAcceptable, ConditionPoor:
+			input.Condition.Value = &condition
+		default:
+			return Book{}, ErrInvalidCondition
+		}
+	}
+
+	finalPurchasedAt := updateValue(current.PurchasedAt, input.PurchasedAt)
+	if finalPurchasedAt != nil && !validation.IsCalendarDate(*finalPurchasedAt) {
+		return Book{}, ErrInvalidPurchasedAt
+	}
+	finalPages := updateValue(current.Pages, input.Pages)
+	if finalPages != nil && *finalPages < 1 {
+		return Book{}, ErrInvalidPages
+	}
+	finalSeriesPosition := updateValue(current.SeriesPosition, input.SeriesPosition)
+	if finalSeriesPosition != nil && (!(*finalSeriesPosition > 0) || math.IsInf(*finalSeriesPosition, 0) || math.IsNaN(*finalSeriesPosition)) {
+		return Book{}, ErrInvalidSeriesPosition
+	}
+	finalYear := updateValue(current.PublishedYear, input.PublishedYear)
+	finalMonth := updateValue(current.PublishedMonth, input.PublishedMonth)
+	finalDay := updateValue(current.PublishedDay, input.PublishedDay)
+	if finalYear != nil && *finalYear < 1 {
+		return Book{}, ErrInvalidPublishedYear
+	}
+	if finalMonth != nil && (finalYear == nil || *finalMonth < 1 || *finalMonth > 12) {
+		return Book{}, ErrInvalidPublishedMonth
+	}
+	if finalDay != nil && (finalYear == nil || finalMonth == nil || *finalDay < 1 ||
+		*finalDay > time.Date(*finalYear, time.Month(*finalMonth)+1, 0, 0, 0, 0, 0, time.UTC).Day()) {
+		return Book{}, ErrInvalidPublishedDay
+	}
+
+	if input.AuthorIDs.Present {
+		var deduped []int64
+		seen := make(map[int64]bool)
+		if input.AuthorIDs.Value != nil {
+			for _, authorID := range *input.AuthorIDs.Value {
+				if authorID <= 0 {
+					return Book{}, ErrAuthorNotFound
+				}
+				if !seen[authorID] {
+					seen[authorID] = true
+					deduped = append(deduped, authorID)
+				}
+			}
+		}
+		input.AuthorIDs.Value = &deduped
+		if len(deduped) > 0 {
+			found, err := s.authorRepo.GetByIDs(ctx, deduped)
+			if err != nil {
+				return Book{}, err
+			}
+			foundIDs := make(map[int64]bool)
+			for _, author := range found {
+				foundIDs[author.ID] = true
+			}
+			for _, authorID := range deduped {
+				if !foundIDs[authorID] {
+					return Book{}, ErrAuthorNotFound
+				}
+			}
+		}
+	}
+
+	var newCoverKey *string
+	if input.Cover.Present {
+		input.CoverImageKey.Present = true
+		if input.Cover.Value != nil {
+			key, err := s.coverStore.Save(*input.Cover.Value)
+			if err != nil {
+				return Book{}, err
+			}
+			newCoverKey = &key
+			input.CoverImageKey.Value = newCoverKey
+		}
+	}
+
+	book, priorCoverKey, err := s.repository.Update(ctx, id, input)
+	if err != nil {
+		if newCoverKey != nil {
+			if cleanupErr := s.coverStore.Delete(*newCoverKey); cleanupErr != nil {
+				return Book{}, errors.Join(err, fmt.Errorf("clean up cover: %w", cleanupErr))
+			}
+		}
+		return Book{}, err
+	}
+	if priorCoverKey != nil && (newCoverKey == nil || *priorCoverKey != *newCoverKey) {
+		if err := s.coverStore.Delete(*priorCoverKey); err != nil {
+			return Book{}, fmt.Errorf("delete old cover: %w", err)
+		}
+	}
+
+	authorsByBook, err := s.authorRepo.ListByBookIDs(ctx, []int64{id})
+	if err != nil {
+		return Book{}, err
+	}
+	if bookAuthors, ok := authorsByBook[id]; ok {
+		book.Authors = bookAuthors
+	} else {
+		book.Authors = []authors.Author{}
+	}
+	setCoverURL(&book)
+	return book, nil
+}
+
+func updateValue[T any](current *T, update optional.Value[T]) *T {
+	if update.Present {
+		return update.Value
+	}
+	return current
 }
 
 func setCoverURL(book *Book) {

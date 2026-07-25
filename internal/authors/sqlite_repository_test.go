@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"bakku.dev/bookist/internal/authors"
+	"bakku.dev/bookist/internal/optional"
 	"bakku.dev/bookist/internal/testsupport"
 )
 
@@ -25,6 +26,45 @@ func TestSQLiteRepositoryCreatePersistsAuthor(t *testing.T) {
 	}
 
 	testsupport.AssertAuthorRow(t, db, created.ID, "Jane Austen")
+}
+
+// ── Update ────────────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryUpdateReturnsFullAuthorAndPreservesCreatedAt(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := authors.NewSQLiteRepository(db)
+	id := testsupport.InsertAuthorRow(t, db, "Jane Austen")
+	name := "Octavia Butler"
+
+	updated, err := repository.Update(ctx, id, authors.UpdateAuthorRequest{
+		Name: optional.Value[string]{Present: true, Value: &name},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.ID != id || updated.Name != name {
+		t.Fatalf("unexpected updated author: %#v", updated)
+	}
+	if got := updated.CreatedAt.Format("2006-01-02T15:04:05Z07:00"); got != "2026-01-02T03:04:05Z" {
+		t.Fatalf("expected created_at to be preserved, got %q", got)
+	}
+	if !updated.UpdatedAt.After(updated.CreatedAt) {
+		t.Fatalf("expected updated_at after created_at, got %v", updated.UpdatedAt)
+	}
+}
+
+func TestSQLiteRepositoryUpdateReturnsErrAuthorNotFound(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := authors.NewSQLiteRepository(db)
+	name := "Octavia Butler"
+
+	_, err := repository.Update(context.Background(), 999999, authors.UpdateAuthorRequest{
+		Name: optional.Value[string]{Present: true, Value: &name},
+	})
+	if !errors.Is(err, authors.ErrAuthorNotFound) {
+		t.Fatalf("expected ErrAuthorNotFound, got %v", err)
+	}
 }
 
 // ── List ──────────────────────────────────────────────────────────────────────

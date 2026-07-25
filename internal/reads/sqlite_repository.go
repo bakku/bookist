@@ -40,6 +40,18 @@ func (r *SQLiteRepository) Create(ctx context.Context, bookID int64, input Creat
 	return read, nil
 }
 
+func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (Read, error) {
+	read, err := scanRead(r.db.QueryRowContext(ctx, `
+		SELECT id, book_id, started_at, finished_at, abandoned_at, rating, notes, created_at, updated_at
+		FROM reads
+		WHERE id = ?
+	`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Read{}, ErrReadNotFound
+	}
+	return read, err
+}
+
 func (r *SQLiteRepository) ListByBookID(ctx context.Context, bookID int64) ([]Read, error) {
 	var exists int
 	if err := r.db.QueryRowContext(ctx, `SELECT 1 FROM books WHERE id = ?`, bookID).Scan(&exists); err != nil {
@@ -76,6 +88,46 @@ func (r *SQLiteRepository) ListByBookID(ctx context.Context, bookID int64) ([]Re
 	}
 
 	return result, nil
+}
+
+func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateReadRequest) (Read, error) {
+	set := make([]string, 0, 6)
+	args := make([]any, 0, 7)
+	if input.StartedAt.Present {
+		set = append(set, "started_at = ?")
+		args = append(args, nullString(input.StartedAt.Value))
+	}
+	if input.FinishedAt.Present {
+		set = append(set, "finished_at = ?")
+		args = append(args, nullString(input.FinishedAt.Value))
+	}
+	if input.AbandonedAt.Present {
+		set = append(set, "abandoned_at = ?")
+		args = append(args, nullString(input.AbandonedAt.Value))
+	}
+	if input.Rating.Present {
+		set = append(set, "rating = ?")
+		args = append(args, nullFloat64(input.Rating.Value))
+	}
+	if input.Notes.Present {
+		set = append(set, "notes = ?")
+		args = append(args, nullString(input.Notes.Value))
+	}
+	if len(set) == 0 {
+		return Read{}, ErrNoFieldsToUpdate
+	}
+
+	set = append(set, "updated_at = ?")
+	args = append(args, time.Now().UTC().Format(time.RFC3339), id)
+	read, err := scanRead(r.db.QueryRowContext(ctx, `
+		UPDATE reads SET `+strings.Join(set, ", ")+`
+		WHERE id = ?
+		RETURNING id, book_id, started_at, finished_at, abandoned_at, rating, notes, created_at, updated_at
+	`, args...))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Read{}, ErrReadNotFound
+	}
+	return read, err
 }
 
 func (r *SQLiteRepository) Delete(ctx context.Context, id int64) error {

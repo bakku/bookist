@@ -1,6 +1,10 @@
 package reads
 
-import "time"
+import (
+	"time"
+
+	"bakku.dev/bookist/internal/optional"
+)
 
 type Read struct {
 	ID          int64     `json:"id"`
@@ -20,4 +24,12 @@ type CreateReadRequest struct {
 	AbandonedAt *string  `json:"abandoned_at"`
 	Rating      *float64 `json:"rating"`
 	Notes       *string  `json:"notes"`
+}
+
+type UpdateReadRequest struct {
+	StartedAt   optional.Value[string]  `json:"started_at"`
+	FinishedAt  optional.Value[string]  `json:"finished_at"`
+	AbandonedAt optional.Value[string]  `json:"abandoned_at"`
+	Rating      optional.Value[float64] `json:"rating"`
+	Notes       optional.Value[string]  `json:"notes"`
 }

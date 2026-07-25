@@ -139,6 +139,62 @@ func TestReadAPICreateRejectsInvalidValues(t *testing.T) {
 	}
 }
 
+// ── Update ────────────────────────────────────────────────────────────────────
+
+func TestReadAPIUpdateAndClear(t *testing.T) {
+	app := newTestApp(t)
+	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
+	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{
+		ID: 100, BookID: bookID, Rating: new(3.0), Notes: new("Old notes"), CreatedAt: "2026-01-01T00:00:00Z",
+	})
+
+	resp := patchJSON(t, app.handler, "/api/reads/100", `{"rating":4.5,"notes":null}`)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, resp.Code, resp.Body.String())
+	}
+	var updated map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated["rating"] != 4.5 || updated["notes"] != nil {
+		t.Fatalf("unexpected response: %#v", updated)
+	}
+	var rating sql.NullFloat64
+	var notes sql.NullString
+	if err := app.db.QueryRow(`SELECT rating, notes FROM reads WHERE id = 100`).Scan(&rating, &notes); err != nil {
+		t.Fatal(err)
+	}
+	if !rating.Valid || rating.Float64 != 4.5 || notes.Valid {
+		t.Fatalf("unexpected persisted values: rating=%#v notes=%#v", rating, notes)
+	}
+}
+
+func TestReadAPIUpdateRejectsInvalidRequests(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		path   string
+		body   string
+		status int
+	}{
+		{name: "invalid ID", path: "/api/reads/zero", body: `{"rating":4}`, status: http.StatusBadRequest},
+		{name: "empty", path: "/api/reads/100", body: `{}`, status: http.StatusBadRequest},
+		{name: "unknown field", path: "/api/reads/100", body: `{"book_id":2}`, status: http.StatusBadRequest},
+		{name: "blank optional", path: "/api/reads/100", body: `{"notes":" "}`, status: http.StatusBadRequest},
+		{name: "invalid rating", path: "/api/reads/100", body: `{"rating":4.2}`, status: http.StatusBadRequest},
+		{name: "not found", path: "/api/reads/999999", body: `{"rating":4}`, status: http.StatusNotFound},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			app := newTestApp(t)
+			bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
+			testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{ID: 100, BookID: bookID, CreatedAt: "2026-01-01T00:00:00Z"})
+			resp := patchJSON(t, app.handler, test.path, test.body)
+			if resp.Code != test.status {
+				t.Fatalf("expected status %d, got %d: %s", test.status, resp.Code, resp.Body.String())
+			}
+		})
+	}
+}
+
 // ── List ──────────────────────────────────────────────────────────────────────
 
 func TestReadAPIList(t *testing.T) {

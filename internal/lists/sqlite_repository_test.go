@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"bakku.dev/bookist/internal/lists"
+	"bakku.dev/bookist/internal/optional"
 	"bakku.dev/bookist/internal/testsupport"
 )
 
@@ -54,6 +55,54 @@ func TestSQLiteRepositoryCreateWithNilDescription(t *testing.T) {
 	}
 	if created.Description != nil {
 		t.Fatalf("expected nil description, got %q", *created.Description)
+	}
+}
+
+// ── Update ────────────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryUpdateClearsDescriptionAndPreservesOtherFields(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+	id := testsupport.InsertListRowWithDescription(t, db, "Nightstand", "Up next")
+
+	updated, err := repository.Update(ctx, id, lists.UpdateListRequest{
+		Description: optional.Value[string]{Present: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.ID != id || updated.Name != "Nightstand" || updated.Description != nil {
+		t.Fatalf("unexpected updated list: %#v", updated)
+	}
+	if got := updated.CreatedAt.Format("2006-01-02T15:04:05Z07:00"); got != "2026-01-02T03:04:05Z" {
+		t.Fatalf("expected created_at to be preserved, got %q", got)
+	}
+	if !updated.UpdatedAt.After(updated.CreatedAt) {
+		t.Fatalf("expected updated_at after created_at, got %v", updated.UpdatedAt)
+	}
+}
+
+func TestSQLiteRepositoryUpdateMapsErrors(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+	testsupport.InsertListRow(t, db, "Nightstand")
+	id := testsupport.InsertListRow(t, db, "Want to Buy")
+	duplicate := "NIGHTSTAND"
+
+	_, err := repository.Update(ctx, id, lists.UpdateListRequest{
+		Name: optional.Value[string]{Present: true, Value: &duplicate},
+	})
+	if !errors.Is(err, lists.ErrNameConflict) {
+		t.Fatalf("expected ErrNameConflict, got %v", err)
+	}
+
+	_, err = repository.Update(ctx, 999999, lists.UpdateListRequest{
+		Description: optional.Value[string]{Present: true},
+	})
+	if !errors.Is(err, lists.ErrListNotFound) {
+		t.Fatalf("expected ErrListNotFound, got %v", err)
 	}
 }
 

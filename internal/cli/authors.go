@@ -89,6 +89,9 @@ func runAuthors(args []string, stdout io.Writer, stderr io.Writer) int {
 	case "add":
 		return runAuthorsAdd(args[1:], stdout, stderr)
 
+	case "edit":
+		return runAuthorsEdit(args[1:], stdout, stderr)
+
 	case "rm":
 		return runAuthorsRM(args[1:], stdout, stderr)
 
@@ -111,9 +114,66 @@ func printAuthorsHelp(w io.Writer) {
 		commands: []helpCommand{
 			{name: "ls", description: "List authors"},
 			{name: "add", description: "Add an author"},
+			{name: "edit", description: "Edit an author"},
 			{name: "rm", description: "Remove an author"},
 		},
 	}, nil)
+}
+
+func runAuthorsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("authors edit", flag.ContinueOnError)
+	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	var name optionalStringFlag
+	var clears stringSliceFlag
+	flags.Var(&name, "name", "Author name")
+	flags.Var(&clears, "clear", "Field to clear (repeatable)")
+	help := commandHelp{name: "bookist authors edit", usage: "bookist authors edit <name-or-ID> [options]", description: "Edit an author"}
+	if len(args) == 0 {
+		_, _ = fmt.Fprintln(stderr, "Error: authors edit requires exactly one name or ID")
+		return 2
+	}
+	if args[0] == "-h" || args[0] == "--help" || args[0] == "-help" {
+		if ok, code := parseFlags(flags, args, stdout, stderr, help); !ok {
+			return code
+		}
+	}
+	target := args[0]
+	if ok, code := parseFlags(flags, args[1:], stdout, stderr, help); !ok {
+		return code
+	}
+	if flags.NArg() != 0 {
+		_, _ = fmt.Fprintln(stderr, "Error: authors edit accepts exactly one positional target before options")
+		return 2
+	}
+	changes := make(map[string]any)
+	if name.value != nil {
+		changes["name"] = *name.value
+	}
+	if err := validateClears(changes, clears, map[string]string{}); err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+	if len(changes) == 0 {
+		_, _ = fmt.Fprintln(stderr, "Error: authors edit requires at least one change")
+		return 2
+	}
+	authorID, err := resolveAuthorID(*serverURL, target)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, err)
+		return 1
+	}
+	endpoint, err := joinURL(*serverURL, "/api/authors/"+strconv.FormatInt(authorID, 10))
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
+		return 2
+	}
+	var updated authors.Author
+	if err := patchEndpoint(endpoint, changes, &updated); err != nil {
+		_, _ = fmt.Fprintf(stderr, "edit author: %v\n", err)
+		return 1
+	}
+	_, _ = fmt.Fprintf(stdout, "%d\t%s\n", updated.ID, updated.Name)
+	return 0
 }
 
 func runAuthorsRM(args []string, stdout io.Writer, stderr io.Writer) int {

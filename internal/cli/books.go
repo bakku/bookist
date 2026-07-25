@@ -32,6 +32,9 @@ func runBooks(args []string, stdout io.Writer, stderr io.Writer) int {
 	case "add":
 		return runBooksAdd(args[1:], stdout, stderr)
 
+	case "edit":
+		return runBooksEdit(args[1:], stdout, stderr)
+
 	case "rm":
 		return runBooksRM(args[1:], stdout, stderr)
 
@@ -54,9 +57,150 @@ func printBooksHelp(w io.Writer) {
 		commands: []helpCommand{
 			{name: "ls", description: "List books"},
 			{name: "add", description: "Add a book"},
+			{name: "edit", description: "Edit a book"},
 			{name: "rm", description: "Remove a book"},
 		},
 	}, nil)
+}
+
+func runBooksEdit(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("books edit", flag.ContinueOnError)
+	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	var title, cover optionalStringFlag
+	var authorsFlag, clears stringSliceFlag
+	var isbn, language, publisher, edition, format, purchasedAt, purchasePrice optionalStringFlag
+	var notes, summary, seriesName, location, condition, acquisitionSource optionalStringFlag
+	var seriesPosition optionalFloatFlag
+	var pages, publishedYear, publishedMonth, publishedDay optionalIntFlag
+	flags.Var(&title, "title", "Book title")
+	flags.Var(&authorsFlag, "author", "Author name or ID (repeatable)")
+	flags.Var(&cover, "cover", "Cover image file path or URL")
+	flags.Var(&isbn, "isbn", "Book ISBN")
+	flags.Var(&language, "language", "Book language")
+	flags.Var(&publisher, "publisher", "Book publisher")
+	flags.Var(&edition, "edition", "Book edition")
+	flags.Var(&format, "format", "Book format (hardback|paperback|epub)")
+	flags.Var(&purchasedAt, "purchased-at", "Date purchased (YYYY-MM-DD)")
+	flags.Var(&purchasePrice, "purchase-price", "Book purchase price (free-form text)")
+	flags.Var(&notes, "notes", "Personal notes")
+	flags.Var(&summary, "summary", "Book summary")
+	flags.Var(&seriesName, "series-name", "Book series name")
+	flags.Var(&seriesPosition, "series-position", "Book position in its series")
+	flags.Var(&location, "location", "Book storage location")
+	flags.Var(&condition, "condition", "Book condition (new|very_good|good|acceptable|poor)")
+	flags.Var(&acquisitionSource, "acquisition-source", "Book acquisition source")
+	flags.Var(&pages, "pages", "Number of pages")
+	flags.Var(&publishedYear, "published-year", "Publication year")
+	flags.Var(&publishedMonth, "published-month", "Publication month (1-12)")
+	flags.Var(&publishedDay, "published-day", "Publication day (1-31)")
+	flags.Var(&clears, "clear", "Field to clear (repeatable)")
+	help := commandHelp{name: "bookist books edit", usage: "bookist books edit <title-or-ID> [options]", description: "Edit a book"}
+	if len(args) == 0 {
+		_, _ = fmt.Fprintln(stderr, "Error: books edit requires exactly one title or ID")
+		return 2
+	}
+	if args[0] == "-h" || args[0] == "--help" || args[0] == "-help" {
+		if ok, code := parseFlags(flags, args, stdout, stderr, help); !ok {
+			return code
+		}
+	}
+	target := args[0]
+	if ok, code := parseFlags(flags, args[1:], stdout, stderr, help); !ok {
+		return code
+	}
+	if flags.NArg() != 0 {
+		_, _ = fmt.Fprintln(stderr, "Error: books edit accepts exactly one positional target before options")
+		return 2
+	}
+
+	changes := make(map[string]any)
+	stringFields := []struct {
+		key   string
+		value *string
+	}{
+		{"title", title.value}, {"isbn", isbn.value}, {"language", language.value}, {"publisher", publisher.value},
+		{"edition", edition.value}, {"format", format.value}, {"purchased_at", purchasedAt.value},
+		{"purchase_price", purchasePrice.value}, {"notes", notes.value}, {"summary", summary.value},
+		{"series_name", seriesName.value}, {"location", location.value}, {"condition", condition.value},
+		{"acquisition_source", acquisitionSource.value},
+	}
+	for _, field := range stringFields {
+		if field.value != nil {
+			changes[field.key] = *field.value
+		}
+	}
+	if seriesPosition.value != nil {
+		changes["series_position"] = *seriesPosition.value
+	}
+	intFields := []struct {
+		key   string
+		value *int
+	}{{"pages", pages.value}, {"published_year", publishedYear.value}, {"published_month", publishedMonth.value}, {"published_day", publishedDay.value}}
+	for _, field := range intFields {
+		if field.value != nil {
+			changes[field.key] = *field.value
+		}
+	}
+	if len(authorsFlag) > 0 {
+		changes["author_ids"] = struct{}{}
+	}
+	if cover.value != nil {
+		changes["cover"] = struct{}{}
+	}
+	clearable := map[string]string{
+		"isbn": "isbn", "authors": "author_ids", "language": "language", "publisher": "publisher", "edition": "edition",
+		"format": "format", "purchased-at": "purchased_at", "purchase-price": "purchase_price", "pages": "pages",
+		"notes": "notes", "summary": "summary", "series-name": "series_name", "series-position": "series_position",
+		"location": "location", "condition": "condition", "acquisition-source": "acquisition_source",
+		"published-year": "published_year", "published-month": "published_month", "published-day": "published_day", "cover": "cover",
+	}
+	if err := validateClears(changes, clears, clearable); err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+	if len(changes) == 0 {
+		_, _ = fmt.Fprintln(stderr, "Error: books edit requires at least one change")
+		return 2
+	}
+	for _, author := range authorsFlag {
+		if strings.TrimSpace(author) == "" {
+			_, _ = fmt.Fprintln(stderr, "Error: --author must not be blank; use --clear authors")
+			return 2
+		}
+	}
+	bookID, err := resolveBookID(*serverURL, target)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if cover.value != nil {
+		data, err := loadCover(*cover.value)
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "load cover: %v\n", err)
+			return 1
+		}
+		changes["cover"] = data
+	}
+	if len(authorsFlag) > 0 {
+		ids, err := resolveAuthorIDs(*serverURL, authorsFlag)
+		if err != nil {
+			_, _ = fmt.Fprintln(stderr, err)
+			return 1
+		}
+		changes["author_ids"] = ids
+	}
+	endpoint, err := joinURL(*serverURL, "/api/books/"+strconv.FormatInt(bookID, 10))
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
+		return 2
+	}
+	var updated books.Book
+	if err := patchEndpoint(endpoint, changes, &updated); err != nil {
+		_, _ = fmt.Fprintf(stderr, "edit book: %v\n", err)
+		return 1
+	}
+	_, _ = fmt.Fprintf(stdout, "%d\t%s\n", updated.ID, updated.Title)
+	return 0
 }
 
 func runBooksRM(args []string, stdout io.Writer, stderr io.Writer) int {

@@ -37,6 +37,26 @@ func (s *Server) handleAPICreateList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, list)
 }
 
+func (s *Server) handleAPIUpdateList(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid list ID", http.StatusBadRequest)
+		return
+	}
+
+	var input lists.UpdateListRequest
+	if !decodePatchJSON(w, r, &input, maxPatchBodySize) {
+		return
+	}
+
+	list, err := s.lists.Update(r.Context(), id, input)
+	if err != nil {
+		writeUpdateListError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
 func (s *Server) handleAPIDeleteList(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r.PathValue("id"))
 	if err != nil {
@@ -152,6 +172,24 @@ func writeCreateListError(w http.ResponseWriter, err error) {
 	}
 
 	http.Error(w, "failed to create list", http.StatusInternalServerError)
+}
+
+func writeUpdateListError(w http.ResponseWriter, err error) {
+	if errors.Is(err, lists.ErrListNotFound) {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if errors.Is(err, lists.ErrNameConflict) {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+	if errors.Is(err, lists.ErrNameRequired) ||
+		errors.Is(err, lists.ErrDescriptionRequired) ||
+		errors.Is(err, lists.ErrNoFieldsToUpdate) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	http.Error(w, "failed to update list", http.StatusInternalServerError)
 }
 
 func writeAddBookToListError(w http.ResponseWriter, err error) {
