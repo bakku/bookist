@@ -13,6 +13,8 @@ import (
 
 var pngImage = []byte("\x89PNG\r\n\x1a\ncover")
 
+// ── Save ──────────────────────────────────────────────────────────────────────
+
 func TestStoreCreatesDirectoryAndSavesImage(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "nested", "book-covers")
 	store, err := covers.NewStore(dir)
@@ -58,6 +60,8 @@ func TestStoreRejectsUnsupportedAndOversizedImages(t *testing.T) {
 	}
 }
 
+// ── Validation ────────────────────────────────────────────────────────────────
+
 func TestValidateAcceptsSupportedFormats(t *testing.T) {
 	for name, image := range map[string][]byte{
 		"JPEG": {0xff, 0xd8, 0xff, 0xe0},
@@ -71,6 +75,8 @@ func TestValidateAcceptsSupportedFormats(t *testing.T) {
 		})
 	}
 }
+
+// ── Managed Keys ──────────────────────────────────────────────────────────────
 
 func TestStoreRejectsUnmanagedKeys(t *testing.T) {
 	store, err := covers.NewStore(t.TempDir())

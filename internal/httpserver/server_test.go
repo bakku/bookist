@@ -59,6 +59,8 @@ func newTestApp(t *testing.T) testApp {
 	}
 }
 
+// ── Book Covers ───────────────────────────────────────────────────────────────
+
 func TestBookCoverRouteRejectsUnmanagedNames(t *testing.T) {
 	app := newTestApp(t)
 	req := httptest.NewRequest(http.MethodGet, "/book-covers/not-managed.png", nil)
