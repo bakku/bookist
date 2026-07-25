@@ -42,6 +42,13 @@ CREATE TABLE books (
             END
         )
     ),
+    cover_image_key TEXT NULL UNIQUE CHECK (
+        cover_image_key IS NULL OR (
+            substr(cover_image_key, 1, 32) NOT GLOB '*[^0-9a-f]*' AND
+            ((length(cover_image_key) = 36 AND substr(cover_image_key, 33) IN ('.jpg', '.png')) OR
+             (length(cover_image_key) = 37 AND substr(cover_image_key, 33) = '.webp'))
+        )
+    ),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );

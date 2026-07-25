@@ -6,7 +6,10 @@ import (
 	"net/http"
 
 	"bakku.dev/bookist/internal/books"
+	"bakku.dev/bookist/internal/covers"
 )
+
+const maxCreateBookBodySize = 15 << 20
 
 func (s *Server) handleAPIListBooks(w http.ResponseWriter, r *http.Request) {
 	bookList, err := s.books.Search(r.Context(), r.URL.Query().Get("q"))
@@ -19,11 +22,17 @@ func (s *Server) handleAPIListBooks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAPICreateBook(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxCreateBookBodySize)
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 
 	var input books.CreateBookRequest
 	if err := decoder.Decode(&input); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		http.Error(w, "invalid JSON body", http.StatusBadRequest)
 		return
 	}
@@ -49,6 +58,14 @@ func writeCreateBookError(w http.ResponseWriter, err error) {
 		errors.Is(err, books.ErrInvalidPublishedMonth) ||
 		errors.Is(err, books.ErrInvalidPublishedDay) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if errors.Is(err, covers.ErrTooLarge) {
+		http.Error(w, err.Error(), http.StatusRequestEntityTooLarge)
+		return
+	}
+	if errors.Is(err, covers.ErrUnsupportedMediaType) {
+		http.Error(w, err.Error(), http.StatusUnsupportedMediaType)
 		return
 	}
 	http.Error(w, "failed to create book", http.StatusInternalServerError)

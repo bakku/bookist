@@ -3,6 +3,7 @@ package books
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"time"
@@ -33,10 +34,16 @@ type Repository interface {
 type Service struct {
 	repository Repository
 	authorRepo authors.Repository
+	coverStore CoverStore
 }
 
-func NewService(repository Repository, authorRepo authors.Repository) *Service {
-	return &Service{repository: repository, authorRepo: authorRepo}
+type CoverStore interface {
+	Save(data []byte) (string, error)
+	Delete(key string) error
+}
+
+func NewService(repository Repository, authorRepo authors.Repository, coverStore CoverStore) *Service {
+	return &Service{repository: repository, authorRepo: authorRepo, coverStore: coverStore}
 }
 
 func (s *Service) List(ctx context.Context) ([]Book, error) {
@@ -84,6 +91,7 @@ func (s *Service) withAuthors(ctx context.Context, books []Book, err error) ([]B
 		} else {
 			books[i].Authors = []authors.Author{}
 		}
+		setCoverURL(&books[i])
 	}
 
 	return books, nil
@@ -274,8 +282,21 @@ func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, er
 		}
 	}
 
+	if input.Cover != nil {
+		key, err := s.coverStore.Save(*input.Cover)
+		if err != nil {
+			return Book{}, err
+		}
+		input.CoverImageKey = &key
+	}
+
 	book, err := s.repository.Create(ctx, input)
 	if err != nil {
+		if input.CoverImageKey != nil {
+			if cleanupErr := s.coverStore.Delete(*input.CoverImageKey); cleanupErr != nil {
+				return Book{}, errors.Join(err, fmt.Errorf("clean up cover: %w", cleanupErr))
+			}
+		}
 		return Book{}, err
 	}
 
@@ -284,6 +305,16 @@ func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, er
 	} else {
 		book.Authors = []authors.Author{}
 	}
+	setCoverURL(&book)
 
 	return book, nil
+}
+
+func setCoverURL(book *Book) {
+	if book.CoverImageKey == nil {
+		book.CoverURL = nil
+		return
+	}
+	url := "/book-covers/" + *book.CoverImageKey
+	book.CoverURL = &url
 }

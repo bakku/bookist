@@ -26,7 +26,7 @@ func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]Book, er
 		SELECT id, title, isbn, language, publisher, edition, format, 
 		    purchased_at, purchase_price, pages, notes, summary, series_name, series_position,
 		    location, condition, acquisition_source, published_year,
-		    published_month, published_day, created_at, updated_at
+		    published_month, published_day, cover_image_key, created_at, updated_at
 		FROM books
 		WHERE instr(lower(title), lower(?)) > 0
 		ORDER BY updated_at DESC, id ASC
@@ -61,7 +61,7 @@ func (r *SQLiteRepository) SearchByListID(ctx context.Context, listID int64, que
 		       b.purchased_at, b.purchase_price, b.pages, b.notes, b.summary, b.series_name,
 		       b.series_position, b.location, b.condition, b.acquisition_source,
 		       b.published_year, b.published_month, b.published_day,
-		       b.created_at, b.updated_at
+		       b.cover_image_key, b.created_at, b.updated_at
 		FROM books b
 		JOIN book_lists bl ON bl.book_id = b.id
 		WHERE bl.list_id = ? AND instr(lower(b.title), lower(?)) > 0
@@ -197,21 +197,26 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 		publishedDay = sql.NullInt64{Int64: int64(*input.PublishedDay), Valid: true}
 	}
 
+	coverImageKey := sql.NullString{}
+	if input.CoverImageKey != nil {
+		coverImageKey = sql.NullString{String: *input.CoverImageKey, Valid: true}
+	}
+
 	row := tx.QueryRowContext(ctx, `
 		INSERT INTO books (title, isbn, language, publisher, edition, format,
 		                   purchased_at, purchase_price, pages, notes, summary, series_name,
 		                   series_position, location, condition, acquisition_source,
-		                   published_year, published_month, published_day,
+		                   published_year, published_month, published_day, cover_image_key,
 		                   created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		RETURNING id, title, isbn, language, publisher, edition, format, purchased_at,
 			purchase_price,
 			pages, notes, summary, series_name, series_position, location, condition,
-			acquisition_source, published_year, published_month, published_day,
+			acquisition_source, published_year, published_month, published_day, cover_image_key,
 			created_at, updated_at
 	`, input.Title, isbn, language, publisher, edition, format, purchasedAt, purchasePrice,
 		pages, notes, summary, seriesName, seriesPosition, location, condition,
-		acquisitionSource, publishedYear, publishedMonth, publishedDay, createdAt, updatedAt)
+		acquisitionSource, publishedYear, publishedMonth, publishedDay, coverImageKey, createdAt, updatedAt)
 
 	book, err := scanBook(row)
 	if err != nil {
@@ -261,13 +266,14 @@ func scanBook(scanner bookScanner) (Book, error) {
 	var publishedYear sql.NullInt64
 	var publishedMonth sql.NullInt64
 	var publishedDay sql.NullInt64
+	var coverImageKey sql.NullString
 	var createdAt string
 	var updatedAt string
 
 	if err := scanner.Scan(&book.ID, &book.Title, &isbn, &language, &publisher, &edition,
 		&format, &purchasedAt, &purchasePrice, &pages, &notes, &summary, &seriesName, &seriesPosition,
 		&location, &condition, &acquisitionSource, &publishedYear, &publishedMonth,
-		&publishedDay, &createdAt, &updatedAt); err != nil {
+		&publishedDay, &coverImageKey, &createdAt, &updatedAt); err != nil {
 		return Book{}, err
 	}
 
@@ -347,6 +353,10 @@ func scanBook(scanner bookScanner) (Book, error) {
 	if publishedDay.Valid {
 		d := int(publishedDay.Int64)
 		book.PublishedDay = &d
+	}
+
+	if coverImageKey.Valid {
+		book.CoverImageKey = &coverImageKey.String
 	}
 
 	var err error

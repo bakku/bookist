@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"math"
+	"os"
 	"testing"
 
+	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
+	"bakku.dev/bookist/internal/covers"
 	"bakku.dev/bookist/internal/testsupport"
 )
 
@@ -34,6 +37,32 @@ func TestServiceCreateRequiresTitle(t *testing.T) {
 		t.Fatalf("expected ErrTitleRequired, got %v", err)
 	}
 	testsupport.AssertBookCount(t, db, 0)
+}
+
+func TestServiceCreateRemovesCoverWhenPersistenceFails(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	authorRepo := authors.NewSQLiteRepository(db)
+	coverDir := t.TempDir()
+	coverStore, err := covers.NewStore(coverDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := books.NewService(books.NewSQLiteRepository(db), authorRepo, coverStore)
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	cover := []byte("\x89PNG\r\n\x1a\ncover")
+	if _, err := service.Create(context.Background(), books.CreateBookRequest{Title: "Dune", Cover: &cover}); err == nil {
+		t.Fatal("expected persistence failure")
+	}
+	entries, err := os.ReadDir(coverDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("expected failed creation to clean up cover, found %d files", len(entries))
+	}
 }
 
 func TestServiceCreateRejectsUnknownAuthorIDs(t *testing.T) {
