@@ -3,6 +3,7 @@ package httpserver_test
 import (
 	"database/sql"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"bakku.dev/bookist/internal/authors"
@@ -51,5 +52,15 @@ func newTestApp(t *testing.T) testApp {
 		handler:  server.Handler(),
 		db:       db,
 		coverDir: coverDir,
+	}
+}
+
+func TestBookCoverRouteRejectsUnmanagedNames(t *testing.T) {
+	app := newTestApp(t)
+	req := httptest.NewRequest(http.MethodGet, "/book-covers/not-managed.png", nil)
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d", http.StatusNotFound, resp.Code)
 	}
 }

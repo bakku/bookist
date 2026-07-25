@@ -212,16 +212,6 @@ func TestBookCoverRouteServesManagedFile(t *testing.T) {
 	}
 }
 
-func TestBookCoverRouteRejectsUnmanagedNames(t *testing.T) {
-	app := newTestApp(t)
-	req := httptest.NewRequest(http.MethodGet, "/book-covers/not-managed.png", nil)
-	resp := httptest.NewRecorder()
-	app.handler.ServeHTTP(resp, req)
-	if resp.Code != http.StatusNotFound {
-		t.Fatalf("expected status %d, got %d", http.StatusNotFound, resp.Code)
-	}
-}
-
 func TestBookAPICreateRejectsFormBody(t *testing.T) {
 	app := newTestApp(t)
 
