@@ -8,6 +8,7 @@ import (
 const (
 	defaultAddr      = ":8080"
 	defaultDBPath    = "bookist.db"
+	defaultDataDir   = "./data"
 	defaultServerURL = "http://localhost:8080"
 )
 

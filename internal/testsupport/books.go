@@ -8,6 +8,7 @@ import (
 
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
+	"bakku.dev/bookist/internal/covers"
 )
 
 func NewBookService(t testing.TB) (*books.Service, *sql.DB) {
@@ -15,7 +16,11 @@ func NewBookService(t testing.TB) (*books.Service, *sql.DB) {
 
 	db := OpenMigratedDB(t)
 	authorRepo := authors.NewSQLiteRepository(db)
-	return books.NewService(books.NewSQLiteRepository(db), authorRepo), db
+	coverStore, err := covers.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return books.NewService(books.NewSQLiteRepository(db), authorRepo, coverStore), db
 }
 
 func InsertBookRow(t testing.TB, db *sql.DB, title string, isbn *string) int64 {
@@ -60,6 +65,7 @@ type BookRowAssertion struct {
 	PublishedYear     *int
 	PublishedMonth    *int
 	PublishedDay      *int
+	CoverImageKey     *string
 }
 
 func AssertBookRow(t testing.TB, db *sql.DB, id int64, wantTitle string, wantISBN *string) {
@@ -117,20 +123,21 @@ func AssertBookRowFields(t testing.TB, db *sql.DB, id int64, want BookRowAsserti
 	var publishedYear sql.NullInt64
 	var publishedMonth sql.NullInt64
 	var publishedDay sql.NullInt64
+	var coverImageKey sql.NullString
 	var createdAt string
 	var updatedAt string
 
 	err := db.QueryRowContext(context.Background(), `
 		SELECT title, isbn, language, publisher, edition, format, purchased_at, purchase_price,
 		    pages, notes, summary, series_name, series_position, location,
-		    condition, acquisition_source, published_year, published_month, published_day,
+		    condition, acquisition_source, published_year, published_month, published_day, cover_image_key,
 		    created_at, updated_at
 		FROM books
 		WHERE id = ?
 	`, id).Scan(&title, &isbn, &language, &publisher, &edition,
 		&format, &purchasedAt, &purchasePrice, &pages, &notes, &summary, &seriesName, &seriesPosition,
 		&location, &condition, &acquisitionSource, &publishedYear, &publishedMonth,
-		&publishedDay, &createdAt, &updatedAt)
+		&publishedDay, &coverImageKey, &createdAt, &updatedAt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,6 +164,7 @@ func AssertBookRowFields(t testing.TB, db *sql.DB, id int64, want BookRowAsserti
 	assertNullInt(t, "published_year", publishedYear, want.PublishedYear)
 	assertNullInt(t, "published_month", publishedMonth, want.PublishedMonth)
 	assertNullInt(t, "published_day", publishedDay, want.PublishedDay)
+	assertNullString(t, "cover_image_key", coverImageKey, want.CoverImageKey)
 
 	if _, err := time.Parse(time.RFC3339, createdAt); err != nil {
 		t.Fatalf("expected RFC3339 created_at, got %q", createdAt)

@@ -5,8 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"bakku.dev/bookist/internal/books"
@@ -109,6 +112,114 @@ func TestBookAPICreate(t *testing.T) {
 		PublishedMonth:    &publishedMonth,
 		PublishedDay:      &publishedDay,
 	})
+}
+
+func TestBookAPICreateWithCover(t *testing.T) {
+	app := newTestApp(t)
+	image := []byte("\x89PNG\r\n\x1a\ncover")
+	body, err := json.Marshal(books.CreateBookRequest{Title: "Dune", Cover: &image})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/books", bytes.NewReader(body))
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, resp.Code, resp.Body.String())
+	}
+
+	var created books.Book
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	if created.CoverURL == nil {
+		t.Fatal("expected cover_url")
+	}
+
+	var key string
+	if err := app.db.QueryRow(`SELECT cover_image_key FROM books WHERE id = ?`, created.ID).Scan(&key); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := *created.CoverURL, "/book-covers/"+key; got != want {
+		t.Fatalf("expected cover URL %q, got %q", want, got)
+	}
+	stored, err := os.ReadFile(filepath.Join(app.coverDir, key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(stored, image) {
+		t.Fatalf("expected stored image %v, got %v", image, stored)
+	}
+}
+
+func TestBookAPICreateRejectsInvalidCovers(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		body   func() []byte
+		status int
+	}{
+		{name: "malformed base64", body: func() []byte { return []byte(`{"title":"Dune","cover":"***"}`) }, status: http.StatusBadRequest},
+		{name: "unsupported media", body: func() []byte {
+			body, _ := json.Marshal(books.CreateBookRequest{Title: "Dune", Cover: new([]byte("plain text"))})
+			return body
+		}, status: http.StatusUnsupportedMediaType},
+		{name: "too large", body: func() []byte {
+			image := make([]byte, 10<<20+1)
+			copy(image, []byte("\x89PNG\r\n\x1a\n"))
+			body, _ := json.Marshal(books.CreateBookRequest{Title: "Dune", Cover: &image})
+			return body
+		}, status: http.StatusRequestEntityTooLarge},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			app := newTestApp(t)
+			req := httptest.NewRequest(http.MethodPost, "/api/books", bytes.NewReader(test.body()))
+			resp := httptest.NewRecorder()
+			app.handler.ServeHTTP(resp, req)
+			if resp.Code != test.status {
+				t.Fatalf("expected status %d, got %d: %s", test.status, resp.Code, resp.Body.String())
+			}
+			testsupport.AssertBookCount(t, app.db, 0)
+		})
+	}
+}
+
+// ── Cover Files ───────────────────────────────────────────────────────────────
+
+func TestBookCoverRouteServesManagedFile(t *testing.T) {
+	app := newTestApp(t)
+	key := "0123456789abcdef0123456789abcdef.png"
+	image := []byte("\x89PNG\r\n\x1a\ncover")
+	if err := os.WriteFile(filepath.Join(app.coverDir, key), image, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/book-covers/"+key, nil)
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, resp.Code)
+	}
+	if got := resp.Header().Get("Content-Type"); got != "image/png" {
+		t.Fatalf("expected image/png, got %q", got)
+	}
+	served, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(served, image) {
+		t.Fatalf("expected served bytes %v, got %v", image, served)
+	}
+}
+
+func TestBookCoverRouteRejectsUnmanagedNames(t *testing.T) {
+	app := newTestApp(t)
+	req := httptest.NewRequest(http.MethodGet, "/book-covers/not-managed.png", nil)
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d", http.StatusNotFound, resp.Code)
+	}
 }
 
 func TestBookAPICreateRejectsFormBody(t *testing.T) {
@@ -336,6 +447,33 @@ func TestBookAPIList(t *testing.T) {
 	}
 	if got.PublishedDay == nil || *got.PublishedDay != 1 {
 		t.Fatalf("expected published_day 1, got %#v", got.PublishedDay)
+	}
+}
+
+func TestBookAPIListIncludesCoverURL(t *testing.T) {
+	app := newTestApp(t)
+	now := "2026-01-02T03:04:05Z"
+	key := "0123456789abcdef0123456789abcdef.jpg"
+	if _, err := app.db.Exec(`
+		INSERT INTO books (title, cover_image_key, created_at, updated_at)
+		VALUES (?, ?, ?, ?)
+	`, "Covered", key, now, now); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/books", nil)
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, resp.Code)
+	}
+
+	var listed []books.Book
+	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].CoverURL == nil || *listed[0].CoverURL != "/book-covers/"+key {
+		t.Fatalf("expected cover URL for listed book, got %#v", listed)
 	}
 }
 

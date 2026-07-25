@@ -33,6 +33,7 @@ func TestSQLiteRepositoryCreatePersistsAllFields(t *testing.T) {
 	year := 2024
 	month := 6
 	day := 15
+	coverImageKey := "0123456789abcdef0123456789abcdef.png"
 
 	created, err := repository.Create(ctx, books.CreateBookRequest{
 		Title:             "The Go Programming Language",
@@ -54,6 +55,7 @@ func TestSQLiteRepositoryCreatePersistsAllFields(t *testing.T) {
 		PublishedYear:     &year,
 		PublishedMonth:    &month,
 		PublishedDay:      &day,
+		CoverImageKey:     &coverImageKey,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -61,6 +63,9 @@ func TestSQLiteRepositoryCreatePersistsAllFields(t *testing.T) {
 
 	if created.ID <= 0 {
 		t.Fatal("expected created book to have an ID")
+	}
+	if created.CoverImageKey == nil || *created.CoverImageKey != coverImageKey {
+		t.Fatalf("expected cover key %q, got %#v", coverImageKey, created.CoverImageKey)
 	}
 
 	f := string(format)
@@ -85,6 +90,7 @@ func TestSQLiteRepositoryCreatePersistsAllFields(t *testing.T) {
 		PublishedYear:     &year,
 		PublishedMonth:    &month,
 		PublishedDay:      &day,
+		CoverImageKey:     &coverImageKey,
 	})
 }
 

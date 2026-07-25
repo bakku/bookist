@@ -160,6 +160,22 @@ func TestInitialSchemaSupportsExtendedBookMetadata(t *testing.T) {
 	}
 }
 
+func TestInitialSchemaValidatesCoverImageKeys(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	now := "2026-01-02T03:04:05Z"
+	key := "0123456789abcdef0123456789abcdef.png"
+
+	if _, err := db.Exec(`INSERT INTO books (title, cover_image_key, created_at, updated_at) VALUES (?, ?, ?, ?)`, "Covered", key, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO books (title, cover_image_key, created_at, updated_at) VALUES (?, ?, ?, ?)`, "Duplicate", key, now, now); err == nil {
+		t.Fatal("expected duplicate cover key to violate uniqueness")
+	}
+	if _, err := db.Exec(`INSERT INTO books (title, cover_image_key, created_at, updated_at) VALUES (?, ?, ?, ?)`, "Invalid", "../cover.png", now, now); err == nil {
+		t.Fatal("expected invalid cover key to violate constraint")
+	}
+}
+
 func TestInitialSchemaEnforcesRelationshipMetadataAndUniqueness(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)

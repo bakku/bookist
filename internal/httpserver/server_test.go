@@ -7,6 +7,7 @@ import (
 
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
+	"bakku.dev/bookist/internal/covers"
 	"bakku.dev/bookist/internal/httpserver"
 	"bakku.dev/bookist/internal/lists"
 	"bakku.dev/bookist/internal/reads"
@@ -14,8 +15,9 @@ import (
 )
 
 type testApp struct {
-	handler http.Handler
-	db      *sql.DB
+	handler  http.Handler
+	db       *sql.DB
+	coverDir string
 }
 
 func newTestApp(t *testing.T) testApp {
@@ -30,18 +32,24 @@ func newTestApp(t *testing.T) testApp {
 	listService := lists.NewService(listRepo)
 
 	bookRepo := books.NewSQLiteRepository(db)
-	bookService := books.NewService(bookRepo, authorRepo)
+	coverDir := t.TempDir()
+	coverStore, err := covers.NewStore(coverDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bookService := books.NewService(bookRepo, authorRepo, coverStore)
 
 	readRepo := reads.NewSQLiteRepository(db)
 	readService := reads.NewService(readRepo)
 
-	server, err := httpserver.New(bookService, authorService, listService, readService)
+	server, err := httpserver.New(bookService, authorService, listService, readService, coverStore)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	return testApp{
-		handler: server.Handler(),
-		db:      db,
+		handler:  server.Handler(),
+		db:       db,
+		coverDir: coverDir,
 	}
 }

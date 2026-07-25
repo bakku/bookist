@@ -45,6 +45,8 @@ type Book struct {
 	PublishedYear  *int      `json:"published_year"`
 	PublishedMonth *int      `json:"published_month"`
 	PublishedDay   *int      `json:"published_day"`
+	CoverImageKey  *string   `json:"-"`
+	CoverURL       *string   `json:"cover_url"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
@@ -70,4 +72,6 @@ type CreateBookRequest struct {
 	PublishedYear     *int       `json:"published_year"`
 	PublishedMonth    *int       `json:"published_month"`
 	PublishedDay      *int       `json:"published_day"`
+	Cover             *[]byte    `json:"cover"`
+	CoverImageKey     *string    `json:"-"`
 }
