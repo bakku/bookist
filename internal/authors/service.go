@@ -2,12 +2,8 @@ package authors
 
 import (
 	"context"
-	"errors"
 	"strings"
 )
-
-var ErrNameRequired = errors.New("name is required")
-var ErrAuthorNotFound = errors.New("author not found")
 
 type Repository interface {
 	Create(ctx context.Context, input CreateAuthorRequest) (Author, error)
