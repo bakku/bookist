@@ -49,6 +49,32 @@ func TestSQLiteRepositoryListReadsPersistedAuthors(t *testing.T) {
 	}
 }
 
+// ── Search ────────────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositorySearchMatchesNamesCaseInsensitively(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := authors.NewSQLiteRepository(db)
+	id1 := testsupport.InsertAuthorRow(t, db, "Jane Austen")
+	id2 := testsupport.InsertAuthorRow(t, db, "Jane Goodall")
+	id3 := testsupport.InsertAuthorRow(t, db, "Jane Yolen")
+	testsupport.InsertAuthorRow(t, db, "Octavia Butler")
+	if _, err := db.Exec(`UPDATE authors SET updated_at = '2026-01-03T00:00:00Z' WHERE id = ?`, id3); err != nil {
+		t.Fatal(err)
+	}
+
+	matched, err := repository.Search(ctx, "jAnE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matched) != 3 {
+		t.Fatalf("expected 3 matching authors, got %#v", matched)
+	}
+	if matched[0].ID != id3 || matched[1].ID != id1 || matched[2].ID != id2 {
+		t.Fatalf("expected updated-at and ID ordering [%d %d %d], got [%d %d %d]", id3, id1, id2, matched[0].ID, matched[1].ID, matched[2].ID)
+	}
+}
+
 // ── GetByIDs ──────────────────────────────────────────────────────────────────
 
 func TestSQLiteRepositoryGetByIDsEmptyInputReturnsNil(t *testing.T) {

@@ -278,6 +278,61 @@ func TestSQLiteRepositoryListReadsPersistedBooks(t *testing.T) {
 	}
 }
 
+// ── Search ────────────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositorySearchMatchesTitlesCaseInsensitively(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	id1 := testsupport.InsertBookRow(t, db, "Dune", nil)
+	id2 := testsupport.InsertBookRow(t, db, "Dune Messiah", nil)
+	id3 := testsupport.InsertBookRow(t, db, "Children of Dune", nil)
+	testsupport.InsertBookRow(t, db, "Foundation", nil)
+	if _, err := db.Exec(`UPDATE books SET updated_at = '2026-01-03T00:00:00Z' WHERE id = ?`, id3); err != nil {
+		t.Fatal(err)
+	}
+
+	matched, err := repository.Search(ctx, "dUnE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matched) != 3 {
+		t.Fatalf("expected 3 matching books, got %#v", matched)
+	}
+	if matched[0].ID != id3 || matched[1].ID != id1 || matched[2].ID != id2 {
+		t.Fatalf("expected updated-at and ID ordering [%d %d %d], got [%d %d %d]", id3, id1, id2, matched[0].ID, matched[1].ID, matched[2].ID)
+	}
+}
+
+func TestSQLiteRepositorySearchTreatsSQLWildcardsLiterally(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	testsupport.InsertBookRow(t, db, "100% Complete", nil)
+	testsupport.InsertBookRow(t, db, "Under_score", nil)
+	testsupport.InsertBookRow(t, db, "Dune", nil)
+
+	tests := []struct {
+		query string
+		want  string
+	}{
+		{query: "%", want: "100% Complete"},
+		{query: "_", want: "Under_score"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.query, func(t *testing.T) {
+			matched, err := repository.Search(ctx, test.query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(matched) != 1 || matched[0].Title != test.want {
+				t.Fatalf("expected only %q, got %#v", test.want, matched)
+			}
+		})
+	}
+}
+
 // ── ListByListID ──────────────────────────────────────────────────────────────
 
 func TestSQLiteRepositoryListByListIDReturnsBooksInList(t *testing.T) {
@@ -356,5 +411,37 @@ func TestSQLiteRepositoryListByListIDDoesNotReturnBooksFromOtherLists(t *testing
 	}
 	if bookList[0].Title != "Dune" {
 		t.Fatalf("expected Dune, got %q", bookList[0].Title)
+	}
+}
+
+func TestSQLiteRepositorySearchByListIDFiltersWithinList(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	listID := testsupport.InsertListRow(t, db, "Nightstand")
+	otherListID := testsupport.InsertListRow(t, db, "Archive")
+	duneID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	duneMessiahID := testsupport.InsertBookRow(t, db, "Dune Messiah", nil)
+	childrenID := testsupport.InsertBookRow(t, db, "Children of Dune", nil)
+	foundationID := testsupport.InsertBookRow(t, db, "Foundation", nil)
+	otherDuneID := testsupport.InsertBookRow(t, db, "The Dune Encyclopedia", nil)
+	testsupport.InsertBookListRow(t, db, listID, duneID)
+	testsupport.InsertBookListRow(t, db, listID, duneMessiahID)
+	testsupport.InsertBookListRow(t, db, listID, childrenID)
+	testsupport.InsertBookListRow(t, db, listID, foundationID)
+	testsupport.InsertBookListRow(t, db, otherListID, otherDuneID)
+	if _, err := db.Exec(`UPDATE book_lists SET updated_at = '2026-01-03T00:00:00Z' WHERE list_id = ? AND book_id = ?`, listID, childrenID); err != nil {
+		t.Fatal(err)
+	}
+
+	matched, err := repository.SearchByListID(ctx, listID, "DUNE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matched) != 3 {
+		t.Fatalf("expected 3 matching books from Nightstand, got %#v", matched)
+	}
+	if matched[0].ID != childrenID || matched[1].ID != duneID || matched[2].ID != duneMessiahID {
+		t.Fatalf("expected relationship ordering [%d %d %d], got [%d %d %d]", childrenID, duneID, duneMessiahID, matched[0].ID, matched[1].ID, matched[2].ID)
 	}
 }

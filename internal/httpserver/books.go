@@ -9,7 +9,7 @@ import (
 )
 
 func (s *Server) handleAPIListBooks(w http.ResponseWriter, r *http.Request) {
-	bookList, err := s.books.List(r.Context())
+	bookList, err := s.books.Search(r.Context(), r.URL.Query().Get("q"))
 	if err != nil {
 		http.Error(w, "failed to list books", http.StatusInternalServerError)
 		return

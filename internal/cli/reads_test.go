@@ -23,6 +23,9 @@ func TestReadsListResolvesBookAndPrintsTableFormats(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/books":
+			if got := r.URL.Query().Get("q"); got != "Dune" {
+				t.Fatalf("expected book query %q, got %q", "Dune", got)
+			}
 			_ = json.NewEncoder(w).Encode([]books.Book{{ID: 1, Title: "Dune"}})
 		case "/api/books/1/reads":
 			_ = json.NewEncoder(w).Encode([]reads.Read{{
@@ -48,7 +51,7 @@ func TestReadsListResolvesBookAndPrintsTableFormats(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			args := []string{"reads", "list", "--book", "Dune", "--server", server.URL}
+			args := []string{"reads", "ls", "--book", "Dune", "--server", server.URL}
 			if test.format != "" {
 				args = append(args, "--format", test.format)
 			}
@@ -70,7 +73,7 @@ func TestReadsListJSONUsesFullReadRepresentation(t *testing.T) {
 
 	defer server.Close()
 
-	exitCode, stdout, stderr := runCLI([]string{"reads", "list", "--book", "1", "--server", server.URL, "--format", "json"})
+	exitCode, stdout, stderr := runCLI([]string{"reads", "ls", "--book", "1", "--server", server.URL, "--format", "json"})
 
 	if exitCode != 0 || stderr != "" {
 		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
@@ -122,7 +125,7 @@ func TestReadsAddPostsToBookEndpoint(t *testing.T) {
 // ── Reads Book Requirement ────────────────────────────────────────────────────
 
 func TestReadsCommandsRequireBook(t *testing.T) {
-	for _, command := range []string{"list", "add"} {
+	for _, command := range []string{"ls", "add"} {
 		t.Run(command, func(t *testing.T) {
 			exitCode, stdout, stderr := runCLI([]string{"reads", command})
 			if exitCode != 2 || stdout != "" || !strings.Contains(stderr, "--book is required") {

@@ -512,3 +512,44 @@ func TestServiceListReturnsPersistedBooks(t *testing.T) {
 		t.Fatalf("expected PublishedDay %d, got %#v", day, got.PublishedDay)
 	}
 }
+
+// ── Search ────────────────────────────────────────────────────────────────────
+
+func TestServiceSearchTrimsQueryAndHydratesAuthors(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+	duneID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	testsupport.InsertBookRow(t, db, "Foundation", nil)
+	authorID := testsupport.InsertAuthorRow(t, db, "Frank Herbert")
+	testsupport.InsertBookAuthorRow(t, db, duneID, authorID)
+
+	matched, err := service.Search(context.Background(), "  UNE  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matched) != 1 || matched[0].Title != "Dune" {
+		t.Fatalf("expected only Dune, got %#v", matched)
+	}
+	if len(matched[0].Authors) != 1 || matched[0].Authors[0].Name != "Frank Herbert" {
+		t.Fatalf("expected Frank Herbert on matched book, got %#v", matched[0].Authors)
+	}
+}
+
+func TestServiceSearchByListIDTrimsQueryAndHydratesAuthors(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+	listID := testsupport.InsertListRow(t, db, "Nightstand")
+	duneID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	authorID := testsupport.InsertAuthorRow(t, db, "Frank Herbert")
+	testsupport.InsertBookAuthorRow(t, db, duneID, authorID)
+	testsupport.InsertBookListRow(t, db, listID, duneID)
+
+	matched, err := service.SearchByListID(context.Background(), listID, "  dune  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matched) != 1 || matched[0].ID != duneID {
+		t.Fatalf("expected Dune, got %#v", matched)
+	}
+	if len(matched[0].Authors) != 1 || matched[0].Authors[0].Name != "Frank Herbert" {
+		t.Fatalf("expected Frank Herbert on matched book, got %#v", matched[0].Authors)
+	}
+}

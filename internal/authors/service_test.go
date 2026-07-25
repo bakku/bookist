@@ -54,3 +54,20 @@ func TestServiceListDelegates(t *testing.T) {
 		t.Fatalf("expected Jane Austen, got %q", listed[0].Name)
 	}
 }
+
+// ── Search ────────────────────────────────────────────────────────────────────
+
+func TestServiceSearchTrimsQuery(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	service := authors.NewService(authors.NewSQLiteRepository(db))
+	testsupport.InsertAuthorRow(t, db, "Jane Austen")
+	testsupport.InsertAuthorRow(t, db, "Octavia Butler")
+
+	matched, err := service.Search(context.Background(), "  AUST  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matched) != 1 || matched[0].Name != "Jane Austen" {
+		t.Fatalf("expected only Jane Austen, got %#v", matched)
+	}
+}

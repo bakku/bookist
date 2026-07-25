@@ -96,6 +96,23 @@ func TestServiceListDelegates(t *testing.T) {
 	}
 }
 
+// ── Search ────────────────────────────────────────────────────────────────────
+
+func TestServiceSearchTrimsQuery(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	service := lists.NewService(lists.NewSQLiteRepository(db))
+	testsupport.InsertListRow(t, db, "Nightstand")
+	testsupport.InsertListRow(t, db, "Want to Buy")
+
+	matched, err := service.Search(context.Background(), "  NIGHT  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matched) != 1 || matched[0].Name != "Nightstand" {
+		t.Fatalf("expected only Nightstand, got %#v", matched)
+	}
+}
+
 // ── GetByID ───────────────────────────────────────────────────────────────────
 
 func TestServiceGetByIDReturnsList(t *testing.T) {

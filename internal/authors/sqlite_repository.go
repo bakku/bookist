@@ -31,11 +31,16 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateAuthorRequest
 }
 
 func (r *SQLiteRepository) List(ctx context.Context) ([]Author, error) {
+	return r.Search(ctx, "")
+}
+
+func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]Author, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, name, created_at, updated_at
 		FROM authors
+		WHERE instr(lower(name), lower(?)) > 0
 		ORDER BY updated_at DESC, id ASC
-	`)
+	`, query)
 	if err != nil {
 		return nil, err
 	}

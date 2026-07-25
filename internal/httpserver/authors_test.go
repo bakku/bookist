@@ -65,3 +65,25 @@ func TestAuthorAPIList(t *testing.T) {
 		t.Fatalf("expected Jane Austen, got %q", listed[0].Name)
 	}
 }
+
+func TestAuthorAPISearchesNamesCaseInsensitively(t *testing.T) {
+	app := newTestApp(t)
+	testsupport.InsertAuthorRow(t, app.db, "Jane Austen")
+	testsupport.InsertAuthorRow(t, app.db, "Octavia Butler")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/authors?q=AUST", nil)
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, resp.Code)
+	}
+
+	var listed []authors.Author
+	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].Name != "Jane Austen" {
+		t.Fatalf("expected only Jane Austen, got %#v", listed)
+	}
+}
