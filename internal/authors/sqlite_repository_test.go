@@ -191,6 +191,6 @@ func TestSQLiteRepositoryDeleteCascadesRelationshipAndPreservesBook(t *testing.T
 		t.Fatal(err)
 	}
 
-	testsupport.AssertBookAuthors(t, db, bookID)
+	testsupport.AssertBookHasNoAuthors(t, db, bookID)
 	testsupport.AssertBookRow(t, db, bookID, "Pride and Prejudice", nil)
 }
