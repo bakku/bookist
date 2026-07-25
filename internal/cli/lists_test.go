@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"bakku.dev/bookist/internal/books"
 	"bakku.dev/bookist/internal/cli"
 	"bakku.dev/bookist/internal/lists"
 )
@@ -302,5 +303,89 @@ func TestListsAddBookBookNotFoundExitsNonZero(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "book not found") {
 		t.Fatalf("expected stderr to contain 'book not found', got %q", stderr.String())
+	}
+}
+
+// ── Lists Remove ──────────────────────────────────────────────────────────────
+
+func TestListsRemoveDeletesByIDAndPrintsResult(t *testing.T) {
+	var method, path string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"lists", "rm", "--server", server.URL, "12"})
+	if exitCode != 0 || stderr != "" || stdout != "removed list 12\n" {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
+	}
+	if method != http.MethodDelete || path != "/api/lists/12" {
+		t.Fatalf("expected DELETE /api/lists/12, got %s %s", method, path)
+	}
+}
+
+func TestListsRemoveResolvesExactName(t *testing.T) {
+	var deletedPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			_ = json.NewEncoder(w).Encode([]lists.List{{ID: 3, Name: "To Read Later"}, {ID: 4, Name: "To Read"}})
+			return
+		}
+		deletedPath = r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	exitCode, _, stderr := runCLI([]string{"lists", "rm", "--server", server.URL, "to READ"})
+	if exitCode != 0 || stderr != "" || deletedPath != "/api/lists/4" {
+		t.Fatalf("unexpected result: exit=%d path=%q stderr=%q", exitCode, deletedPath, stderr)
+	}
+}
+
+func TestListsRemoveRejectsAmbiguousName(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]lists.List{{ID: 1, Name: "Owned"}, {ID: 2, Name: "owned"}})
+	}))
+	defer server.Close()
+
+	exitCode, _, stderr := runCLI([]string{"lists", "rm", "--server", server.URL, "Owned"})
+	if exitCode == 0 || !strings.Contains(stderr, `list "Owned" exists multiple times; pass a list ID instead`) {
+		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
+	}
+}
+
+// ── Lists Remove-Book ─────────────────────────────────────────────────────────
+
+func TestListsRemoveBookResolvesAndDeletesRelationship(t *testing.T) {
+	var method, deletedPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/lists":
+			_ = json.NewEncoder(w).Encode([]lists.List{{ID: 4, Name: "Owned"}})
+		case "/api/books":
+			_ = json.NewEncoder(w).Encode([]books.Book{{ID: 7, Title: "Dune"}})
+		default:
+			method, deletedPath = r.Method, r.URL.Path
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"lists", "rm-book", "--server", server.URL, "--list", "Owned", "--book", "Dune"})
+	if exitCode != 0 || stderr != "" || stdout != "removed book 7 from list 4\n" {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
+	}
+	if method != http.MethodDelete || deletedPath != "/api/lists/4/books/7" {
+		t.Fatalf("expected DELETE /api/lists/4/books/7, got %s %s", method, deletedPath)
+	}
+}
+
+func TestListsRemoveBookRequiresBothFlags(t *testing.T) {
+	for _, args := range [][]string{{"lists", "rm-book"}, {"lists", "rm-book", "--list", "1"}, {"lists", "rm-book", "--book", "2"}} {
+		exitCode, stdout, stderr := runCLI(args)
+		if exitCode != 2 || stdout != "" || !strings.Contains(stderr, "required") {
+			t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
+		}
 	}
 }

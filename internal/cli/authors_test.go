@@ -123,3 +123,81 @@ func TestAuthorsLSForwardsQuery(t *testing.T) {
 		t.Fatalf("expected query %q, got %q", "Octavia Butler", gotQuery)
 	}
 }
+
+// ── Authors Remove ────────────────────────────────────────────────────────────
+
+func TestAuthorsRemoveDeletesByIDAndPrintsResult(t *testing.T) {
+	var method, path string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"authors", "rm", "--server", server.URL, "12"})
+	if exitCode != 0 || stderr != "" || stdout != "removed author 12\n" {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
+	}
+	if method != http.MethodDelete || path != "/api/authors/12" {
+		t.Fatalf("expected DELETE /api/authors/12, got %s %s", method, path)
+	}
+}
+
+func TestAuthorsRemoveResolvesExactName(t *testing.T) {
+	var deletedPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			if r.URL.Query().Get("q") != "frank HERBERT" {
+				t.Fatalf("unexpected query %q", r.URL.Query().Get("q"))
+			}
+			_ = json.NewEncoder(w).Encode([]authors.Author{{ID: 2, Name: "Frank Herbert Jr."}, {ID: 3, Name: "Frank Herbert"}})
+			return
+		}
+		deletedPath = r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	exitCode, _, stderr := runCLI([]string{"authors", "rm", "--server", server.URL, "frank HERBERT"})
+	if exitCode != 0 || stderr != "" || deletedPath != "/api/authors/3" {
+		t.Fatalf("unexpected result: exit=%d path=%q stderr=%q", exitCode, deletedPath, stderr)
+	}
+}
+
+func TestAuthorsRemoveDoesNotCreateMissingAuthor(t *testing.T) {
+	postCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			postCount++
+		}
+		_ = json.NewEncoder(w).Encode([]authors.Author{})
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"authors", "rm", "--server", server.URL, "Missing"})
+	if exitCode == 0 || stdout != "" || !strings.Contains(stderr, "author not found: Missing") {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
+	}
+	if postCount != 0 {
+		t.Fatalf("expected no author creation, got %d POST requests", postCount)
+	}
+}
+
+func TestAuthorsRemoveRejectsAmbiguousName(t *testing.T) {
+	deleteCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			deleteCount++
+		}
+		_ = json.NewEncoder(w).Encode([]authors.Author{{ID: 1, Name: "Ada"}, {ID: 2, Name: "ada"}})
+	}))
+	defer server.Close()
+
+	exitCode, _, stderr := runCLI([]string{"authors", "rm", "--server", server.URL, "Ada"})
+	if exitCode == 0 || !strings.Contains(stderr, `author "Ada" exists multiple times; pass an author ID instead`) {
+		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
+	}
+	if deleteCount != 0 {
+		t.Fatal("expected ambiguity to prevent DELETE")
+	}
+}

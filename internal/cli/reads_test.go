@@ -134,3 +134,37 @@ func TestReadsCommandsRequireBook(t *testing.T) {
 		})
 	}
 }
+
+// ── Reads Remove ──────────────────────────────────────────────────────────────
+
+func TestReadsRemoveDeletesByIDAndPrintsResult(t *testing.T) {
+	var method, path string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"reads", "rm", "--server", server.URL, "12"})
+	if exitCode != 0 || stderr != "" || stdout != "removed read 12\n" {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
+	}
+	if method != http.MethodDelete || path != "/api/reads/12" {
+		t.Fatalf("expected DELETE /api/reads/12, got %s %s", method, path)
+	}
+}
+
+func TestReadsRemoveRejectsInvalidIDsWithoutRequest(t *testing.T) {
+	for _, ref := range []string{"Dune", "0", "-1"} {
+		t.Run(ref, func(t *testing.T) {
+			args := []string{"reads", "rm", ref}
+			if strings.HasPrefix(ref, "-") {
+				args = []string{"reads", "rm", "--", ref}
+			}
+			exitCode, stdout, stderr := runCLI(args)
+			if exitCode != 2 || stdout != "" || !strings.Contains(stderr, "invalid") {
+				t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
+			}
+		})
+	}
+}

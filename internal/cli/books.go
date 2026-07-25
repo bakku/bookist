@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
 )
 
@@ -331,7 +330,11 @@ func resolveAuthorIDs(serverURL string, values []string) ([]int64, error) {
 	}
 
 	var result []int64
-	byName := make(map[string][]authors.Author)
+	type authorResolution struct {
+		id    int64
+		found bool
+	}
+	byName := make(map[string]authorResolution)
 
 	for _, val := range values {
 		val = strings.TrimSpace(val)
@@ -348,26 +351,17 @@ func resolveAuthorIDs(serverURL string, values []string) ([]int64, error) {
 			result = append(result, id)
 		} else {
 			key := strings.ToLower(val)
-			matches, lookedUp := byName[key]
+			resolved, lookedUp := byName[key]
 			if !lookedUp {
-				existingAuthors, err := fetchAuthors(serverURL, val)
+				authorID, found, err := resolveAuthorName(serverURL, val)
 				if err != nil {
-					return nil, fmt.Errorf("fetch authors: %v", err)
+					return nil, err
 				}
-
-				for _, a := range existingAuthors {
-					if strings.EqualFold(a.Name, val) {
-						matches = append(matches, a)
-					}
-				}
-				byName[key] = matches
+				resolved = authorResolution{id: authorID, found: found}
+				byName[key] = resolved
 			}
-
-			if len(matches) > 1 {
-				return nil, fmt.Errorf("author %q exists multiple times; pass an author ID instead", val)
-			}
-			if len(matches) == 1 {
-				result = append(result, matches[0].ID)
+			if resolved.found {
+				result = append(result, resolved.id)
 			} else {
 				// Textual author references create the missing author for convenient book entry.
 				created, err := createAuthor(serverURL, val)
@@ -376,7 +370,7 @@ func resolveAuthorIDs(serverURL string, values []string) ([]int64, error) {
 				}
 
 				result = append(result, created.ID)
-				byName[key] = []authors.Author{created}
+				byName[key] = authorResolution{id: created.ID, found: true}
 			}
 		}
 	}

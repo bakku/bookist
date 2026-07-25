@@ -164,25 +164,37 @@ func resolveAuthorID(serverURL, value string) (int64, error) {
 		return id, nil
 	}
 
-	existing, err := fetchAuthors(serverURL, value)
+	id, found, err := resolveAuthorName(serverURL, value)
 	if err != nil {
-		return 0, fmt.Errorf("fetch authors: %v", err)
+		return 0, err
+	}
+	if !found {
+		return 0, fmt.Errorf("author not found: %s", value)
+	}
+
+	return id, nil
+}
+
+func resolveAuthorName(serverURL, name string) (int64, bool, error) {
+	existing, err := fetchAuthors(serverURL, name)
+	if err != nil {
+		return 0, false, fmt.Errorf("fetch authors: %v", err)
 	}
 
 	var matches []authors.Author
 	for _, author := range existing {
-		if strings.EqualFold(author.Name, value) {
+		if strings.EqualFold(author.Name, name) {
 			matches = append(matches, author)
 		}
 	}
 	if len(matches) > 1 {
-		return 0, fmt.Errorf("author %q exists multiple times; pass an author ID instead", value)
+		return 0, false, fmt.Errorf("author %q exists multiple times; pass an author ID instead", name)
 	}
 	if len(matches) == 1 {
-		return matches[0].ID, nil
+		return matches[0].ID, true, nil
 	}
 
-	return 0, fmt.Errorf("author not found: %s", value)
+	return 0, false, nil
 }
 
 func runAuthorsLS(args []string, stdout io.Writer, stderr io.Writer) int {
