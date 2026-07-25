@@ -8,6 +8,7 @@ import (
 
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
+	"bakku.dev/bookist/internal/covers"
 	"bakku.dev/bookist/internal/lists"
 	"bakku.dev/bookist/internal/reads"
 	"bakku.dev/bookist/internal/web"
@@ -18,6 +19,7 @@ type Server struct {
 	authors   *authors.Service
 	lists     *lists.Service
 	reads     *reads.Service
+	covers    *covers.Store
 	templates *template.Template
 }
 
@@ -29,7 +31,7 @@ func parseID(value string) (int64, error) {
 	return id, nil
 }
 
-func New(books *books.Service, authors *authors.Service, lists *lists.Service, reads *reads.Service) (*Server, error) {
+func New(books *books.Service, authors *authors.Service, lists *lists.Service, reads *reads.Service, covers *covers.Store) (*Server, error) {
 	templates, err := web.Templates()
 	if err != nil {
 		return nil, err
@@ -40,6 +42,7 @@ func New(books *books.Service, authors *authors.Service, lists *lists.Service, r
 		authors:   authors,
 		lists:     lists,
 		reads:     reads,
+		covers:    covers,
 		templates: templates,
 	}, nil
 }
@@ -63,8 +66,29 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/lists/{id}/books", s.handleAPIAddBookToList)
 	mux.HandleFunc("DELETE /api/lists/{id}/books/{bookID}", s.handleAPIRemoveBookFromList)
 	mux.HandleFunc("DELETE /api/reads/{id}", s.handleAPIDeleteRead)
+	mux.HandleFunc("GET /book-covers/{key}", s.handleBookCover)
 
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(web.StaticFS()))))
 
 	return mux
+}
+
+func (s *Server) handleBookCover(w http.ResponseWriter, r *http.Request) {
+	key := r.PathValue("key")
+	file, err := s.covers.Open(key)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", covers.MediaType(key))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	http.ServeContent(w, r, key, info.ModTime(), file)
 }

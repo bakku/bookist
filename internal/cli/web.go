@@ -8,10 +8,12 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
+	"bakku.dev/bookist/internal/covers"
 	"bakku.dev/bookist/internal/httpserver"
 	"bakku.dev/bookist/internal/lists"
 	"bakku.dev/bookist/internal/reads"
@@ -22,6 +24,7 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	addr := flags.String("addr", defaultAddr, "HTTP address to listen on")
 	dbPath := flags.String("db", defaultDBPath, "SQLite database path")
+	dataDir := flags.String("data-dir", defaultDataDir, "Directory for managed application data")
 
 	help := commandHelp{
 		name:        "bookist serve",
@@ -30,6 +33,12 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
+	}
+
+	coverStore, err := covers.NewStore(filepath.Join(*dataDir, "book-covers"))
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "initialize cover storage: %v\n", err)
+		return 1
 	}
 
 	db, err := openAndMigrate(context.Background(), *dbPath)
@@ -49,12 +58,12 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	listService := lists.NewService(listRepo)
 
 	bookRepo := books.NewSQLiteRepository(db)
-	bookService := books.NewService(bookRepo, authorRepo)
+	bookService := books.NewService(bookRepo, authorRepo, coverStore)
 
 	readRepo := reads.NewSQLiteRepository(db)
 	readService := reads.NewService(readRepo)
 
-	server, err := httpserver.New(bookService, authorService, listService, readService)
+	server, err := httpserver.New(bookService, authorService, listService, readService, coverStore)
 
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "create server: %v\n", err)

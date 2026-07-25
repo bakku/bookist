@@ -34,6 +34,7 @@ func TestSQLiteRepositoryCreatePersistsAllFields(t *testing.T) {
 	year := 2024
 	month := 6
 	day := 15
+	coverImageKey := "0123456789abcdef0123456789abcdef.png"
 
 	created, err := repository.Create(ctx, books.CreateBookRequest{
 		Title:             "The Go Programming Language",
@@ -55,6 +56,7 @@ func TestSQLiteRepositoryCreatePersistsAllFields(t *testing.T) {
 		PublishedYear:     &year,
 		PublishedMonth:    &month,
 		PublishedDay:      &day,
+		CoverImageKey:     &coverImageKey,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -62,6 +64,9 @@ func TestSQLiteRepositoryCreatePersistsAllFields(t *testing.T) {
 
 	if created.ID <= 0 {
 		t.Fatal("expected created book to have an ID")
+	}
+	if created.CoverImageKey == nil || *created.CoverImageKey != coverImageKey {
+		t.Fatalf("expected cover key %q, got %#v", coverImageKey, created.CoverImageKey)
 	}
 
 	f := string(format)
@@ -86,6 +91,7 @@ func TestSQLiteRepositoryCreatePersistsAllFields(t *testing.T) {
 		PublishedYear:     &year,
 		PublishedMonth:    &month,
 		PublishedDay:      &day,
+		CoverImageKey:     &coverImageKey,
 	})
 }
 
@@ -143,7 +149,7 @@ func TestSQLiteRepositoryDeleteReturnsErrBookNotFoundForUnknownID(t *testing.T) 
 	db := testsupport.OpenMigratedDB(t)
 	repository := books.NewSQLiteRepository(db)
 
-	err := repository.Delete(context.Background(), 999999)
+	_, err := repository.Delete(context.Background(), 999999)
 	if !errors.Is(err, books.ErrBookNotFound) {
 		t.Fatalf("expected ErrBookNotFound, got %v", err)
 	}
@@ -159,7 +165,7 @@ func TestSQLiteRepositoryDeleteCascadesBookRelationships(t *testing.T) {
 	testsupport.InsertBookListRow(t, db, listID, bookID)
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{ID: 1, BookID: bookID, CreatedAt: "2026-01-01T00:00:00Z"})
 
-	if err := repository.Delete(context.Background(), bookID); err != nil {
+	if _, err := repository.Delete(context.Background(), bookID); err != nil {
 		t.Fatal(err)
 	}
 

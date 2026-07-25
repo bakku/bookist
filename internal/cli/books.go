@@ -8,11 +8,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"bakku.dev/bookist/internal/books"
+	"bakku.dev/bookist/internal/covers"
 )
 
 func runBooks(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -197,6 +199,7 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
 	title := flags.String("title", "", "Book title")
+	coverSource := flags.String("cover", "", "Cover image file path or URL")
 
 	var authorFlags stringSliceFlag
 	flags.Var(&authorFlags, "author", "Author name or ID (repeatable)")
@@ -287,6 +290,15 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		input.AuthorIDs = authorIDs
 	}
 
+	if *coverSource != "" {
+		cover, err := loadCover(*coverSource)
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "load cover: %v\n", err)
+			return 1
+		}
+		input.Cover = &cover
+	}
+
 	body, err := json.Marshal(input)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "encode book: %v\n", err)
@@ -322,6 +334,51 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	_, _ = fmt.Fprintf(stdout, "%d\t%s\n", book.ID, book.Title)
 	return 0
+}
+
+func loadCover(source string) ([]byte, error) {
+	parsed, err := url.Parse(source)
+	if err != nil {
+		return nil, err
+	}
+
+	var reader io.ReadCloser
+	switch parsed.Scheme {
+	case "":
+		reader, err = os.Open(source)
+		if err != nil {
+			return nil, err
+		}
+	case "http", "https":
+		client := http.Client{
+			Timeout: 10 * time.Second,
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		var response *http.Response
+		response, err = client.Get(source)
+		if err != nil {
+			return nil, err
+		}
+		if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+			_ = response.Body.Close()
+			return nil, fmt.Errorf("cover URL returned %s", response.Status)
+		}
+		reader = response.Body
+	default:
+		return nil, fmt.Errorf("unsupported URL scheme %q", parsed.Scheme)
+	}
+	defer reader.Close()
+
+	data, err := io.ReadAll(io.LimitReader(reader, covers.MaxSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if err := covers.Validate(data); err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 func resolveAuthorIDs(serverURL string, values []string) ([]int64, error) {

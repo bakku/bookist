@@ -1,9 +1,12 @@
 package cli_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -294,6 +297,81 @@ func TestBooksAddSendsNullForOmittedOptionalFields(t *testing.T) {
 		posted.Location != nil || posted.Condition != nil || posted.AcquisitionSource != nil ||
 		posted.PublishedYear != nil || posted.PublishedMonth != nil || posted.PublishedDay != nil {
 		t.Fatalf("expected omitted optional fields to be nil, got %#v", posted)
+	}
+}
+
+func TestBooksAddLoadsCoverFromFile(t *testing.T) {
+	image := []byte("\x89PNG\r\n\x1a\ncover")
+	path := filepath.Join(t.TempDir(), "cover.png")
+	if err := os.WriteFile(path, image, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var posted books.CreateBookRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
+			t.Fatal(err)
+		}
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(books.Book{ID: 10, Title: posted.Title})
+	}))
+	defer server.Close()
+
+	exitCode, _, stderr := runCLI([]string{"books", "add", "--title", "Dune", "--cover", path, "--server", server.URL})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
+	}
+	if posted.Cover == nil || !bytes.Equal(*posted.Cover, image) {
+		t.Fatalf("expected cover bytes %v, got %#v", image, posted.Cover)
+	}
+}
+
+func TestBooksAddLoadsCoverFromURL(t *testing.T) {
+	image := []byte("\x89PNG\r\n\x1a\nremote")
+	coverServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(image)
+	}))
+	defer coverServer.Close()
+
+	var posted books.CreateBookRequest
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&posted)
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(books.Book{ID: 10, Title: posted.Title})
+	}))
+	defer apiServer.Close()
+
+	exitCode, _, stderr := runCLI([]string{"books", "add", "--title", "Dune", "--cover", coverServer.URL, "--server", apiServer.URL})
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
+	}
+	if posted.Cover == nil || !bytes.Equal(*posted.Cover, image) {
+		t.Fatalf("expected cover bytes %v, got %#v", image, posted.Cover)
+	}
+}
+
+func TestBooksAddDoesNotFollowCoverRedirects(t *testing.T) {
+	targetCalled := false
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		targetCalled = true
+		_, _ = w.Write([]byte("\x89PNG\r\n\x1a\ncover"))
+	}))
+	defer target.Close()
+
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusFound)
+	}))
+	defer redirect.Close()
+
+	exitCode, _, stderr := runCLI([]string{"books", "add", "--title", "Dune", "--cover", redirect.URL})
+	if exitCode == 0 {
+		t.Fatal("expected redirect to fail")
+	}
+	if targetCalled {
+		t.Fatal("expected redirect target not to be requested")
+	}
+	if !strings.Contains(stderr, "302 Found") {
+		t.Fatalf("expected redirect status error, got %q", stderr)
 	}
 }
 
