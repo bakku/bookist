@@ -44,7 +44,10 @@ func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]Author, 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var authors []Author
 	for rows.Next() {
@@ -83,7 +86,10 @@ func (r *SQLiteRepository) GetByIDs(ctx context.Context, ids []int64) ([]Author,
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var authors []Author
 	for rows.Next() {
@@ -124,7 +130,10 @@ func (r *SQLiteRepository) ListByBookIDs(ctx context.Context, bookIDs []int64) (
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	result := make(map[int64][]Author)
 	for rows.Next() {
