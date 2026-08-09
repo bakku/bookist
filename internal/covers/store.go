@@ -126,6 +126,7 @@ func validate(data []byte) (string, error) {
 	if len(data) > MaxSize {
 		return "", ErrTooLarge
 	}
+
 	return extensionFor(data)
 }
 

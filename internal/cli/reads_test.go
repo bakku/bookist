@@ -84,6 +84,14 @@ func TestReadsListJSONUsesFullReadRepresentation(t *testing.T) {
 	}
 }
 
+func TestReadsListRequiresBook(t *testing.T) {
+	exitCode, stdout, stderr := runCLI([]string{"reads", "ls"})
+
+	if exitCode != 2 || stdout != "" || !strings.Contains(stderr, "--book is required") {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
+	}
+}
+
 // ── Reads Add ─────────────────────────────────────────────────────────────────
 
 func TestReadsAddPostsToBookEndpoint(t *testing.T) {
@@ -122,16 +130,11 @@ func TestReadsAddPostsToBookEndpoint(t *testing.T) {
 	}
 }
 
-// ── Reads Book Requirement ────────────────────────────────────────────────────
+func TestReadsAddRequiresBook(t *testing.T) {
+	exitCode, stdout, stderr := runCLI([]string{"reads", "add"})
 
-func TestReadsCommandsRequireBook(t *testing.T) {
-	for _, command := range []string{"ls", "add"} {
-		t.Run(command, func(t *testing.T) {
-			exitCode, stdout, stderr := runCLI([]string{"reads", command})
-			if exitCode != 2 || stdout != "" || !strings.Contains(stderr, "--book is required") {
-				t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
-			}
-		})
+	if exitCode != 2 || stdout != "" || !strings.Contains(stderr, "--book is required") {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
 	}
 }
 
@@ -158,10 +161,13 @@ func TestReadsRemoveRejectsInvalidIDsWithoutRequest(t *testing.T) {
 	for _, ref := range []string{"Dune", "0", "-1"} {
 		t.Run(ref, func(t *testing.T) {
 			args := []string{"reads", "rm", ref}
+
 			if strings.HasPrefix(ref, "-") {
 				args = []string{"reads", "rm", "--", ref}
 			}
+
 			exitCode, stdout, stderr := runCLI(args)
+
 			if exitCode != 2 || stdout != "" || !strings.Contains(stderr, "invalid") {
 				t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
 			}

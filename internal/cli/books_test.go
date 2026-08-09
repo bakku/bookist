@@ -130,6 +130,7 @@ func TestBooksLSForwardsQuery(t *testing.T) {
 
 func TestBooksLSResolvesExactListAndForwardsQuery(t *testing.T) {
 	var gotListQuery, gotBookQuery, gotBookPath string
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/lists":
@@ -164,20 +165,20 @@ func TestBooksLSResolvesExactListAndForwardsQuery(t *testing.T) {
 
 // ── Books Add ──────────────────────────────────────────────────────────────────
 
-func TestBooksAddWithNewFields(t *testing.T) {
+func TestBooksAddWithCompleteFields(t *testing.T) {
 	var postedBooks []books.CreateBookRequest
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/authors":
-			json.NewEncoder(w).Encode([]authors.Author{})
+			_ = json.NewEncoder(w).Encode([]authors.Author{})
 
 		case "/api/books":
 			var req books.CreateBookRequest
-			json.NewDecoder(r.Body).Decode(&req)
+			_ = json.NewDecoder(r.Body).Decode(&req)
 			postedBooks = append(postedBooks, req)
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(books.Book{ID: 10, Title: req.Title})
+			_ = json.NewEncoder(w).Encode(books.Book{ID: 10, Title: req.Title})
 		}
 	}))
 	defer server.Close()
@@ -185,13 +186,13 @@ func TestBooksAddWithNewFields(t *testing.T) {
 	var stdout, stderr strings.Builder
 
 	exitCode := cli.Run([]string{
-		"books", "add", "--title", "Full Book", "--language", "en", "--publisher", "O'Reilly",
-		"--edition", "2nd", "--format", "paperback", "--purchased-at", "2025-06-15",
-		"--purchase-price", "12.34 EUR",
-		"--pages", "400", "--notes", "Great read", "--summary", "A practical guide",
-		"--series-name", "Programming", "--series-position", "1.5", "--location", "Office shelf",
-		"--condition", "very_good", "--acquisition-source", "Bookshop", "--published-year", "2024",
-		"--published-month", "6", "--published-day", "15", "--server", server.URL},
+		"books", "add", "--title", "Full Book", "--isbn", "12-3456-789", "--language", "en",
+		"--publisher", "O'Reilly", "--edition", "2nd", "--format", "paperback",
+		"--purchased-at", "2025-06-15", "--purchase-price", "12.34 EUR", "--pages", "400",
+		"--notes", "Great read", "--summary", "A practical guide", "--series-name", "Programming",
+		"--series-position", "1.5", "--location", "Office shelf", "--condition", "very_good",
+		"--acquisition-source", "Bookshop", "--published-year", "2024", "--published-month", "6",
+		"--published-day", "15", "--server", server.URL},
 		&stdout, &stderr)
 
 	if exitCode != 0 {
@@ -206,6 +207,10 @@ func TestBooksAddWithNewFields(t *testing.T) {
 
 	if got.Title != "Full Book" {
 		t.Fatalf("expected title 'Full Book', got %q", got.Title)
+	}
+
+	if got.ISBN == nil || *got.ISBN != "12-3456-789" {
+		t.Fatalf("expected isbn '12-3456-789', got %q", *got.ISBN)
 	}
 
 	if got.Language == nil || *got.Language != "en" {
@@ -308,6 +313,7 @@ func TestBooksAddLoadsCoverFromFile(t *testing.T) {
 	}
 
 	var posted books.CreateBookRequest
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&posted); err != nil {
 			t.Fatal(err)
@@ -315,12 +321,15 @@ func TestBooksAddLoadsCoverFromFile(t *testing.T) {
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(books.Book{ID: 10, Title: posted.Title})
 	}))
+
 	defer server.Close()
 
 	exitCode, _, stderr := runCLI([]string{"books", "add", "--title", "Dune", "--cover", path, "--server", server.URL})
+
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
 	}
+
 	if posted.Cover == nil || !bytes.Equal(*posted.Cover, image) {
 		t.Fatalf("expected cover bytes %v, got %#v", image, posted.Cover)
 	}
@@ -334,14 +343,17 @@ func TestBooksAddLoadsCoverFromURL(t *testing.T) {
 	defer coverServer.Close()
 
 	var posted books.CreateBookRequest
+
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&posted)
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(books.Book{ID: 10, Title: posted.Title})
 	}))
+
 	defer apiServer.Close()
 
 	exitCode, _, stderr := runCLI([]string{"books", "add", "--title", "Dune", "--cover", coverServer.URL, "--server", apiServer.URL})
+
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
 	}
@@ -364,6 +376,7 @@ func TestBooksAddDoesNotFollowCoverRedirects(t *testing.T) {
 	defer redirect.Close()
 
 	exitCode, _, stderr := runCLI([]string{"books", "add", "--title", "Dune", "--cover", redirect.URL})
+
 	if exitCode == 0 {
 		t.Fatal("expected redirect to fail")
 	}
@@ -410,7 +423,8 @@ func TestBooksAddWithAuthorNameExistsLinksAuthor(t *testing.T) {
 				if got := r.URL.Query().Get("q"); got != "existing author" {
 					t.Fatalf("expected author query %q, got %q", "existing author", got)
 				}
-				json.NewEncoder(w).Encode([]authors.Author{
+
+				_ = json.NewEncoder(w).Encode([]authors.Author{
 					{ID: 4, Name: "Former Existing Author"},
 					{ID: 5, Name: "Existing Author"},
 				})
@@ -421,10 +435,13 @@ func TestBooksAddWithAuthorNameExistsLinksAuthor(t *testing.T) {
 
 		case "/api/books":
 			var req books.CreateBookRequest
-			json.NewDecoder(r.Body).Decode(&req)
+			_ = json.NewDecoder(r.Body).Decode(&req)
+
 			postedBooks = append(postedBooks, req)
+
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(books.Book{ID: 10, Title: req.Title})
+
+			_ = json.NewEncoder(w).Encode(books.Book{ID: 10, Title: req.Title})
 		}
 	}))
 	defer server.Close()
@@ -481,22 +498,22 @@ func TestBooksAddWithAuthorNameNotFoundCreatesAuthorThenBook(t *testing.T) {
 		case "/api/authors":
 			switch r.Method {
 			case http.MethodGet:
-				json.NewEncoder(w).Encode([]authors.Author{})
+				_ = json.NewEncoder(w).Encode([]authors.Author{})
 
 			case http.MethodPost:
 				var req authors.CreateAuthorRequest
-				json.NewDecoder(r.Body).Decode(&req)
+				_ = json.NewDecoder(r.Body).Decode(&req)
 				postedAuthors = append(postedAuthors, req)
 				w.WriteHeader(http.StatusCreated)
-				json.NewEncoder(w).Encode(authors.Author{ID: 5, Name: req.Name})
+				_ = json.NewEncoder(w).Encode(authors.Author{ID: 5, Name: req.Name})
 			}
 
 		case "/api/books":
 			var req books.CreateBookRequest
-			json.NewDecoder(r.Body).Decode(&req)
+			_ = json.NewDecoder(r.Body).Decode(&req)
 			postedBooks = append(postedBooks, req)
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(books.Book{ID: 10, Title: req.Title})
+			_ = json.NewEncoder(w).Encode(books.Book{ID: 10, Title: req.Title})
 		}
 	}))
 	defer server.Close()
@@ -528,10 +545,10 @@ func TestBooksAddWithIntegerAuthorIDLinksAuthor(t *testing.T) {
 		switch r.URL.Path {
 		case "/api/books":
 			var req books.CreateBookRequest
-			json.NewDecoder(r.Body).Decode(&req)
+			_ = json.NewDecoder(r.Body).Decode(&req)
 			postedBooks = append(postedBooks, req)
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(books.Book{ID: 10, Title: req.Title})
+			_ = json.NewEncoder(w).Encode(books.Book{ID: 10, Title: req.Title})
 		}
 	}))
 	defer server.Close()
@@ -633,10 +650,10 @@ func TestBooksRemoveResolvesExactTitle(t *testing.T) {
 }
 
 func TestBooksRemoveRejectsAmbiguousTitle(t *testing.T) {
-	deleteCount := 0
+	deleteCalled := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodDelete {
-			deleteCount++
+			deleteCalled = true
 		}
 		_ = json.NewEncoder(w).Encode([]books.Book{{ID: 1, Title: "Dune"}, {ID: 2, Title: "dune"}})
 	}))
@@ -646,7 +663,7 @@ func TestBooksRemoveRejectsAmbiguousTitle(t *testing.T) {
 	if exitCode == 0 || !strings.Contains(stderr, `book "Dune" exists multiple times; pass a book ID instead`) {
 		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
 	}
-	if deleteCount != 0 {
+	if deleteCalled {
 		t.Fatal("expected ambiguity to prevent DELETE")
 	}
 }
