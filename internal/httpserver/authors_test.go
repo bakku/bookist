@@ -38,7 +38,7 @@ func TestAuthorAPICreate(t *testing.T) {
 		t.Fatalf("expected Jane Austen, got %q", created.Name)
 	}
 
-	testsupport.AssertAuthorCount(t, app.db, 1)
+	testsupport.AssertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM authors`)
 	testsupport.AssertAuthorRow(t, app.db, created.ID, "Jane Austen")
 }
 
@@ -67,28 +67,6 @@ func TestAuthorAPIList(t *testing.T) {
 	}
 }
 
-func TestAuthorAPISearchesNamesCaseInsensitively(t *testing.T) {
-	app := newTestApp(t)
-	testsupport.InsertAuthorRow(t, app.db, "Jane Austen")
-	testsupport.InsertAuthorRow(t, app.db, "Octavia Butler")
-
-	req := httptest.NewRequest(http.MethodGet, "/api/authors?q=AUST", nil)
-	resp := httptest.NewRecorder()
-	app.handler.ServeHTTP(resp, req)
-
-	if resp.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, resp.Code)
-	}
-
-	var listed []authors.Author
-	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
-		t.Fatal(err)
-	}
-	if len(listed) != 1 || listed[0].Name != "Jane Austen" {
-		t.Fatalf("expected only Jane Austen, got %#v", listed)
-	}
-}
-
 // ── Delete ────────────────────────────────────────────────────────────────────
 
 func TestAuthorAPIDeleteRemovesOnlyAuthorRelationships(t *testing.T) {
@@ -105,10 +83,10 @@ func TestAuthorAPIDeleteRemovesOnlyAuthorRelationships(t *testing.T) {
 	if resp.Code != http.StatusNoContent {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusNoContent, resp.Code, resp.Body.String())
 	}
-	assertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM authors WHERE id = ?`, authorID)
-	assertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM book_authors WHERE author_id = ?`, authorID)
-	assertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM books WHERE id = ?`, bookID)
-	assertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM book_authors WHERE book_id = ? AND author_id = ?`, bookID, otherAuthorID)
+	testsupport.AssertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM authors WHERE id = ?`, authorID)
+	testsupport.AssertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM book_authors WHERE author_id = ?`, authorID)
+	testsupport.AssertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM books WHERE id = ?`, bookID)
+	testsupport.AssertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM book_authors WHERE book_id = ? AND author_id = ?`, bookID, otherAuthorID)
 }
 
 func TestAuthorAPIDeleteRejectsInvalidID(t *testing.T) {

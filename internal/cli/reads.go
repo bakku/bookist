@@ -52,49 +52,6 @@ func printReadsHelp(w io.Writer) {
 	}, nil)
 }
 
-func runReadsRM(args []string, stdout io.Writer, stderr io.Writer) int {
-	flags := flag.NewFlagSet("reads rm", flag.ContinueOnError)
-	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
-	help := commandHelp{
-		name:        "bookist reads rm",
-		usage:       "bookist reads rm [options] <read-ID>",
-		description: "Remove a read",
-	}
-	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
-		return exitCode
-	}
-	if flags.NArg() != 1 {
-		_, _ = fmt.Fprintln(stderr, "Error: reads rm requires exactly one read ID")
-		_, _ = fmt.Fprintln(stderr)
-		printCommandHelp(stderr, help, flags)
-		return 2
-	}
-
-	readRef := strings.TrimSpace(flags.Arg(0))
-	readID, isID, err := parseIDReference(readRef)
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "%v\n", err)
-		return 2
-	}
-	if !isID {
-		_, _ = fmt.Fprintf(stderr, "invalid read ID %q\n", readRef)
-		return 2
-	}
-
-	endpoint, err := joinURL(*serverURL, "/api/reads/"+strconv.FormatInt(readID, 10))
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
-		return 2
-	}
-	if err := deleteEndpoint(endpoint); err != nil {
-		_, _ = fmt.Fprintf(stderr, "remove read: %v\n", err)
-		return 1
-	}
-
-	_, _ = fmt.Fprintf(stdout, "removed read %d\n", readID)
-	return 0
-}
-
 func runReadsLS(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("reads ls", flag.ContinueOnError)
 
@@ -243,6 +200,57 @@ func runReadsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	return 0
 }
 
+func runReadsRM(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("reads rm", flag.ContinueOnError)
+
+	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+
+	help := commandHelp{
+		name:        "bookist reads rm",
+		usage:       "bookist reads rm [options] <read-ID>",
+		description: "Remove a read",
+	}
+
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
+	}
+
+	if flags.NArg() != 1 {
+		_, _ = fmt.Fprintln(stderr, "Error: reads rm requires exactly one read ID")
+		_, _ = fmt.Fprintln(stderr)
+		printCommandHelp(stderr, help, flags)
+		return 2
+	}
+
+	readRef := strings.TrimSpace(flags.Arg(0))
+
+	readID, isID, err := parseIDReference(readRef)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "%v\n", err)
+		return 2
+	}
+
+	if !isID {
+		_, _ = fmt.Fprintf(stderr, "invalid read ID %q\n", readRef)
+		return 2
+	}
+
+	endpoint, err := joinURL(*serverURL, "/api/reads/"+strconv.FormatInt(readID, 10))
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
+		return 2
+	}
+
+	if err := deleteEndpoint(endpoint); err != nil {
+		_, _ = fmt.Fprintf(stderr, "remove read: %v\n", err)
+		return 1
+	}
+
+	_, _ = fmt.Fprintf(stdout, "removed read %d\n", readID)
+
+	return 0
+}
+
 func fetchReads(serverURL string, bookID int64) ([]reads.Read, error) {
 	endpoint, err := joinURL(serverURL, "/api/books/"+strconv.FormatInt(bookID, 10)+"/reads")
 	if err != nil {
@@ -269,18 +277,4 @@ func fetchReads(serverURL string, bookID int64) ([]reads.Read, error) {
 	}
 
 	return listed, nil
-}
-
-func stringValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
-func floatValue(value *float64) string {
-	if value == nil {
-		return ""
-	}
-	return strconv.FormatFloat(*value, 'f', -1, 64)
 }

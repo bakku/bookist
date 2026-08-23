@@ -211,18 +211,6 @@ func assertNullInt(t testing.TB, name string, got sql.NullInt64, want *int) {
 	}
 }
 
-func AssertBookCount(t testing.TB, db *sql.DB, want int) {
-	t.Helper()
-
-	var count int
-	if err := db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM books`).Scan(&count); err != nil {
-		t.Fatal(err)
-	}
-	if count != want {
-		t.Fatalf("expected %d persisted books, got %d", want, count)
-	}
-}
-
 func InsertBookAuthorRow(t testing.TB, db *sql.DB, bookID int64, authorID int64) {
 	t.Helper()
 	now := "2026-01-02T03:04:05Z"

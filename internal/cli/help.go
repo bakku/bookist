@@ -22,28 +22,34 @@ type commandHelp struct {
 
 func printCommandHelp(w io.Writer, help commandHelp, flags *flag.FlagSet) {
 	tw := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+
 	_, _ = fmt.Fprintf(tw, "NAME:\n   %s - %s\n\n", help.name, help.description)
 	_, _ = fmt.Fprintf(tw, "USAGE:\n   %s\n", help.usage)
 
 	if len(help.commands) > 0 {
 		_, _ = fmt.Fprintln(tw, "\nCOMMANDS:")
+
 		for _, command := range help.commands {
 			_, _ = fmt.Fprintf(tw, "   %s\t%s\n", command.name, command.description)
 		}
 	}
 
 	_, _ = fmt.Fprintln(tw, "\nOPTIONS:")
+
 	if flags != nil {
 		flags.VisitAll(func(f *flag.Flag) {
 			option := "--" + f.Name + flagPlaceholder(f)
 			description := f.Usage
+
 			if showDefault(f.DefValue) {
 				description += " (default: " + f.DefValue + ")"
 			}
+
 			_, _ = fmt.Fprintf(tw, "   %s\t%s\n", option, description)
 		})
 	}
 	_, _ = fmt.Fprintln(tw, "   --help, -h\tShow help")
+
 	_ = tw.Flush()
 }
 

@@ -32,7 +32,12 @@ func NewStore(dir string) (*Store, error) {
 }
 
 func (s *Store) Save(data []byte) (string, error) {
-	extension, err := validate(data)
+	err := Validate(data)
+	if err != nil {
+		return "", err
+	}
+
+	extension, err := extensionFor(data)
 	if err != nil {
 		return "", err
 	}
@@ -54,10 +59,13 @@ func (s *Store) Save(data []byte) (string, error) {
 		if _, err := file.Write(data); err != nil {
 			_ = file.Close()
 			_ = os.Remove(filepath.Join(s.dir, key))
+
 			return "", fmt.Errorf("write cover: %w", err)
 		}
+
 		if err := file.Close(); err != nil {
 			_ = os.Remove(filepath.Join(s.dir, key))
+
 			return "", fmt.Errorf("close cover: %w", err)
 		}
 
@@ -66,29 +74,36 @@ func (s *Store) Save(data []byte) (string, error) {
 }
 
 func Validate(data []byte) error {
-	_, err := validate(data)
-	return err
+	if len(data) > MaxSize {
+		return ErrTooLarge
+	}
+
+	_, err := extensionFor(data)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Store) Delete(key string) error {
-	if !ValidKey(key) {
+	if !validKey(key) {
 		return fmt.Errorf("invalid cover key")
 	}
+
 	if err := os.Remove(filepath.Join(s.dir, key)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("delete cover: %w", err)
 	}
+
 	return nil
 }
 
 func (s *Store) Open(key string) (*os.File, error) {
-	if !ValidKey(key) {
-		return nil, os.ErrNotExist
+	if !validKey(key) {
+		return nil, fmt.Errorf("invalid cover key")
 	}
-	return os.Open(filepath.Join(s.dir, key))
-}
 
-func ValidKey(key string) bool {
-	return keyPattern.MatchString(key)
+	return os.Open(filepath.Join(s.dir, key))
 }
 
 func MediaType(key string) string {
@@ -122,11 +137,8 @@ func extensionFor(data []byte) (string, error) {
 	}
 }
 
-func validate(data []byte) (string, error) {
-	if len(data) > MaxSize {
-		return "", ErrTooLarge
-	}
-	return extensionFor(data)
+func validKey(key string) bool {
+	return keyPattern.MatchString(key)
 }
 
 func randomKey(extension string) (string, error) {

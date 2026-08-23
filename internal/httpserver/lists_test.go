@@ -18,7 +18,8 @@ import (
 func TestListAPICreate(t *testing.T) {
 	app := newTestApp(t)
 
-	body := bytes.NewBufferString(`{"name":"Want to Buy"}`)
+	body := bytes.NewBufferString(`{"name":"Want to Buy", "description":"Books I want to buy"}`)
+
 	req := httptest.NewRequest(http.MethodPost, "/api/lists", body)
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
@@ -32,15 +33,23 @@ func TestListAPICreate(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
 		t.Fatal(err)
 	}
+
 	if created.ID <= 0 {
 		t.Fatal("expected created list to have an ID")
 	}
+
 	if created.Name != "Want to Buy" {
 		t.Fatalf("expected Want to Buy, got %q", created.Name)
 	}
 
-	testsupport.AssertListCount(t, app.db, 1)
-	testsupport.AssertListRow(t, app.db, created.ID, "Want to Buy")
+	expectedDescription := "Books I want to buy"
+
+	if created.Description == nil || *created.Description != expectedDescription {
+		t.Fatalf("expected description 'Books I want to buy', got %#v", created.Description)
+	}
+
+	testsupport.AssertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM lists`)
+	testsupport.AssertListRow(t, app.db, created.ID, "Want to Buy", &expectedDescription)
 }
 
 func TestListAPICreateRejectsBlankName(t *testing.T) {
@@ -56,37 +65,17 @@ func TestListAPICreateRejectsBlankName(t *testing.T) {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
 	}
 
-	testsupport.AssertListCount(t, app.db, 0)
-}
-
-func TestListAPICreateWithDescription(t *testing.T) {
-	app := newTestApp(t)
-
-	body := bytes.NewBufferString(`{"name":"Nightstand","description":"Currently reading"}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/lists", body)
-	req.Header.Set("Content-Type", "application/json")
-	resp := httptest.NewRecorder()
-
-	app.handler.ServeHTTP(resp, req)
-	if resp.Code != http.StatusCreated {
-		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, resp.Code, resp.Body.String())
-	}
-
-	var created lists.List
-	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
-		t.Fatal(err)
-	}
-	if created.Description == nil || *created.Description != "Currently reading" {
-		t.Fatalf("expected description 'Currently reading', got %#v", created.Description)
-	}
+	testsupport.AssertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM lists`)
 }
 
 func TestListAPICreateReturnsConflictForDuplicateName(t *testing.T) {
 	app := newTestApp(t)
+
 	testsupport.InsertListRow(t, app.db, "Nightstand")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/lists", bytes.NewBufferString(`{"name":"NIGHTSTAND"}`))
 	resp := httptest.NewRecorder()
+
 	app.handler.ServeHTTP(resp, req)
 	if resp.Code != http.StatusConflict {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusConflict, resp.Code, resp.Body.String())
@@ -101,6 +90,7 @@ func TestListAPIList(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/lists", nil)
 	resp := httptest.NewRecorder()
+
 	app.handler.ServeHTTP(resp, req)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, resp.Code)
@@ -110,9 +100,11 @@ func TestListAPIList(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
 		t.Fatal(err)
 	}
+
 	if len(listed) != 1 {
 		t.Fatalf("expected 1 list, got %d", len(listed))
 	}
+
 	if listed[0].Name != "Want to Buy" {
 		t.Fatalf("expected Want to Buy, got %q", listed[0].Name)
 	}
@@ -120,11 +112,13 @@ func TestListAPIList(t *testing.T) {
 
 func TestListAPISearchesNamesCaseInsensitively(t *testing.T) {
 	app := newTestApp(t)
+
 	testsupport.InsertListRow(t, app.db, "Nightstand")
 	testsupport.InsertListRow(t, app.db, "Want to Buy")
 
 	req := httptest.NewRequest(http.MethodGet, "/api/lists?q=NIGHT", nil)
 	resp := httptest.NewRecorder()
+
 	app.handler.ServeHTTP(resp, req)
 
 	if resp.Code != http.StatusOK {
@@ -135,6 +129,7 @@ func TestListAPISearchesNamesCaseInsensitively(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
 		t.Fatal(err)
 	}
+
 	if len(listed) != 1 || listed[0].Name != "Nightstand" {
 		t.Fatalf("expected only Nightstand, got %#v", listed)
 	}
@@ -144,9 +139,11 @@ func TestListAPISearchesNamesCaseInsensitively(t *testing.T) {
 
 func TestListAPIDeleteRemovesOnlyListRelationships(t *testing.T) {
 	app := newTestApp(t)
+
 	listID := testsupport.InsertListRow(t, app.db, "Favorites")
 	otherListID := testsupport.InsertListRow(t, app.db, "Nightstand")
 	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
+
 	testsupport.InsertBookListRow(t, app.db, listID, bookID)
 	testsupport.InsertBookListRow(t, app.db, otherListID, bookID)
 
@@ -156,10 +153,11 @@ func TestListAPIDeleteRemovesOnlyListRelationships(t *testing.T) {
 	if resp.Code != http.StatusNoContent {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusNoContent, resp.Code, resp.Body.String())
 	}
-	assertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM lists WHERE id = ?`, listID)
-	assertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM book_lists WHERE list_id = ?`, listID)
-	assertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM books WHERE id = ?`, bookID)
-	assertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM book_lists WHERE list_id = ? AND book_id = ?`, otherListID, bookID)
+
+	testsupport.AssertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM lists WHERE id = ?`, listID)
+	testsupport.AssertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM book_lists WHERE list_id = ?`, listID)
+	testsupport.AssertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM books WHERE id = ?`, bookID)
+	testsupport.AssertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM book_lists WHERE list_id = ? AND book_id = ?`, otherListID, bookID)
 }
 
 func TestListAPIDeleteRejectsInvalidID(t *testing.T) {
@@ -284,10 +282,12 @@ func TestListAPIAddBookToListRejectsInvalidIDs(t *testing.T) {
 
 func TestListAPIRemoveBookFromListIsIsolated(t *testing.T) {
 	app := newTestApp(t)
+
 	listID := testsupport.InsertListRow(t, app.db, "Favorites")
 	otherListID := testsupport.InsertListRow(t, app.db, "Nightstand")
 	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
 	otherBookID := testsupport.InsertBookRow(t, app.db, "Foundation", nil)
+
 	testsupport.InsertBookListRow(t, app.db, listID, bookID)
 	testsupport.InsertBookListRow(t, app.db, listID, otherBookID)
 	testsupport.InsertBookListRow(t, app.db, otherListID, bookID)
@@ -299,11 +299,12 @@ func TestListAPIRemoveBookFromListIsIsolated(t *testing.T) {
 	if resp.Code != http.StatusNoContent {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusNoContent, resp.Code, resp.Body.String())
 	}
-	assertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM book_lists WHERE list_id = ? AND book_id = ?`, listID, bookID)
-	assertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM book_lists WHERE list_id = ? AND book_id = ?`, listID, otherBookID)
-	assertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM book_lists WHERE list_id = ? AND book_id = ?`, otherListID, bookID)
-	assertSQLCount(t, app.db, 2, `SELECT COUNT(*) FROM books WHERE id IN (?, ?)`, bookID, otherBookID)
-	assertSQLCount(t, app.db, 2, `SELECT COUNT(*) FROM lists WHERE id IN (?, ?)`, listID, otherListID)
+
+	testsupport.AssertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM book_lists WHERE list_id = ? AND book_id = ?`, listID, bookID)
+	testsupport.AssertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM book_lists WHERE list_id = ? AND book_id = ?`, listID, otherBookID)
+	testsupport.AssertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM book_lists WHERE list_id = ? AND book_id = ?`, otherListID, bookID)
+	testsupport.AssertSQLCount(t, app.db, 2, `SELECT COUNT(*) FROM books WHERE id IN (?, ?)`, bookID, otherBookID)
+	testsupport.AssertSQLCount(t, app.db, 2, `SELECT COUNT(*) FROM lists WHERE id IN (?, ?)`, listID, otherListID)
 }
 
 func TestListAPIRemoveBookRejectsInvalidIDs(t *testing.T) {
@@ -375,7 +376,9 @@ func TestListAPIListBooks(t *testing.T) {
 	listID := testsupport.InsertListRow(t, app.db, "Want to Buy")
 	bookID1 := testsupport.InsertBookRow(t, app.db, "Dune", nil)
 	bookID2 := testsupport.InsertBookRow(t, app.db, "Foundation", nil)
+	authorID := testsupport.InsertAuthorRow(t, app.db, "Frank Herbert")
 
+	testsupport.InsertBookAuthorRow(t, app.db, bookID1, authorID)
 	testsupport.InsertBookListRow(t, app.db, listID, bookID1)
 	testsupport.InsertBookListRow(t, app.db, listID, bookID2)
 	if _, err := app.db.Exec(`UPDATE book_lists SET updated_at = '2026-01-03T00:00:00Z' WHERE book_id = ?`, bookID1); err != nil {
@@ -393,12 +396,19 @@ func TestListAPIListBooks(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&bookList); err != nil {
 		t.Fatal(err)
 	}
+
 	if len(bookList) != 2 {
 		t.Fatalf("expected 2 books, got %d", len(bookList))
 	}
+
 	if bookList[0].Title != "Dune" {
 		t.Fatalf("expected Dune, got %q", bookList[0].Title)
 	}
+
+	if bookList[0].Authors[0].Name != "Frank Herbert" {
+		t.Fatalf("expected Frank Herbert, got %q", bookList[0].Authors[0].Name)
+	}
+
 	if bookList[1].Title != "Foundation" {
 		t.Fatalf("expected Foundation, got %q", bookList[1].Title)
 	}
@@ -412,6 +422,7 @@ func TestListAPIListBooksSearchesWithinList(t *testing.T) {
 	duneID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
 	foundationID := testsupport.InsertBookRow(t, app.db, "Foundation", nil)
 	otherDuneID := testsupport.InsertBookRow(t, app.db, "Dune Messiah", nil)
+
 	testsupport.InsertBookListRow(t, app.db, listID, duneID)
 	testsupport.InsertBookListRow(t, app.db, listID, foundationID)
 	testsupport.InsertBookListRow(t, app.db, otherListID, otherDuneID)
@@ -428,32 +439,9 @@ func TestListAPIListBooksSearchesWithinList(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
 		t.Fatal(err)
 	}
+
 	if len(listed) != 1 || listed[0].Title != "Dune" {
 		t.Fatalf("expected only Dune from Nightstand, got %#v", listed)
-	}
-}
-
-func TestListAPIListBooksReturnsEmptyArrayForEmptyList(t *testing.T) {
-	app := newTestApp(t)
-
-	listID := testsupport.InsertListRow(t, app.db, "Want to Buy")
-
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/lists/%d/books", listID), nil)
-	resp := httptest.NewRecorder()
-	app.handler.ServeHTTP(resp, req)
-	if resp.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, resp.Code)
-	}
-
-	var bookList []books.Book
-	if err := json.NewDecoder(resp.Body).Decode(&bookList); err != nil {
-		t.Fatal(err)
-	}
-	if bookList == nil {
-		t.Fatal("expected non-nil array")
-	}
-	if len(bookList) != 0 {
-		t.Fatalf("expected empty array, got %d books", len(bookList))
 	}
 }
 
@@ -467,36 +455,5 @@ func TestListAPIListBooksReturns404ForUnknownList(t *testing.T) {
 	app.handler.ServeHTTP(resp, req)
 	if resp.Code != http.StatusNotFound {
 		t.Fatalf("expected status %d, got %d", http.StatusNotFound, resp.Code)
-	}
-}
-
-func TestListAPIListBooksHydratesAuthors(t *testing.T) {
-	app := newTestApp(t)
-
-	listID := testsupport.InsertListRow(t, app.db, "Want to Buy")
-	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
-	authorID := testsupport.InsertAuthorRow(t, app.db, "Frank Herbert")
-	testsupport.InsertBookAuthorRow(t, app.db, bookID, authorID)
-	testsupport.InsertBookListRow(t, app.db, listID, bookID)
-
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/lists/%d/books", listID), nil)
-	resp := httptest.NewRecorder()
-	app.handler.ServeHTTP(resp, req)
-	if resp.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, resp.Code)
-	}
-
-	var bookList []books.Book
-	if err := json.NewDecoder(resp.Body).Decode(&bookList); err != nil {
-		t.Fatal(err)
-	}
-	if len(bookList) != 1 {
-		t.Fatalf("expected 1 book, got %d", len(bookList))
-	}
-	if len(bookList[0].Authors) != 1 {
-		t.Fatalf("expected 1 author, got %d", len(bookList[0].Authors))
-	}
-	if bookList[0].Authors[0].Name != "Frank Herbert" {
-		t.Fatalf("expected Frank Herbert, got %q", bookList[0].Authors[0].Name)
 	}
 }

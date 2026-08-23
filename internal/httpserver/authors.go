@@ -30,7 +30,12 @@ func (s *Server) handleAPICreateAuthor(w http.ResponseWriter, r *http.Request) {
 
 	author, err := s.authors.Create(r.Context(), input)
 	if err != nil {
-		writeCreateAuthorError(w, err)
+		if errors.Is(err, authors.ErrNameRequired) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		http.Error(w, "failed to create author", http.StatusInternalServerError)
 		return
 	}
 
@@ -55,12 +60,4 @@ func (s *Server) handleAPIDeleteAuthor(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func writeCreateAuthorError(w http.ResponseWriter, err error) {
-	if errors.Is(err, authors.ErrNameRequired) {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	http.Error(w, "failed to create author", http.StatusInternalServerError)
 }

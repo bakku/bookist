@@ -36,7 +36,7 @@ func TestServiceCreateRequiresTitle(t *testing.T) {
 	if !errors.Is(err, books.ErrTitleRequired) {
 		t.Fatalf("expected ErrTitleRequired, got %v", err)
 	}
-	testsupport.AssertBookCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
 }
 
 func TestServiceCreateRemovesCoverWhenPersistenceFails(t *testing.T) {
@@ -75,7 +75,7 @@ func TestServiceCreateRejectsUnknownAuthorIDs(t *testing.T) {
 	if !errors.Is(err, books.ErrAuthorNotFound) {
 		t.Fatalf("expected ErrAuthorNotFound, got %v", err)
 	}
-	testsupport.AssertBookCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
 }
 
 func TestServiceCreateRejectsNonPositiveAuthorIDs(t *testing.T) {
@@ -88,7 +88,7 @@ func TestServiceCreateRejectsNonPositiveAuthorIDs(t *testing.T) {
 	if !errors.Is(err, books.ErrAuthorNotFound) {
 		t.Fatalf("expected ErrAuthorNotFound, got %v", err)
 	}
-	testsupport.AssertBookCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
 }
 
 func TestServiceCreateTrimsAndPersistsInput(t *testing.T) {
@@ -305,7 +305,7 @@ func TestServiceCreateRejectsInvalidFormat(t *testing.T) {
 	if !errors.Is(err, books.ErrInvalidFormat) {
 		t.Fatalf("expected ErrInvalidFormat, got %v", err)
 	}
-	testsupport.AssertBookCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
 }
 
 func TestServiceCreateConvertsBlankStringFieldsToNull(t *testing.T) {
@@ -338,6 +338,11 @@ func TestServiceCreateConvertsBlankStringFieldsToNull(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if created.Language != nil || created.Publisher != nil || created.Edition != nil || created.PurchasedAt != nil ||
+		created.PurchasePrice != nil || created.Notes != nil || created.Summary != nil || created.SeriesName != nil ||
+		created.Location != nil || created.AcquisitionSource != nil {
+		t.Fatalf("expected blank string fields to be nil, got %#v", created)
+	}
 
 	testsupport.AssertBookRowFields(t, db, created.ID, testsupport.BookRowAssertion{
 		Title: "Blank Fields",
@@ -356,7 +361,7 @@ func TestServiceCreateRejectsInvalidCondition(t *testing.T) {
 			t.Fatalf("expected ErrInvalidCondition for %q, got %v", condition, err)
 		}
 	}
-	testsupport.AssertBookCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
 }
 
 func TestServiceCreateAcceptsValidConditions(t *testing.T) {
@@ -380,7 +385,7 @@ func TestServiceCreateAcceptsValidConditions(t *testing.T) {
 			t.Fatalf("expected condition %q, got %#v", condition, created.Condition)
 		}
 	}
-	testsupport.AssertBookCount(t, db, 5)
+	testsupport.AssertSQLCount(t, db, 5, `SELECT COUNT(*) FROM books`)
 }
 
 func TestServiceCreateRejectsInvalidNumericFields(t *testing.T) {
@@ -408,7 +413,7 @@ func TestServiceCreateRejectsInvalidNumericFields(t *testing.T) {
 			}
 		})
 	}
-	testsupport.AssertBookCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
 }
 
 func TestServiceCreateRejectsInvalidPurchasedAt(t *testing.T) {
@@ -417,7 +422,7 @@ func TestServiceCreateRejectsInvalidPurchasedAt(t *testing.T) {
 	if !errors.Is(err, books.ErrInvalidPurchasedAt) {
 		t.Fatalf("expected ErrInvalidPurchasedAt, got %v", err)
 	}
-	testsupport.AssertBookCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────
@@ -430,7 +435,7 @@ func TestServiceDeleteRemovesPersistedBook(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testsupport.AssertBookCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
 }
 
 func TestServiceDeleteRemovesManagedCover(t *testing.T) {
@@ -459,7 +464,7 @@ func TestServiceDeleteRemovesManagedCover(t *testing.T) {
 	if len(entries) != 0 {
 		t.Fatalf("expected deletion to remove managed cover, found %d files", len(entries))
 	}
-	testsupport.AssertBookCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
 }
 
 // ── List ──────────────────────────────────────────────────────────────────────
