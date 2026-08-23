@@ -29,10 +29,12 @@ func (s *Server) handleAPICreateBook(w http.ResponseWriter, r *http.Request) {
 	var input books.CreateBookRequest
 	if err := decoder.Decode(&input); err != nil {
 		var tooLarge *http.MaxBytesError
+
 		if errors.As(err, &tooLarge) {
 			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
 			return
 		}
+
 		http.Error(w, "invalid JSON body", http.StatusBadRequest)
 		return
 	}
@@ -80,13 +82,16 @@ func writeCreateBookError(w http.ResponseWriter, err error) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
 	if errors.Is(err, covers.ErrTooLarge) {
 		http.Error(w, err.Error(), http.StatusRequestEntityTooLarge)
 		return
 	}
+
 	if errors.Is(err, covers.ErrUnsupportedMediaType) {
 		http.Error(w, err.Error(), http.StatusUnsupportedMediaType)
 		return
 	}
+
 	http.Error(w, "failed to create book", http.StatusInternalServerError)
 }

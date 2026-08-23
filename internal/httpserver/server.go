@@ -1,9 +1,7 @@
 package httpserver
 
 import (
-	"fmt"
 	"net/http"
-	"strconv"
 
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
@@ -20,14 +18,6 @@ type Server struct {
 	reads     *reads.Service
 	covers    *covers.Store
 	templates web.TemplateSet
-}
-
-func parseID(value string) (int64, error) {
-	id, err := strconv.ParseInt(value, 10, 64)
-	if err != nil || id <= 0 {
-		return 0, fmt.Errorf("invalid ID")
-	}
-	return id, nil
 }
 
 func New(books *books.Service, authors *authors.Service, lists *lists.Service, reads *reads.Service, covers *covers.Store) (*Server, error) {
@@ -74,29 +64,4 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(web.StaticFS()))))
 
 	return mux
-}
-
-func (s *Server) handleBookCover(w http.ResponseWriter, r *http.Request) {
-	key := r.PathValue("key")
-
-	file, err := s.covers.Open(key)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-
-	defer func() {
-		_ = file.Close()
-	}()
-
-	info, err := file.Stat()
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-
-	w.Header().Set("Content-Type", covers.MediaType(key))
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-
-	http.ServeContent(w, r, key, info.ModTime(), file)
 }

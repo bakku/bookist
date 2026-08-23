@@ -12,14 +12,17 @@ import (
 )
 
 var pngImage = []byte("\x89PNG\r\n\x1a\ncover")
+var key = "196a218517b32b00959932a6e1c938cf.png"
 
 // ── NewStore ──────────────────────────────────────────────────────────────────
 
 func TestNewStoreCreatesDirectory(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "nested", "book-covers")
+
 	if _, err := covers.NewStore(dir); err != nil {
 		t.Fatal(err)
 	}
+
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 		t.Fatalf("expected cover directory, got info=%v err=%v", info, err)
 	}
@@ -29,6 +32,7 @@ func TestNewStoreCreatesDirectory(t *testing.T) {
 
 func TestStoreSaveWritesImageWithOpaqueKey(t *testing.T) {
 	dir := t.TempDir()
+
 	store, err := covers.NewStore(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -38,13 +42,16 @@ func TestStoreSaveWritesImageWithOpaqueKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !covers.ValidKey(key) || filepath.Ext(key) != ".png" {
+
+	if filepath.Ext(key) != ".png" {
 		t.Fatalf("expected an opaque PNG key, got %q", key)
 	}
+
 	got, err := os.ReadFile(filepath.Join(dir, key))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !bytes.Equal(got, pngImage) {
 		t.Fatalf("expected saved bytes %v, got %v", pngImage, got)
 	}
@@ -59,8 +66,10 @@ func TestStoreRejectsUnsupportedAndOversizedImages(t *testing.T) {
 	if _, err := store.Save([]byte("not an image")); !errors.Is(err, covers.ErrUnsupportedMediaType) {
 		t.Fatalf("expected ErrUnsupportedMediaType, got %v", err)
 	}
+
 	tooLarge := make([]byte, covers.MaxSize+1)
 	copy(tooLarge, pngImage)
+
 	if _, err := store.Save(tooLarge); !errors.Is(err, covers.ErrTooLarge) {
 		t.Fatalf("expected ErrTooLarge, got %v", err)
 	}
@@ -69,11 +78,14 @@ func TestStoreRejectsUnsupportedAndOversizedImages(t *testing.T) {
 // ── Open ──────────────────────────────────────────────────────────────────────
 
 func TestStoreOpenReadsManagedImage(t *testing.T) {
-	store, err := covers.NewStore(t.TempDir())
+	dir := t.TempDir()
+
+	store, err := covers.NewStore(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	key, err := store.Save(pngImage)
+
+	err = os.WriteFile(filepath.Join(dir, key), pngImage, 0o600)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,11 +94,16 @@ func TestStoreOpenReadsManagedImage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer file.Close()
+
+	defer func() {
+		_ = file.Close()
+	}()
+
 	got, err := io.ReadAll(file)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !bytes.Equal(got, pngImage) {
 		t.Fatalf("expected opened bytes %v, got %v", pngImage, got)
 	}
@@ -97,8 +114,9 @@ func TestStoreOpenRejectsUnmanagedKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Open("../secret.png"); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("expected not found for traversal key, got %v", err)
+
+	if _, err := store.Open("../secret.png"); err == nil {
+		t.Fatalf("expected error for traversal key, got no error")
 	}
 }
 

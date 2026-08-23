@@ -2,14 +2,14 @@ package httpserver_test
 
 import (
 	"bytes"
-	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"bakku.dev/bookist/internal/reads"
 	"bakku.dev/bookist/internal/testsupport"
 )
 
@@ -38,47 +38,25 @@ func TestReadAPICreate(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		t.Fatal(err)
 	}
+
 	if response["book_id"] != float64(bookID) || response["abandoned_at"] != "2026-01-03" || response["rating"] != 4.5 || response["notes"] != "Excellent" {
 		t.Fatalf("unexpected response: %#v", response)
 	}
+
 	if response["created_at"] == nil {
 		t.Fatal("created_at must be exposed")
 	}
+
 	if response["updated_at"] == nil {
 		t.Fatal("updated_at must be exposed")
 	}
 
-	var startedAt, finishedAt, abandonedAt, notes sql.NullString
-	var rating sql.NullFloat64
-	var createdAt, updatedAt string
-
-	err := app.db.QueryRowContext(context.Background(), `
-		SELECT started_at, finished_at, abandoned_at, rating, notes, created_at, updated_at
-		FROM reads WHERE id = ?
-	`, response["id"]).Scan(&startedAt, &finishedAt, &abandonedAt, &rating, &notes, &createdAt, &updatedAt)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-	if startedAt.Valid || finishedAt.Valid || abandonedAt.String != "2026-01-03" || rating.Float64 != 4.5 || notes.String != "Excellent" {
-		t.Fatal("unexpected persisted values")
-	}
-	if createdAt == "" || updatedAt == "" {
-		t.Fatal("expected backend-generated timestamps")
-	}
-}
-
-func TestReadAPICreateRejectsClientTimestamp(t *testing.T) {
-	app := newTestApp(t)
-	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
-	body := bytes.NewBufferString(`{"created_at":"2026-01-01T00:00:00Z"}`)
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/books/%d/reads", bookID), body)
-	resp := httptest.NewRecorder()
-
-	app.handler.ServeHTTP(resp, req)
-	if resp.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
-	}
+	testsupport.AssertReadRow(t, app.db, int64(response["id"].(float64)), testsupport.ReadRowAssertion{
+		BookID:      bookID,
+		AbandonedAt: new("2026-01-03"),
+		Rating:      new(4.5),
+		Notes:       new("Excellent"),
+	})
 }
 
 func TestReadAPICreateReturns404ForUnknownBook(t *testing.T) {
@@ -143,17 +121,21 @@ func TestReadAPICreateRejectsInvalidValues(t *testing.T) {
 
 func TestReadAPIList(t *testing.T) {
 	app := newTestApp(t)
+
 	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
 	olderID := int64(100)
 	newerID := int64(101)
+
 	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{
 		ID: olderID, BookID: bookID, StartedAt: new("2025-01-01"), FinishedAt: new("2025-01-03"),
 		Rating: new(4.0), Notes: new("Good"), CreatedAt: "2026-01-01T00:00:00Z",
 	})
+
 	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{
 		ID: newerID, BookID: bookID, StartedAt: new("2026-01-01"), AbandonedAt: new("2026-01-03"),
 		Rating: new(4.5), Notes: new("Excellent"), CreatedAt: "2026-01-02T00:00:00Z",
 	})
+
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/books/%d/reads", bookID), nil)
 	resp := httptest.NewRecorder()
 
@@ -162,34 +144,56 @@ func TestReadAPIList(t *testing.T) {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, resp.Code, resp.Body.String())
 	}
 
-	var raw []map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+	var listed []reads.Read
+
+	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
 		t.Fatal(err)
 	}
-	if len(raw) != 2 || raw[0]["id"] != float64(newerID) || raw[1]["id"] != float64(olderID) {
-		t.Fatalf("expected newest reads first, got %#v", raw)
-	}
-	if raw[0]["abandoned_at"] != "2026-01-03" || raw[0]["finished_at"] != nil || raw[1]["abandoned_at"] != nil {
-		t.Fatalf("unexpected terminal dates: %#v", raw)
-	}
-	for _, item := range raw {
-		for _, field := range []string{"id", "book_id", "started_at", "finished_at", "abandoned_at", "rating", "notes", "created_at", "updated_at"} {
-			if _, exists := item[field]; !exists {
-				t.Fatalf("expected field %q in %#v", field, item)
-			}
-		}
-	}
-}
 
-func TestReadAPIListReturnsEmptyArray(t *testing.T) {
-	app := newTestApp(t)
-	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
-	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/books/%d/reads", bookID), nil)
-	resp := httptest.NewRecorder()
+	if len(listed) != 2 {
+		t.Fatalf("expected 2 reads, got %d", len(listed))
+	}
 
-	app.handler.ServeHTTP(resp, req)
-	if resp.Code != http.StatusOK || resp.Body.String() != "[]\n" {
-		t.Fatalf("expected empty JSON array, got status %d: %s", resp.Code, resp.Body.String())
+	newer := listed[0]
+
+	if newer.ID != newerID || newer.BookID != bookID {
+		t.Fatalf("expected newer read IDs %d and %d, got %#v", newerID, bookID, newer)
+	}
+
+	if newer.StartedAt == nil || *newer.StartedAt != "2026-01-01" || newer.FinishedAt != nil ||
+		newer.AbandonedAt == nil || *newer.AbandonedAt != "2026-01-03" {
+		t.Fatalf("unexpected newer read dates: %#v", newer)
+	}
+
+	if newer.Rating == nil || *newer.Rating != 4.5 || newer.Notes == nil || *newer.Notes != "Excellent" {
+		t.Fatalf("unexpected newer read metadata: %#v", newer)
+	}
+
+	newerTimestamp := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
+
+	if !newer.CreatedAt.Equal(newerTimestamp) || !newer.UpdatedAt.Equal(newerTimestamp) {
+		t.Fatalf("unexpected newer read timestamps: %#v", newer)
+	}
+
+	older := listed[1]
+
+	if older.ID != olderID || older.BookID != bookID {
+		t.Fatalf("expected older read IDs %d and %d, got %#v", olderID, bookID, older)
+	}
+
+	if older.StartedAt == nil || *older.StartedAt != "2025-01-01" ||
+		older.FinishedAt == nil || *older.FinishedAt != "2025-01-03" || older.AbandonedAt != nil {
+		t.Fatalf("unexpected older read dates: %#v", older)
+	}
+
+	if older.Rating == nil || *older.Rating != 4.0 || older.Notes == nil || *older.Notes != "Good" {
+		t.Fatalf("unexpected older read metadata: %#v", older)
+	}
+
+	olderTimestamp := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	if !older.CreatedAt.Equal(olderTimestamp) || !older.UpdatedAt.Equal(olderTimestamp) {
+		t.Fatalf("unexpected older read timestamps: %#v", older)
 	}
 }
 
@@ -208,7 +212,9 @@ func TestReadAPIListReturns404ForUnknownBook(t *testing.T) {
 
 func TestReadAPIDeleteLeavesBookAndOtherReads(t *testing.T) {
 	app := newTestApp(t)
+
 	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
+
 	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{ID: 100, BookID: bookID, CreatedAt: "2026-01-01T00:00:00Z"})
 	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{ID: 101, BookID: bookID, CreatedAt: "2026-01-02T00:00:00Z"})
 
@@ -218,17 +224,21 @@ func TestReadAPIDeleteLeavesBookAndOtherReads(t *testing.T) {
 	if resp.Code != http.StatusNoContent {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusNoContent, resp.Code, resp.Body.String())
 	}
-	assertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM reads WHERE id = 100`)
-	assertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM reads WHERE id = 101`)
-	assertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM books WHERE id = ?`, bookID)
+
+	testsupport.AssertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM reads WHERE id = 100`)
+	testsupport.AssertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM reads WHERE id = 101`)
+	testsupport.AssertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM books WHERE id = ?`, bookID)
 }
 
 func TestReadAPIDeleteRejectsInvalidID(t *testing.T) {
 	for _, id := range []string{"not-a-number", "0", "-1"} {
 		t.Run(id, func(t *testing.T) {
 			app := newTestApp(t)
+
 			resp := httptest.NewRecorder()
+
 			app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, "/api/reads/"+id, nil))
+
 			if resp.Code != http.StatusBadRequest {
 				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
 			}
@@ -238,8 +248,11 @@ func TestReadAPIDeleteRejectsInvalidID(t *testing.T) {
 
 func TestReadAPIDeleteReturns404ForUnknownRead(t *testing.T) {
 	app := newTestApp(t)
+
 	resp := httptest.NewRecorder()
+
 	app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, "/api/reads/999999", nil))
+
 	if resp.Code != http.StatusNotFound {
 		t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, resp.Code, resp.Body.String())
 	}

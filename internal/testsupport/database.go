@@ -24,3 +24,15 @@ func OpenMigratedDB(t testing.TB) *sql.DB {
 
 	return db
 }
+
+func AssertSQLCount(t testing.TB, db *sql.DB, want int, query string, args ...any) {
+	t.Helper()
+
+	var got int
+	if err := db.QueryRowContext(context.Background(), query, args...).Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("expected count %d, got %d", want, got)
+	}
+}

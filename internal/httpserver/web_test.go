@@ -15,15 +15,20 @@ import (
 
 func TestIndexListsBooks(t *testing.T) {
 	app := newTestApp(t)
+
 	isbn := "9780807083697"
+
 	testsupport.InsertBookRow(t, app.db, "Kindred", &isbn)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	resp := httptest.NewRecorder()
+
 	app.handler.ServeHTTP(resp, req)
+
 	if resp.Code != http.StatusOK {
 		t.Fatalf("expected status %d, got %d", http.StatusOK, resp.Code)
 	}
+
 	if !bytes.Contains(resp.Body.Bytes(), []byte("Kindred")) {
 		t.Fatalf("expected index response to contain book title, got %s", resp.Body.String())
 	}

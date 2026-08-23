@@ -19,7 +19,7 @@ func TestServiceCreateRequiresName(t *testing.T) {
 	if !errors.Is(err, authors.ErrNameRequired) {
 		t.Fatalf("expected ErrNameRequired, got %v", err)
 	}
-	testsupport.AssertAuthorCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM authors`)
 }
 
 func TestServiceCreateTrimsAndPersistsName(t *testing.T) {
@@ -136,5 +136,5 @@ func TestServiceDeletePersistsDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testsupport.AssertAuthorCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM authors`)
 }

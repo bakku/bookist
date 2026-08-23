@@ -51,16 +51,3 @@ func AssertAuthorRow(t testing.TB, db *sql.DB, id int64, wantName string) {
 		t.Fatalf("expected RFC3339 updated_at, got %q", updatedAt)
 	}
 }
-
-func AssertAuthorCount(t testing.TB, db *sql.DB, want int) {
-	t.Helper()
-
-	var count int
-	if err := db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM authors`).Scan(&count); err != nil {
-		t.Fatal(err)
-	}
-
-	if count != want {
-		t.Fatalf("expected %d persisted authors, got %d", want, count)
-	}
-}
