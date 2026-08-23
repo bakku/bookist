@@ -1,7 +1,6 @@
 package web
 
 import (
-	"fmt"
 	"net/http"
 
 	"bakku.dev/bookist/internal/books"
@@ -16,9 +15,6 @@ type navItemView struct {
 
 type layoutView struct {
 	PageTitle   string
-	HeaderTitle string
-	BadgeText   string
-	BadgeLabel  string
 	LibraryNav  []navItemView
 	UserListNav []navItemView
 }
@@ -35,17 +31,9 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bookLabel := "books"
-	if len(bookList) == 1 {
-		bookLabel = "book"
-	}
-
 	data := indexPageView{
 		Layout: layoutView{
-			PageTitle:   "Bookist Library",
-			HeaderTitle: "Library",
-			BadgeText:   fmt.Sprintf("%d", len(bookList)),
-			BadgeLabel:  fmt.Sprintf("%d %s in library", len(bookList), bookLabel),
+			PageTitle: "Bookist Library",
 			LibraryNav: []navItemView{
 				{Href: "/", Label: "Books", IconID: "bookshelf", Active: true},
 				{Href: "/authors", Label: "Authors", IconID: "account-outline"},
