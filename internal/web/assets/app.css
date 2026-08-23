@@ -1,0 +1,266 @@
+/*
+ * UI tokens and component styles adapted from @immich/ui.
+ * Copyright 2025 Immich, MIT licensed. See /THIRD_PARTY_NOTICES.md.
+ */
+@tailwind utilities;
+@source "../templates";
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", Arial, sans-serif;
+  --color-black: #000;
+  --color-gray-600: oklch(44.6% 0.03 256.802);
+  --spacing: 0.25rem;
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+  --breakpoint-sidebar: 53.125rem;
+  --container-2xl: 42rem;
+  --container-7xl: 80rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 2rem;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --leading-tight: 1.25;
+  --tracking-tight: -0.025em;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  --default-transition-duration: 150ms;
+  --default-transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@theme inline {
+  --color-primary-50: var(--bookist-ui-primary-50);
+  --color-primary-500: var(--bookist-ui-primary-500);
+  --color-primary-600: var(--bookist-ui-primary-600);
+  --color-primary: var(--bookist-ui-primary-500);
+  --color-light: var(--bookist-ui-light);
+  --color-dark: var(--bookist-ui-dark);
+  --color-muted: var(--bookist-ui-muted);
+  --color-subtle: var(--bookist-ui-subtle);
+  --color-border: var(--bookist-ui-border);
+}
+
+@layer base {
+  *,
+  ::before,
+  ::after,
+  ::backdrop,
+  ::file-selector-button {
+    box-sizing: border-box;
+    border: 0 solid;
+    border-color: var(--bookist-ui-border);
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    font-family: var(--font-sans);
+    line-height: 1.5;
+    tab-size: 4;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  p {
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: inherit;
+  }
+
+  button,
+  input,
+  select,
+  textarea,
+  ::file-selector-button {
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+  }
+
+  button,
+  input:where([type="button"], [type="reset"], [type="submit"]),
+  ::file-selector-button {
+    appearance: button;
+  }
+
+  ol,
+  ul,
+  menu {
+    list-style: none;
+  }
+
+  img,
+  svg {
+    display: block;
+    vertical-align: middle;
+  }
+
+  img {
+    height: auto;
+    max-width: 100%;
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+
+  :root {
+    color-scheme: light;
+    --bookist-ui-primary-50: oklch(0.9616 0.0166 271.24);
+    --bookist-ui-primary-500: #4250af;
+    --bookist-ui-primary-600: oklch(0.404 0.129 273.18);
+    --bookist-ui-light: oklch(100% 0 0);
+    --bookist-ui-dark: oklch(36% 0 17);
+    --bookist-ui-muted: oklch(71% 0 271);
+    --bookist-ui-subtle: oklch(97% 0 271);
+    --bookist-ui-border: oklch(87% 0 none);
+  }
+
+  body {
+    background: var(--bookist-ui-light);
+    color: var(--bookist-ui-dark);
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer components {
+  .skip-link {
+    background: var(--bookist-ui-primary-500);
+    border-radius: 0.75rem;
+    color: var(--bookist-ui-light);
+    inset-inline-start: 1rem;
+    padding: 0.5rem 1rem;
+    position: fixed;
+    top: 0.5rem;
+    transform: translateY(-200%);
+    z-index: 50;
+  }
+
+  .skip-link:focus {
+    outline: 2px solid var(--bookist-ui-primary-500);
+    outline-offset: 2px;
+    transform: translateY(0);
+  }
+
+  .bookist-scrollbar {
+    scrollbar-color: transparent transparent;
+    scrollbar-width: thin;
+  }
+
+  .bookist-scrollbar::-webkit-scrollbar {
+    height: 8px;
+    visibility: hidden;
+    width: 8px;
+  }
+
+  .bookist-scrollbar::-webkit-scrollbar-track {
+    background-color: var(--bookist-ui-subtle);
+    border-radius: 4px;
+    visibility: hidden;
+  }
+
+  .bookist-scrollbar::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklab, var(--bookist-ui-muted) 40%, transparent);
+    border-radius: 4px;
+    visibility: hidden;
+  }
+
+  .bookist-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklab, var(--bookist-ui-primary-500) 70%, transparent);
+  }
+
+  .bookist-scrollbar:hover,
+  .bookist-scrollbar:active {
+    scrollbar-color: color-mix(in oklab, var(--bookist-ui-muted) 40%, transparent) var(--bookist-ui-subtle);
+  }
+
+  .bookist-scrollbar:hover::-webkit-scrollbar,
+  .bookist-scrollbar:active::-webkit-scrollbar,
+  .bookist-scrollbar:hover::-webkit-scrollbar-track,
+  .bookist-scrollbar:active::-webkit-scrollbar-track,
+  .bookist-scrollbar:hover::-webkit-scrollbar-thumb,
+  .bookist-scrollbar:active::-webkit-scrollbar-thumb {
+    visibility: visible;
+  }
+
+  #mobile-sidebar {
+    inset-inline-end: auto;
+  }
+
+  #mobile-sidebar::backdrop {
+    background: transparent;
+  }
+
+  .ui-card {
+    border: 1px solid var(--bookist-ui-border);
+    border-radius: 1rem;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    overflow: hidden;
+    width: 100%;
+  }
+
+  .ui-card__inner {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    width: 100%;
+  }
+
+  .ui-card__header {
+    border-bottom: 1px solid var(--bookist-ui-border);
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+  }
+
+  .ui-card__body {
+    height: 100%;
+    overflow: auto;
+    padding: 1rem;
+    width: 100%;
+  }
+
+  .ui-card__footer {
+    align-items: center;
+    border-top: 1px solid var(--bookist-ui-border);
+    display: flex;
+    padding: 1rem;
+  }
+
+  .book-cover {
+    box-shadow: rgba(60, 64, 67, 0.3) 0 1px 2px 0, rgba(60, 64, 67, 0.15) 0 1px 3px 1px;
+  }
+
+  .book-cover-title {
+    text-shadow: 0 1px 2px rgb(0 0 0 / 0.6);
+  }
+}

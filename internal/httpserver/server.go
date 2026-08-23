@@ -2,7 +2,6 @@ package httpserver
 
 import (
 	"fmt"
-	"html/template"
 	"net/http"
 	"strconv"
 
@@ -20,7 +19,7 @@ type Server struct {
 	lists     *lists.Service
 	reads     *reads.Service
 	covers    *covers.Store
-	templates *template.Template
+	templates web.TemplateSet
 }
 
 func parseID(value string) (int64, error) {
