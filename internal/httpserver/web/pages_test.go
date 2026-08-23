@@ -44,7 +44,7 @@ func TestIndexListsBooks(t *testing.T) {
 	if !bytes.Contains(resp.Body.Bytes(), []byte(`grid-cols-2`)) {
 		t.Fatalf("expected index response to render the book grid, got %s", resp.Body.String())
 	}
-	if !bytes.Contains(resp.Body.Bytes(), []byte(`1 book in library`)) {
+	if !bytes.Contains(resp.Body.Bytes(), []byte(`1 in library`)) {
 		t.Fatalf("expected index response to describe the singular book count, got %s", resp.Body.String())
 	}
 }

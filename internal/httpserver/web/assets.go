@@ -6,7 +6,7 @@ import (
 	"io/fs"
 )
 
-//go:embed templates/*.html static/*
+//go:embed templates static
 var files embed.FS
 
 type TemplateSet struct {
@@ -24,7 +24,7 @@ func Templates() (TemplateSet, error) {
 		return TemplateSet{}, err
 	}
 
-	booksIndex, err := parsePage(base, "templates/books_index.html")
+	booksIndex, err := parsePage(base, "templates/books/index.html")
 	if err != nil {
 		return TemplateSet{}, err
 	}
