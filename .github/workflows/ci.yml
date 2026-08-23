@@ -19,7 +19,7 @@ jobs:
       - name: Check generated CSS
         run: |
           make css
-          git diff --exit-code -- internal/web/static/app.css
+          git diff --exit-code -- internal/httpserver/web/static/app.css
 
       - name: Build
         run: go build ./...

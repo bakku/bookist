@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := build
 
-CSS_INPUT := internal/web/assets/app.css
-CSS_OUTPUT := internal/web/static/app.css
+CSS_INPUT := internal/httpserver/web/assets/app.css
+CSS_OUTPUT := internal/httpserver/web/static/app.css
 BINARY := ./bin/bookist
 
 .PHONY: css css-watch build run test clean

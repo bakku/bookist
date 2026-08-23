@@ -1,4 +1,4 @@
-package httpserver_test
+package web_test
 
 import (
 	"bytes"
