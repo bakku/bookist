@@ -1,23 +1,21 @@
 # Third-Party Notices
 
-Portions of Bookist's user-interface styles and component design are adapted
-from `@immich/ui`:
+## Bulma
 
-https://github.com/immich-app/static-pages
+Bookist includes Bulma version 1.0.4:
 
-Source: `packages/ui` at commit
-`b940c9b2def4758324ec4aee0b09ac60a21b47c3`.
+https://github.com/jgthms/bulma/tree/1.0.4
 
-## Immich UI
+The MIT License (MIT)
 
-Copyright 2025 Immich
+Copyright (c) 2023 Jeremy Thomas
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of
-this software and associated documentation files (the "Software"), to deal in
-the Software without restriction, including without limitation the rights to
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
-the Software, and to permit persons to whom the Software is furnished to do so,
-subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
@@ -32,7 +30,7 @@ SOFTWARE.
 
 ## Material Design Icons
 
-Bookist includes icon path data from `@mdi/js` version 7.4.47:
+Bookist includes icon path data from Material Design Icons version 7.4.47:
 
 https://github.com/Templarian/MaterialDesign-JS/tree/v7.4.47
 
