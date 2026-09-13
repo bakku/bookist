@@ -22,7 +22,7 @@
           </span>
           <strong class="ml-2">Bookist</strong>
         </a>
-        <button type="button" class="navbar-burger" data-navigation-toggle aria-label="Open navigation" aria-expanded="false" aria-controls="mobile-navigation">
+        <button type="button" class="navbar-burger is-hidden-tablet" data-navigation-toggle aria-label="Open navigation" aria-expanded="false" aria-controls="mobile-navigation">
           <span aria-hidden="true"></span>
           <span aria-hidden="true"></span>
           <span aria-hidden="true"></span>
@@ -30,7 +30,7 @@
         </button>
       </div>
 
-      <div id="mobile-navigation" class="navbar-menu is-hidden-desktop">
+      <div id="mobile-navigation" class="navbar-menu is-hidden-tablet">
         <div class="navbar-start">
           {{range .Layout.LibraryNav}}
           <a class="navbar-item{{if .Active}} is-active{{end}}" href="{{.Href}}" {{if .Active}}aria-current="page"{{end}}>{{.Label}}</a>
@@ -45,7 +45,7 @@
   </nav>
 
   <div class="columns is-gapless app-layout">
-    <aside data-desktop-sidebar class="column is-narrow app-sidebar is-hidden-touch">
+    <aside data-desktop-sidebar class="column is-narrow app-sidebar is-hidden-mobile">
       <nav aria-label="Primary" class="menu p-5">
         <p class="menu-label">Library</p>
         <ul class="menu-list">
@@ -68,10 +68,12 @@
       </nav>
     </aside>
 
-    <main id="main-content" tabindex="-1" class="column section">
-      <div class="container is-fluid">
-        {{template "page-content" .}}
-      </div>
+    <main id="main-content" tabindex="-1" class="column">
+      <section class="section">
+        <div class="container is-fluid">
+          {{template "page-content" .}}
+        </div>
+      </section>
     </main>
   </div>
 </body>
