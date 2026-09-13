@@ -14,6 +14,11 @@
   min-height: calc(100dvh - 3.25rem);
 }
 
+.navbar-menu-toggle {
+  align-self: center;
+  margin-left: auto;
+}
+
 .app-sidebar {
   border-right: 1px solid var(--bulma-border-weak);
   width: 16rem;
@@ -67,5 +72,11 @@
 @media screen and (max-width: 768px) {
   .section {
     padding: 1.5rem 1rem;
+  }
+}
+
+@media screen and (min-width: 1024px) {
+  .navbar-menu-toggle {
+    display: none;
   }
 }
