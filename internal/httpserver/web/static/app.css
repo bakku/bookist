@@ -11,7 +11,7 @@
 
 .app-layout {
   margin-bottom: 0 !important;
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--bulma-navbar-height));
 }
 
 .app-sidebar {
@@ -28,8 +28,8 @@
   background: var(--bulma-scheme-main);
   border: 0;
   border-right: 1px solid var(--bulma-border-weak);
-  height: 100dvh;
-  inset: 0 auto 0 0;
+  height: calc(100dvh - var(--bulma-navbar-height));
+  inset: var(--bulma-navbar-height) auto 0 0;
   margin: 0;
   max-height: none;
   overscroll-behavior: contain;
@@ -45,10 +45,6 @@
 html:has(.mobile-sidebar:popover-open),
 body:has(.mobile-sidebar:popover-open) {
   overflow: hidden;
-}
-
-.mobile-sidebar-button {
-  display: none;
 }
 
 .mobile-sidebar::backdrop {
@@ -104,9 +100,5 @@ body:has(.mobile-sidebar:popover-open) {
 @media screen and (max-width: 1023px) {
   .app-sidebar {
     display: none;
-  }
-
-  .mobile-sidebar-button {
-    display: inline-flex;
   }
 }

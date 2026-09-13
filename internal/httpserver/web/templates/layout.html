@@ -12,6 +12,25 @@
   {{template "icon-sprite" .}}
   <a href="#main-content" class="skip-link">Skip to content</a>
 
+  <header class="navbar has-shadow" role="banner">
+    <div class="container is-fluid">
+      <div class="navbar-brand">
+        <a class="navbar-item" href="/">
+          <span class="icon has-text-primary" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="currentColor"><use href="#icon-bookshelf"></use></svg>
+          </span>
+          <strong class="is-size-5 ml-2">Bookist</strong>
+        </a>
+        <button type="button" class="navbar-burger" popovertarget="mobile-sidebar" aria-label="Open navigation">
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
   <aside id="mobile-sidebar" popover class="mobile-sidebar">
     <div class="is-flex is-align-items-center is-justify-content-space-between p-5 pb-0">
       <strong class="is-size-5">Navigation</strong>
@@ -25,7 +44,6 @@
   <div class="columns is-gapless app-layout">
     <aside data-desktop-sidebar class="column is-narrow app-sidebar">
       <div class="p-5">
-        {{template "sidebar-brand" .}}
         <nav aria-label="Primary" class="menu">
           {{template "sidebar-menu" .Layout}}
         </nav>
@@ -35,14 +53,6 @@
     <main id="main-content" tabindex="-1" class="column">
       <section class="section">
         <div class="container is-fluid">
-          <button type="button" class="button is-primary is-light mobile-sidebar-button mb-5" popovertarget="mobile-sidebar" aria-label="Open navigation">
-            <span class="icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                <path d="M4 6h16M4 12h16M4 18h16"></path>
-              </svg>
-            </span>
-            <span>Menu</span>
-          </button>
           {{template "page-content" .}}
         </div>
       </section>
@@ -50,15 +60,6 @@
   </div>
 </body>
 </html>
-{{end}}
-
-{{define "sidebar-brand"}}
-<a class="is-flex is-align-items-center mb-5 px-2" href="/">
-  <span class="icon has-text-primary" aria-hidden="true">
-    <svg viewBox="0 0 24 24" fill="currentColor"><use href="#icon-bookshelf"></use></svg>
-  </span>
-  <strong class="is-size-5 ml-2">Bookist</strong>
-</a>
 {{end}}
 
 {{define "sidebar-menu"}}
