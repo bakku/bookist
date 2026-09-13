@@ -65,14 +65,12 @@ func TestIndexRendersBulmaAppShell(t *testing.T) {
 	for _, expected := range []string{
 		`href="/static/bulma.min.css"`,
 		`href="/static/app.css"`,
-		`src="/static/app.js"`,
-		`class="navbar has-shadow"`,
-		`aria-label="Main navigation"`,
 		`aria-label="Primary"`,
-		`class="button is-white navbar-menu-toggle"`,
-		`id="mobile-navigation" class="navbar-menu is-hidden-desktop"`,
+		`aria-label="Mobile primary"`,
+		`id="mobile-sidebar" popover class="mobile-sidebar"`,
+		`popovertarget="mobile-sidebar" aria-label="Open navigation"`,
 		`data-desktop-sidebar class="column is-narrow app-sidebar is-hidden-touch"`,
-		`class="menu p-5"`,
+		`class="menu"`,
 		`class="notification is-primary is-light"`,
 		`class="tag is-primary is-light is-rounded"`,
 		`aria-current="page" class="is-active"`,
@@ -85,7 +83,7 @@ func TestIndexRendersBulmaAppShell(t *testing.T) {
 
 // ── Static Assets ─────────────────────────────────────────────────────────────
 
-func TestStaticAssetsAreServed(t *testing.T) {
+func TestStaticStylesheetsAreServed(t *testing.T) {
 	app := newTestApp(t)
 
 	tests := []struct {
@@ -95,7 +93,6 @@ func TestStaticAssetsAreServed(t *testing.T) {
 	}{
 		{path: "/static/bulma.min.css", contentType: "text/css", contains: []byte("bulma.io v1.0.4")},
 		{path: "/static/app.css", contentType: "text/css", contains: []byte(".app-sidebar")},
-		{path: "/static/app.js", contentType: "text/javascript", contains: []byte("data-navigation-toggle")},
 	}
 
 	for _, tt := range tests {
