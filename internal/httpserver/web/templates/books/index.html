@@ -1,65 +1,59 @@
 {{define "page-content"}}
 <section aria-labelledby="books-heading">
-    <div class="level is-mobile mb-5">
-        <div class="level-left">
-            <h1 id="books-heading" class="title is-4 mb-0">Books</h1>
-        </div>
-        <div class="level-right">
-            <span class="tag is-primary is-light is-rounded">{{len .Books}} in library</span>
-        </div>
+  <div class="level is-mobile mb-5">
+    <div class="level-left">
+      <h1 id="books-heading" class="title is-4 mb-0">Books</h1>
     </div>
-    {{if .Books}}
-    <div data-book-grid class="columns is-mobile is-multiline book-grid">
-        {{range .Books}}
-        {{$book := .}}
-        <div class="column is-half-mobile is-one-third-tablet is-one-quarter-desktop is-one-fifth-widescreen book-column">
-            <article class="card book-card">
-                <div class="card-image">
-                    <figure class="image is-3by4 book-cover">
-                        {{with .CoverURL}}
-                        <img src="{{.}}" alt="Cover of {{$book.Title}}" loading="lazy">
-                        {{else}}
-                        <span role="img" aria-label="Cover unavailable for {{$book.Title}}" class="book-cover-placeholder">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11a1 1 0 0 1 1 1v16a2.5 2.5 0 0 0-2.5-2.5H4z"></path>
-                                <path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H13a1 1 0 0 0-1 1v16a2.5 2.5 0 0 1 2.5-2.5H20z"></path>
-                            </svg>
-                        </span>
-                        {{end}}
-                        <span class="book-cover-gradient" aria-hidden="true"></span>
-                        <h2 class="book-cover-title">{{.Title}}</h2>
-                    </figure>
-                </div>
-                <div class="card-content">
-                    <p class="has-text-grey is-size-7 has-text-weight-medium mb-2">Book #{{.ID}}</p>
-                    <dl class="book-metadata is-size-7">
-                        <div>
-                            <dt class="has-text-grey">ISBN</dt>
-                            <dd>{{with .ISBN}}{{.}}{{else}}Not set{{end}}</dd>
-                        </div>
-                        <div>
-                            <dt class="has-text-grey">Added</dt>
-                            <dd><time datetime="{{.CreatedAt.Format "2006-01-02"}}">{{.CreatedAt.Format "2006-01-02"}}</time></dd>
-                        </div>
-                    </dl>
-                </div>
-            </article>
+    <div class="level-right">
+      <span class="tag is-primary is-light is-rounded">{{len .Books}} in library</span>
+    </div>
+  </div>
+
+  {{if .Books}}
+  <div data-book-grid class="columns is-mobile is-multiline">
+    {{range .Books}}
+    {{$book := .}}
+    <div class="column is-half-mobile is-one-third-tablet is-one-quarter-desktop is-one-fifth-widescreen book-column">
+      <article class="card book-card">
+        <div class="card-image">
+          <figure class="image is-3by4 has-background-primary-light">
+            {{with .CoverURL}}
+            <img src="{{.}}" alt="Cover of {{$book.Title}}" loading="lazy">
+            {{else}}
+            <span role="img" aria-label="Cover unavailable for {{$book.Title}}" class="book-cover-placeholder has-text-primary">
+              <span class="icon is-large" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11a1 1 0 0 1 1 1v16a2.5 2.5 0 0 0-2.5-2.5H4z"></path>
+                  <path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H13a1 1 0 0 0-1 1v16a2.5 2.5 0 0 1 2.5-2.5H20z"></path>
+                </svg>
+              </span>
+            </span>
+            {{end}}
+          </figure>
         </div>
-        {{end}}
-    </div>
-    {{else}}
-    <div data-book-grid class="columns is-mobile is-multiline book-grid">
-        {{template "book-placeholder"}}
-        {{template "book-placeholder"}}
-        {{template "book-placeholder"}}
-        {{template "book-placeholder"}}
-        {{template "book-placeholder"}}
-        {{template "book-placeholder"}}
-    </div>
-    <div class="notification is-primary is-light mt-5">
-        <p class="has-text-weight-semibold">Your book grid is ready.</p>
-        <p>No books yet. Add one with the JSON API or CLI.</p>
+        <div class="card-content">
+          <h2 class="title is-6 mb-2">{{.Title}}</h2>
+          <p class="has-text-grey is-size-7 mb-3">Book #{{.ID}}</p>
+          <dl class="is-size-7">
+            <div class="level is-mobile mb-1">
+              <dt class="level-left has-text-grey">ISBN</dt>
+              <dd class="level-right book-value">{{with .ISBN}}{{.}}{{else}}Not set{{end}}</dd>
+            </div>
+            <div class="level is-mobile mb-0">
+              <dt class="level-left has-text-grey">Added</dt>
+              <dd class="level-right"><time datetime="{{.CreatedAt.Format "2006-01-02"}}">{{.CreatedAt.Format "2006-01-02"}}</time></dd>
+            </div>
+          </dl>
+        </div>
+      </article>
     </div>
     {{end}}
+  </div>
+  {{else}}
+  <div class="notification is-primary is-light">
+    <p class="has-text-weight-semibold">Your library is empty.</p>
+    <p>Add a book with the JSON API or CLI to see it here.</p>
+  </div>
+  {{end}}
 </section>
 {{end}}

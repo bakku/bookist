@@ -7,34 +7,73 @@
   <title>{{.Layout.PageTitle}}</title>
   <link rel="stylesheet" href="/static/bulma.min.css">
   <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
 </head>
 <body>
   {{template "icon-sprite" .}}
   <a href="#main-content" class="skip-link">Skip to content</a>
-  {{template "app-shell" .}}
+
+  <nav class="navbar has-shadow" role="navigation" aria-label="Main navigation">
+    <div class="container is-fluid">
+      <div class="navbar-brand">
+        <a class="navbar-item" href="/">
+          <span class="icon has-text-primary" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="currentColor"><use href="#icon-bookshelf"></use></svg>
+          </span>
+          <strong class="ml-2">Bookist</strong>
+        </a>
+        <button type="button" class="navbar-burger" data-navigation-toggle aria-label="Open navigation" aria-expanded="false" aria-controls="mobile-navigation">
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+        </button>
+      </div>
+
+      <div id="mobile-navigation" class="navbar-menu is-hidden-desktop">
+        <div class="navbar-start">
+          {{range .Layout.LibraryNav}}
+          <a class="navbar-item{{if .Active}} is-active{{end}}" href="{{.Href}}" {{if .Active}}aria-current="page"{{end}}>{{.Label}}</a>
+          {{end}}
+          <div class="navbar-item has-text-grey is-size-7 has-text-weight-semibold">Lists</div>
+          {{range .Layout.UserListNav}}
+          <a class="navbar-item" href="{{.Href}}">{{.Label}}</a>
+          {{end}}
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="columns is-gapless app-layout">
+    <aside data-desktop-sidebar class="column is-narrow app-sidebar is-hidden-touch">
+      <nav aria-label="Primary" class="menu p-5">
+        <p class="menu-label">Library</p>
+        <ul class="menu-list">
+          {{range .Layout.LibraryNav}}
+          <li><a href="{{.Href}}" {{if .Active}}aria-current="page" class="is-active"{{end}}>
+            <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><use href="#icon-{{.IconID}}"></use></svg></span>
+            <span>{{.Label}}</span>
+          </a></li>
+          {{end}}
+        </ul>
+        <p class="menu-label">Lists</p>
+        <ul class="menu-list">
+          {{range .Layout.UserListNav}}
+          <li><a href="{{.Href}}">
+            <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><use href="#icon-{{.IconID}}"></use></svg></span>
+            <span>{{.Label}}</span>
+          </a></li>
+          {{end}}
+        </ul>
+      </nav>
+    </aside>
+
+    <main id="main-content" tabindex="-1" class="column section">
+      <div class="container is-fluid">
+        {{template "page-content" .}}
+      </div>
+    </main>
+  </div>
 </body>
 </html>
-{{end}}
-
-{{define "app-shell"}}
-<div class="app-shell">
-  <header data-app-header class="navbar app-header" role="banner">
-    <div class="navbar-brand app-header-brand">
-      <div class="is-hidden-desktop">
-        {{template "mobile-sidebar" .Layout}}
-      </div>
-      {{template "brand" .}}
-    </div>
-  </header>
-  <div class="app-body">
-    {{template "sidebar" .Layout}}
-    <div class="app-content">
-      <main id="main-content" tabindex="-1" class="section app-section">
-        <div class="container is-fluid page-container">
-          {{template "page-content" .}}
-        </div>
-      </main>
-    </div>
-  </div>
-</div>
 {{end}}

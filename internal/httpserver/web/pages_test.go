@@ -41,7 +41,7 @@ func TestIndexListsBooks(t *testing.T) {
 	if !bytes.Contains(resp.Body.Bytes(), []byte(`aria-label="Cover unavailable for Kindred"`)) {
 		t.Fatalf("expected index response to contain a cover placeholder, got %s", resp.Body.String())
 	}
-	if !bytes.Contains(resp.Body.Bytes(), []byte(`data-book-grid class="columns is-mobile is-multiline book-grid"`)) {
+	if !bytes.Contains(resp.Body.Bytes(), []byte(`data-book-grid class="columns is-mobile is-multiline"`)) {
 		t.Fatalf("expected index response to render the book grid, got %s", resp.Body.String())
 	}
 	if !bytes.Contains(resp.Body.Bytes(), []byte(`1 in library`)) {
@@ -65,11 +65,13 @@ func TestIndexRendersBulmaAppShell(t *testing.T) {
 	for _, expected := range []string{
 		`href="/static/bulma.min.css"`,
 		`href="/static/app.css"`,
-		`class="navbar app-header"`,
+		`src="/static/app.js"`,
+		`class="navbar has-shadow"`,
+		`aria-label="Main navigation"`,
 		`aria-label="Primary"`,
-		`aria-label="Mobile primary"`,
-		`class="menu"`,
-		`class="notification is-primary is-light mt-5"`,
+		`id="mobile-navigation" class="navbar-menu is-hidden-desktop"`,
+		`class="menu p-5"`,
+		`class="notification is-primary is-light"`,
 		`class="tag is-primary is-light is-rounded"`,
 		`aria-current="page" class="is-active"`,
 	} {
@@ -81,15 +83,17 @@ func TestIndexRendersBulmaAppShell(t *testing.T) {
 
 // ── Static Assets ─────────────────────────────────────────────────────────────
 
-func TestStaticStylesheetsAreServed(t *testing.T) {
+func TestStaticAssetsAreServed(t *testing.T) {
 	app := newTestApp(t)
 
 	tests := []struct {
-		path     string
-		contains []byte
+		path        string
+		contentType string
+		contains    []byte
 	}{
-		{path: "/static/bulma.min.css", contains: []byte("bulma.io v1.0.4")},
-		{path: "/static/app.css", contains: []byte(".app-sidebar")},
+		{path: "/static/bulma.min.css", contentType: "text/css", contains: []byte("bulma.io v1.0.4")},
+		{path: "/static/app.css", contentType: "text/css", contains: []byte(".app-sidebar")},
+		{path: "/static/app.js", contentType: "text/javascript", contains: []byte("data-navigation-toggle")},
 	}
 
 	for _, tt := range tests {
@@ -100,8 +104,8 @@ func TestStaticStylesheetsAreServed(t *testing.T) {
 			if resp.Code != http.StatusOK {
 				t.Fatalf("expected status %d, got %d", http.StatusOK, resp.Code)
 			}
-			if got := resp.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/css") {
-				t.Fatalf("expected CSS content type, got %q", got)
+			if got := resp.Header().Get("Content-Type"); !strings.HasPrefix(got, tt.contentType) {
+				t.Fatalf("expected content type %q, got %q", tt.contentType, got)
 			}
 
 			body, err := io.ReadAll(resp.Body)
