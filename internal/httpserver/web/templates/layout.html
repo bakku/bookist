@@ -23,7 +23,7 @@
   </aside>
 
   <div class="columns is-gapless app-layout">
-    <aside data-desktop-sidebar class="column is-narrow app-sidebar is-hidden-touch">
+    <aside data-desktop-sidebar class="column is-narrow app-sidebar">
       <div class="p-5">
         {{template "sidebar-brand" .}}
         <nav aria-label="Primary" class="menu">
@@ -35,7 +35,7 @@
     <main id="main-content" tabindex="-1" class="column">
       <section class="section">
         <div class="container is-fluid">
-          <button type="button" class="button is-primary is-light is-hidden-desktop mb-5" popovertarget="mobile-sidebar" aria-label="Open navigation">
+          <button type="button" class="button is-primary is-light mobile-sidebar-button mb-5" popovertarget="mobile-sidebar" aria-label="Open navigation">
             <span class="icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                 <path d="M4 6h16M4 12h16M4 18h16"></path>
