@@ -35,13 +35,13 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		Layout: layoutView{
 			PageTitle: "Bookist Library",
 			LibraryNav: []navItemView{
-				{Href: "/", Label: "Books", IconID: "bookshelf", Active: true},
-				{Href: "/authors", Label: "Authors", IconID: "account-outline"},
+				{Href: "/", Label: "Books", IconID: "books", Active: true},
+				{Href: "/authors", Label: "Authors", IconID: "user"},
 			},
 			UserListNav: []navItemView{
-				{Href: "/lists/to-read", Label: "To Read", IconID: "format-list-bulleted"},
-				{Href: "/lists/sci-fi-favorites", Label: "Sci-Fi Favorites", IconID: "format-list-bulleted"},
-				{Href: "/lists/summer-reading", Label: "Summer Reading", IconID: "format-list-bulleted"},
+				{Href: "/lists/to-read", Label: "To Read", IconID: "list"},
+				{Href: "/lists/sci-fi-favorites", Label: "Sci-Fi Favorites", IconID: "list"},
+				{Href: "/lists/summer-reading", Label: "Summer Reading", IconID: "list"},
 			},
 		},
 		Books: bookList,

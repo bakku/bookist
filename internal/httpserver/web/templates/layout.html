@@ -17,7 +17,7 @@
       <div class="navbar-brand">
         <a class="navbar-item" href="/">
           <span class="icon has-text-primary" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="currentColor"><use href="#icon-bookshelf"></use></svg>
+            <svg viewBox="0 0 24 24"><use href="#icon-books"></use></svg>
           </span>
           <strong class="is-size-5 ml-2">Bookist</strong>
         </a>
@@ -67,7 +67,7 @@
 <ul class="menu-list">
   {{range .LibraryNav}}
   <li><a href="{{.Href}}" {{if .Active}}aria-current="page" class="is-active"{{end}}>
-    <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><use href="#icon-{{.IconID}}"></use></svg></span>
+    <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><use href="#icon-{{.IconID}}"></use></svg></span>
     <span>{{.Label}}</span>
   </a></li>
   {{end}}
@@ -76,7 +76,7 @@
 <ul class="menu-list">
   {{range .UserListNav}}
   <li><a href="{{.Href}}">
-    <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><use href="#icon-{{.IconID}}"></use></svg></span>
+    <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><use href="#icon-{{.IconID}}"></use></svg></span>
     <span>{{.Label}}</span>
   </a></li>
   {{end}}

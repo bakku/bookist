@@ -22,10 +22,7 @@
             {{else}}
             <span role="img" aria-label="Cover unavailable for {{$book.Title}}" class="book-cover-placeholder has-text-primary">
               <span class="icon is-large" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11a1 1 0 0 1 1 1v16a2.5 2.5 0 0 0-2.5-2.5H4z"></path>
-                  <path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H13a1 1 0 0 0-1 1v16a2.5 2.5 0 0 1 2.5-2.5H20z"></path>
-                </svg>
+                <svg viewBox="0 0 24 24"><use href="#icon-book"></use></svg>
               </span>
             </span>
             {{end}}
