@@ -37,7 +37,7 @@ func TestServiceCreateRequiresTitle(t *testing.T) {
 	if !errors.Is(err, books.ErrTitleRequired) {
 		t.Fatalf("expected ErrTitleRequired, got %v", err)
 	}
-	testsupport.AssertBookCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
 }
 
 func TestServiceCreateRemovesCoverWhenPersistenceFails(t *testing.T) {
@@ -76,7 +76,7 @@ func TestServiceCreateRejectsUnknownAuthorIDs(t *testing.T) {
 	if !errors.Is(err, books.ErrAuthorNotFound) {
 		t.Fatalf("expected ErrAuthorNotFound, got %v", err)
 	}
-	testsupport.AssertBookCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
 }
 
 func TestServiceCreateRejectsNonPositiveAuthorIDs(t *testing.T) {
@@ -89,7 +89,7 @@ func TestServiceCreateRejectsNonPositiveAuthorIDs(t *testing.T) {
 	if !errors.Is(err, books.ErrAuthorNotFound) {
 		t.Fatalf("expected ErrAuthorNotFound, got %v", err)
 	}
-	testsupport.AssertBookCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
 }
 
 func TestServiceCreateTrimsAndPersistsInput(t *testing.T) {
@@ -306,7 +306,7 @@ func TestServiceCreateRejectsInvalidFormat(t *testing.T) {
 	if !errors.Is(err, books.ErrInvalidFormat) {
 		t.Fatalf("expected ErrInvalidFormat, got %v", err)
 	}
-	testsupport.AssertBookCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
 }
 
 func TestServiceCreateConvertsBlankStringFieldsToNull(t *testing.T) {
@@ -339,6 +339,11 @@ func TestServiceCreateConvertsBlankStringFieldsToNull(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if created.Language != nil || created.Publisher != nil || created.Edition != nil || created.PurchasedAt != nil ||
+		created.PurchasePrice != nil || created.Notes != nil || created.Summary != nil || created.SeriesName != nil ||
+		created.Location != nil || created.AcquisitionSource != nil {
+		t.Fatalf("expected blank string fields to be nil, got %#v", created)
+	}
 
 	testsupport.AssertBookRowFields(t, db, created.ID, testsupport.BookRowAssertion{
 		Title: "Blank Fields",
@@ -357,7 +362,7 @@ func TestServiceCreateRejectsInvalidCondition(t *testing.T) {
 			t.Fatalf("expected ErrInvalidCondition for %q, got %v", condition, err)
 		}
 	}
-	testsupport.AssertBookCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
 }
 
 func TestServiceCreateAcceptsValidConditions(t *testing.T) {
@@ -381,7 +386,7 @@ func TestServiceCreateAcceptsValidConditions(t *testing.T) {
 			t.Fatalf("expected condition %q, got %#v", condition, created.Condition)
 		}
 	}
-	testsupport.AssertBookCount(t, db, 5)
+	testsupport.AssertSQLCount(t, db, 5, `SELECT COUNT(*) FROM books`)
 }
 
 func TestServiceCreateRejectsInvalidNumericFields(t *testing.T) {
@@ -409,7 +414,7 @@ func TestServiceCreateRejectsInvalidNumericFields(t *testing.T) {
 			}
 		})
 	}
-	testsupport.AssertBookCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
 }
 
 func TestServiceCreateRejectsInvalidPurchasedAt(t *testing.T) {
@@ -418,7 +423,7 @@ func TestServiceCreateRejectsInvalidPurchasedAt(t *testing.T) {
 	if !errors.Is(err, books.ErrInvalidPurchasedAt) {
 		t.Fatalf("expected ErrInvalidPurchasedAt, got %v", err)
 	}
-	testsupport.AssertBookCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
 }
 
 // ── Update ────────────────────────────────────────────────────────────────────
@@ -486,6 +491,24 @@ func TestServiceUpdateReplacesAndHydratesAuthors(t *testing.T) {
 		t.Fatalf("expected non-nil empty authors, got %#v", updated.Authors)
 	}
 	testsupport.AssertBookAuthors(t, db, bookID)
+}
+
+func TestServiceUpdatePreservesAndHydratesAuthorsWhenOmitted(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	authorID := testsupport.InsertAuthorRow(t, db, "Frank Herbert")
+	testsupport.InsertBookAuthorRow(t, db, bookID, authorID)
+
+	updated, err := service.Update(context.Background(), bookID, books.UpdateBookRequest{
+		Title: updateValueOf("Dune Messiah"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated.Authors) != 1 || updated.Authors[0].ID != authorID {
+		t.Fatalf("expected preserved hydrated author, got %#v", updated.Authors)
+	}
+	testsupport.AssertBookAuthors(t, db, bookID, authorID)
 }
 
 func TestServiceUpdateReplacesAndClearsCover(t *testing.T) {
@@ -563,6 +586,51 @@ func TestServiceUpdateCleansNewCoverWhenPersistenceFails(t *testing.T) {
 	}
 }
 
+func TestServiceUpdateSucceedsWhenOldCoverCleanupFails(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	oldKey := "00000000000000000000000000000000.png"
+	newKey := "11111111111111111111111111111111.png"
+	if _, err := db.Exec(`UPDATE books SET cover_image_key = ? WHERE id = ?`, oldKey, bookID); err != nil {
+		t.Fatal(err)
+	}
+
+	service := books.NewService(
+		books.NewSQLiteRepository(db),
+		authors.NewSQLiteRepository(db),
+		cleanupFailingCoverStore{savedKey: newKey},
+	)
+	updated, err := service.Update(context.Background(), bookID, books.UpdateBookRequest{
+		Cover: updateValueOf([]byte("replacement cover")),
+	})
+	if err != nil {
+		t.Fatalf("expected committed update to succeed despite cleanup failure: %v", err)
+	}
+	if updated.CoverImageKey == nil || *updated.CoverImageKey != newKey {
+		t.Fatalf("expected new cover key, got %#v", updated.CoverImageKey)
+	}
+
+	var persistedKey string
+	if err := db.QueryRow(`SELECT cover_image_key FROM books WHERE id = ?`, bookID).Scan(&persistedKey); err != nil {
+		t.Fatal(err)
+	}
+	if persistedKey != newKey {
+		t.Fatalf("expected persisted cover key %q, got %q", newKey, persistedKey)
+	}
+}
+
+type cleanupFailingCoverStore struct {
+	savedKey string
+}
+
+func (s cleanupFailingCoverStore) Save([]byte) (string, error) {
+	return s.savedKey, nil
+}
+
+func (cleanupFailingCoverStore) Delete(string) error {
+	return errors.New("cleanup failed")
+}
+
 func updateValueOf[T any](value T) optional.Value[T] {
 	return optional.Value[T]{Present: true, Value: &value}
 }
@@ -577,7 +645,7 @@ func TestServiceDeleteRemovesPersistedBook(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testsupport.AssertBookCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
 }
 
 func TestServiceDeleteRemovesManagedCover(t *testing.T) {
@@ -606,7 +674,7 @@ func TestServiceDeleteRemovesManagedCover(t *testing.T) {
 	if len(entries) != 0 {
 		t.Fatalf("expected deletion to remove managed cover, found %d files", len(entries))
 	}
-	testsupport.AssertBookCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
 }
 
 // ── List ──────────────────────────────────────────────────────────────────────

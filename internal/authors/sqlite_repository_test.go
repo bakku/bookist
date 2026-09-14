@@ -206,7 +206,7 @@ func TestSQLiteRepositoryDeletePersistsDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testsupport.AssertAuthorCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM authors`)
 }
 
 func TestSQLiteRepositoryDeleteReturnsErrAuthorNotFound(t *testing.T) {

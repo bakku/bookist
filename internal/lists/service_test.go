@@ -20,7 +20,7 @@ func TestServiceCreateRequiresName(t *testing.T) {
 	if !errors.Is(err, lists.ErrNameRequired) {
 		t.Fatalf("expected ErrNameRequired, got %v", err)
 	}
-	testsupport.AssertListCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM lists`)
 }
 
 func TestServiceCreateTrimsAndPersistsName(t *testing.T) {
@@ -34,7 +34,7 @@ func TestServiceCreateTrimsAndPersistsName(t *testing.T) {
 	if created.Name != "Want to Buy" {
 		t.Fatalf("expected trimmed name, got %q", created.Name)
 	}
-	testsupport.AssertListRow(t, db, created.ID, "Want to Buy")
+	testsupport.AssertListRow(t, db, created.ID, "Want to Buy", nil)
 }
 
 func TestServiceCreateTrimsAndPersistsDescription(t *testing.T) {
@@ -75,7 +75,7 @@ func TestServiceCreateRejectsCaseInsensitiveDuplicate(t *testing.T) {
 	if _, err := service.Create(context.Background(), lists.CreateListRequest{Name: "NIGHTSTAND"}); !errors.Is(err, lists.ErrNameConflict) {
 		t.Fatalf("expected ErrNameConflict, got %v", err)
 	}
-	testsupport.AssertListCount(t, db, 1)
+	testsupport.AssertSQLCount(t, db, 1, `SELECT COUNT(*) FROM lists`)
 }
 
 // ── Update ────────────────────────────────────────────────────────────────────
@@ -144,7 +144,7 @@ func TestServiceUpdateValidatesRequestAndNameUniqueness(t *testing.T) {
 			if !errors.Is(err, tt.want) {
 				t.Fatalf("expected %v, got %v", tt.want, err)
 			}
-			testsupport.AssertListRow(t, db, id, "Want to Buy")
+			testsupport.AssertListRow(t, db, id, "Want to Buy", nil)
 		})
 	}
 }
@@ -238,7 +238,7 @@ func TestServiceDeleteDelegates(t *testing.T) {
 	if err := service.Delete(context.Background(), id); err != nil {
 		t.Fatal(err)
 	}
-	testsupport.AssertListCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM lists`)
 }
 
 // ── AddBookToList ─────────────────────────────────────────────────────────────

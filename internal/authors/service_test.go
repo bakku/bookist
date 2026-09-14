@@ -20,7 +20,7 @@ func TestServiceCreateRequiresName(t *testing.T) {
 	if !errors.Is(err, authors.ErrNameRequired) {
 		t.Fatalf("expected ErrNameRequired, got %v", err)
 	}
-	testsupport.AssertAuthorCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM authors`)
 }
 
 func TestServiceCreateTrimsAndPersistsName(t *testing.T) {
@@ -85,7 +85,7 @@ func TestServiceUpdateValidatesFields(t *testing.T) {
 
 // ── List ──────────────────────────────────────────────────────────────────────
 
-func TestServiceListDelegates(t *testing.T) {
+func TestServiceListReturnsAuthor(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	service := authors.NewService(authors.NewSQLiteRepository(db))
 	testsupport.InsertAuthorRow(t, db, "Jane Austen")
@@ -119,6 +119,59 @@ func TestServiceSearchTrimsQuery(t *testing.T) {
 	}
 }
 
+// ── GetByIDs ──────────────────────────────────────────────────────────────────
+
+func TestServiceGetByIDsReturnsSpecifiedAuthors(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	service := authors.NewService(authors.NewSQLiteRepository(db))
+	janeId := testsupport.InsertAuthorRow(t, db, "Jane Austen")
+	testsupport.InsertAuthorRow(t, db, "Octavia Butler")
+	dumasId := testsupport.InsertAuthorRow(t, db, "Alexandre Dumas")
+
+	result, err := service.GetByIDs(context.Background(), []int64{janeId, dumasId})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(result) != 2 {
+		t.Fatalf("expected '2' authors, got %d", len(result))
+	}
+
+	if result[0].Name != "Jane Austen" {
+		t.Fatalf("expected Jane Austen, got %q", result[0].Name)
+	}
+
+	if result[1].Name != "Alexandre Dumas" {
+		t.Fatalf("expected Alexandre Dumas, got %q", result[1].Name)
+	}
+}
+
+// ── ListByBookIDs ─────────────────────────────────────────────────────────────
+
+func TestServiceListByBookIDsReturnsAuthorsGroupedByBook(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	service := authors.NewService(authors.NewSQLiteRepository(db))
+	bookID1 := testsupport.InsertBookRow(t, db, "Pride and Prejudice", nil)
+	bookID2 := testsupport.InsertBookRow(t, db, "Kindred", nil)
+	janeID := testsupport.InsertAuthorRow(t, db, "Jane Austen")
+	octaviaID := testsupport.InsertAuthorRow(t, db, "Octavia Butler")
+	testsupport.InsertBookAuthorRow(t, db, bookID1, janeID)
+	testsupport.InsertBookAuthorRow(t, db, bookID2, octaviaID)
+
+	result, err := service.ListByBookIDs(context.Background(), []int64{bookID1, bookID2})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(result[bookID1]) != 1 || result[bookID1][0].Name != "Jane Austen" {
+		t.Fatalf("expected Jane Austen for Pride and Prejudice, got %#v", result[bookID1])
+	}
+
+	if len(result[bookID2]) != 1 || result[bookID2][0].Name != "Octavia Butler" {
+		t.Fatalf("expected Octavia Butler for Kindred, got %#v", result[bookID2])
+	}
+}
+
 // ── Delete ────────────────────────────────────────────────────────────────────
 
 func TestServiceDeletePersistsDeletion(t *testing.T) {
@@ -130,7 +183,7 @@ func TestServiceDeletePersistsDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testsupport.AssertAuthorCount(t, db, 0)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM authors`)
 }
 
 func stringPointer(value string) *string {

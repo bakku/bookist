@@ -112,9 +112,9 @@ func TestListsAddPrintsIDAndName(t *testing.T) {
 	var capturedBody lists.CreateListRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && r.URL.Path == "/api/lists" {
-			json.NewDecoder(r.Body).Decode(&capturedBody)
+			_ = json.NewDecoder(r.Body).Decode(&capturedBody)
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(lists.List{ID: 10, Name: capturedBody.Name})
+			_ = json.NewEncoder(w).Encode(lists.List{ID: 10, Name: capturedBody.Name})
 		}
 	}))
 	defer server.Close()
@@ -143,12 +143,12 @@ func TestListsAddBookResolvesListByName(t *testing.T) {
 			if got := r.URL.Query().Get("q"); got != "want TO buy" {
 				t.Fatalf("expected list query %q, got %q", "want TO buy", got)
 			}
-			json.NewEncoder(w).Encode([]lists.List{
+			_ = json.NewEncoder(w).Encode([]lists.List{
 				{ID: 9, Name: "Want to Buy Later"},
 				{ID: 1, Name: "Want to Buy"},
 			})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/books":
-			json.NewEncoder(w).Encode([]interface{}{})
+			_ = json.NewEncoder(w).Encode([]interface{}{})
 		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/lists/"):
 			capturedPath = r.URL.Path
 			w.WriteHeader(http.StatusNoContent)
@@ -194,14 +194,14 @@ func TestListsAddBookResolvesBookByTitle(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/lists":
-			json.NewEncoder(w).Encode([]lists.List{
+			_ = json.NewEncoder(w).Encode([]lists.List{
 				{ID: 1, Name: "Want to Buy"},
 			})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/books":
 			if got := r.URL.Query().Get("q"); got != "dUnE" {
 				t.Fatalf("expected book query %q, got %q", "dUnE", got)
 			}
-			json.NewEncoder(w).Encode([]struct {
+			_ = json.NewEncoder(w).Encode([]struct {
 				ID    int64  `json:"id"`
 				Title string `json:"title"`
 			}{
@@ -209,7 +209,7 @@ func TestListsAddBookResolvesBookByTitle(t *testing.T) {
 				{ID: 2, Title: "Dune"},
 			})
 		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/lists/"):
-			json.NewDecoder(r.Body).Decode(&capturedBody)
+			_ = json.NewDecoder(r.Body).Decode(&capturedBody)
 			w.WriteHeader(http.StatusNoContent)
 		}
 	}))
@@ -263,7 +263,7 @@ func TestListsAddBookWithAmbiguousTitleRequiresID(t *testing.T) {
 func TestListsAddBookListNotFoundExitsNonZero(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/api/lists" {
-			json.NewEncoder(w).Encode([]lists.List{})
+			_ = json.NewEncoder(w).Encode([]lists.List{})
 		}
 	}))
 	defer server.Close()
@@ -283,11 +283,11 @@ func TestListsAddBookBookNotFoundExitsNonZero(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/lists":
-			json.NewEncoder(w).Encode([]lists.List{
+			_ = json.NewEncoder(w).Encode([]lists.List{
 				{ID: 1, Name: "Want to Buy"},
 			})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/books":
-			json.NewEncoder(w).Encode([]struct {
+			_ = json.NewEncoder(w).Encode([]struct {
 				ID    int64  `json:"id"`
 				Title string `json:"title"`
 			}{})

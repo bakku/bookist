@@ -15,15 +15,17 @@ import (
 
 func TestAuthorsAddPrintsIDAndName(t *testing.T) {
 	var capturedBody string
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && r.URL.Path == "/api/authors" {
 			var req authors.CreateAuthorRequest
-			json.NewDecoder(r.Body).Decode(&req)
+			_ = json.NewDecoder(r.Body).Decode(&req)
 			capturedBody = req.Name
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(authors.Author{ID: 10, Name: req.Name})
+			_ = json.NewEncoder(w).Encode(authors.Author{ID: 10, Name: req.Name})
 		}
 	}))
+
 	defer server.Close()
 
 	var stdout, stderr strings.Builder
@@ -165,39 +167,45 @@ func TestAuthorsRemoveResolvesExactName(t *testing.T) {
 }
 
 func TestAuthorsRemoveDoesNotCreateMissingAuthor(t *testing.T) {
-	postCount := 0
+	postCalled := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
-			postCount++
+			postCalled = true
 		}
 		_ = json.NewEncoder(w).Encode([]authors.Author{})
 	}))
 	defer server.Close()
 
 	exitCode, stdout, stderr := runCLI([]string{"authors", "rm", "--server", server.URL, "Missing"})
+
 	if exitCode == 0 || stdout != "" || !strings.Contains(stderr, "author not found: Missing") {
 		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
 	}
-	if postCount != 0 {
-		t.Fatalf("expected no author creation, got %d POST requests", postCount)
+
+	if postCalled {
+		t.Fatalf("expected no author creation")
 	}
 }
 
 func TestAuthorsRemoveRejectsAmbiguousName(t *testing.T) {
-	deleteCount := 0
+	deleteCalled := false
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodDelete {
-			deleteCount++
+			deleteCalled = true
 		}
 		_ = json.NewEncoder(w).Encode([]authors.Author{{ID: 1, Name: "Ada"}, {ID: 2, Name: "ada"}})
 	}))
+
 	defer server.Close()
 
 	exitCode, _, stderr := runCLI([]string{"authors", "rm", "--server", server.URL, "Ada"})
+
 	if exitCode == 0 || !strings.Contains(stderr, `author "Ada" exists multiple times; pass an author ID instead`) {
 		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
 	}
-	if deleteCount != 0 {
+
+	if deleteCalled {
 		t.Fatal("expected ambiguity to prevent DELETE")
 	}
 }

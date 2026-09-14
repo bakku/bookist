@@ -30,69 +30,38 @@ func NewService(repository Repository, authorRepo authors.Repository, coverStore
 
 func (s *Service) List(ctx context.Context) ([]Book, error) {
 	books, err := s.repository.List(ctx)
-	return s.withAuthors(ctx, books, err)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.withAuthorsAndCover(ctx, books)
 }
 
 func (s *Service) Search(ctx context.Context, query string) ([]Book, error) {
 	books, err := s.repository.Search(ctx, strings.TrimSpace(query))
-	return s.withAuthors(ctx, books, err)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.withAuthorsAndCover(ctx, books)
 }
 
 func (s *Service) ListByListID(ctx context.Context, listID int64) ([]Book, error) {
 	books, err := s.repository.ListByListID(ctx, listID)
-	return s.withAuthors(ctx, books, err)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.withAuthorsAndCover(ctx, books)
 }
 
 func (s *Service) SearchByListID(ctx context.Context, listID int64, query string) ([]Book, error) {
 	books, err := s.repository.SearchByListID(ctx, listID, strings.TrimSpace(query))
-	return s.withAuthors(ctx, books, err)
-}
-
-func (s *Service) Delete(ctx context.Context, id int64) error {
-	book, err := s.repository.GetByID(ctx, id)
-	if err != nil {
-		return err
-	}
-	if err := s.repository.Delete(ctx, id); err != nil {
-		return err
-	}
-	if book.CoverImageKey != nil {
-		if err := s.coverStore.Delete(*book.CoverImageKey); err != nil {
-			return fmt.Errorf("delete cover: %w", err)
-		}
-	}
-	return nil
-}
-
-func (s *Service) withAuthors(ctx context.Context, books []Book, err error) ([]Book, error) {
 	if err != nil {
 		return nil, err
 	}
 
-	if len(books) == 0 {
-		return books, nil
-	}
-
-	ids := make([]int64, len(books))
-	for i, b := range books {
-		ids[i] = b.ID
-	}
-
-	authorsByBook, err := s.authorRepo.ListByBookIDs(ctx, ids)
-	if err != nil {
-		return nil, err
-	}
-
-	for i, b := range books {
-		if aa, ok := authorsByBook[b.ID]; ok {
-			books[i].Authors = aa
-		} else {
-			books[i].Authors = []authors.Author{}
-		}
-		setCoverURL(&books[i])
-	}
-
-	return books, nil
+	return s.withAuthorsAndCover(ctx, books)
 }
 
 func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, error) {
@@ -303,6 +272,7 @@ func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, er
 	} else {
 		book.Authors = []authors.Author{}
 	}
+
 	setCoverURL(&book)
 
 	return book, nil
@@ -385,6 +355,7 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateBookRequest)
 		return Book{}, ErrInvalidPublishedDay
 	}
 
+	updatedAuthors := make([]authors.Author, 0)
 	if input.AuthorIDs.Present {
 		var deduped []int64
 		seen := make(map[int64]bool)
@@ -405,15 +376,25 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateBookRequest)
 			if err != nil {
 				return Book{}, err
 			}
-			foundIDs := make(map[int64]bool)
+			foundByID := make(map[int64]authors.Author)
 			for _, author := range found {
-				foundIDs[author.ID] = true
+				foundByID[author.ID] = author
 			}
 			for _, authorID := range deduped {
-				if !foundIDs[authorID] {
+				author, ok := foundByID[authorID]
+				if !ok {
 					return Book{}, ErrAuthorNotFound
 				}
+				updatedAuthors = append(updatedAuthors, author)
 			}
+		}
+	} else {
+		authorsByBook, err := s.authorRepo.ListByBookIDs(ctx, []int64{id})
+		if err != nil {
+			return Book{}, err
+		}
+		if currentAuthors, ok := authorsByBook[id]; ok {
+			updatedAuthors = currentAuthors
 		}
 	}
 
@@ -440,20 +421,12 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateBookRequest)
 		return Book{}, err
 	}
 	if priorCoverKey != nil && (newCoverKey == nil || *priorCoverKey != *newCoverKey) {
-		if err := s.coverStore.Delete(*priorCoverKey); err != nil {
-			return Book{}, fmt.Errorf("delete old cover: %w", err)
-		}
+		// The database update has committed, so old-cover cleanup is best effort.
+		// Reporting an error here would incorrectly tell clients that the update failed.
+		_ = s.coverStore.Delete(*priorCoverKey)
 	}
 
-	authorsByBook, err := s.authorRepo.ListByBookIDs(ctx, []int64{id})
-	if err != nil {
-		return Book{}, err
-	}
-	if bookAuthors, ok := authorsByBook[id]; ok {
-		book.Authors = bookAuthors
-	} else {
-		book.Authors = []authors.Author{}
-	}
+	book.Authors = updatedAuthors
 	setCoverURL(&book)
 	return book, nil
 }
@@ -465,11 +438,60 @@ func updateValue[T any](current *T, update optional.Value[T]) *T {
 	return current
 }
 
+func (s *Service) Delete(ctx context.Context, id int64) error {
+	book, err := s.repository.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if err := s.repository.Delete(ctx, id); err != nil {
+		return err
+	}
+
+	if book.CoverImageKey != nil {
+		if err := s.coverStore.Delete(*book.CoverImageKey); err != nil {
+			return fmt.Errorf("delete cover: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (s *Service) withAuthorsAndCover(ctx context.Context, books []Book) ([]Book, error) {
+	if len(books) == 0 {
+		return books, nil
+	}
+
+	ids := make([]int64, len(books))
+	for i, b := range books {
+		ids[i] = b.ID
+	}
+
+	authorsByBook, err := s.authorRepo.ListByBookIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+
+	for i, b := range books {
+		if aa, ok := authorsByBook[b.ID]; ok {
+			books[i].Authors = aa
+		} else {
+			books[i].Authors = []authors.Author{}
+		}
+
+		setCoverURL(&books[i])
+	}
+
+	return books, nil
+}
+
 func setCoverURL(book *Book) {
 	if book.CoverImageKey == nil {
 		book.CoverURL = nil
 		return
 	}
+
 	url := "/book-covers/" + *book.CoverImageKey
+
 	book.CoverURL = &url
 }

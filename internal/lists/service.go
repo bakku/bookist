@@ -15,19 +15,23 @@ func NewService(repository Repository) *Service {
 
 func (s *Service) Create(ctx context.Context, input CreateListRequest) (List, error) {
 	input.Name = strings.TrimSpace(input.Name)
+
 	if input.Name == "" {
 		return List{}, ErrNameRequired
 	}
+
 	exists, err := s.repository.NameExists(ctx, input.Name)
 	if err != nil {
 		return List{}, err
 	}
+
 	if exists {
 		return List{}, ErrNameConflict
 	}
 
 	if input.Description != nil {
 		desc := strings.TrimSpace(*input.Description)
+
 		if desc == "" {
 			input.Description = nil
 		} else {

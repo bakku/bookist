@@ -3,6 +3,7 @@
 
 # binary
 cmd/bookist/bookist
+/bin/
 
 # SQLite
 *.db*

@@ -1,0 +1,37 @@
+{{define "layout"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Layout.PageTitle}}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="font-sans">
+  {{template "icon-sprite" .}}
+  <a href="#main-content" class="skip-link">Skip to content</a>
+  {{template "app-shell" .}}
+</body>
+</html>
+{{end}}
+
+{{define "app-shell"}}
+<div class="flex h-dvh flex-col overflow-hidden bg-light">
+  <header data-app-header class="flex h-18 shrink-0 items-center border-b border-border bg-light">
+    <div class="flex h-16 w-32 shrink-0 items-center gap-1 px-4 sidebar:w-64">
+      <div class="sidebar:hidden">
+        {{template "mobile-sidebar" .Layout}}
+      </div>
+      {{template "brand" .}}
+    </div>
+  </header>
+  <div class="relative flex min-h-0 w-full grow overflow-y-auto">
+    {{template "sidebar" .Layout}}
+    <div class="bookist-scrollbar h-full min-w-0 w-full grow overflow-auto bg-light">
+      <main id="main-content" tabindex="-1" class="w-full p-4 sm:p-6 lg:p-8">
+        {{template "page-content" .}}
+      </main>
+    </div>
+  </div>
+</div>
+{{end}}

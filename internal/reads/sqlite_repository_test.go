@@ -2,7 +2,6 @@ package reads_test
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -36,26 +35,13 @@ func TestSQLiteRepositoryCreatePersistsRead(t *testing.T) {
 		t.Fatal("expected backend timestamps")
 	}
 
-	var gotBookID int64
-	var gotStartedAt, gotFinishedAt, gotAbandonedAt, gotNotes sql.NullString
-	var gotRating sql.NullFloat64
-	var createdAt, updatedAt string
-	err = db.QueryRow(`
-		SELECT book_id, started_at, finished_at, abandoned_at, rating, notes, created_at, updated_at
-		FROM reads WHERE id = ?
-	`, created.ID).Scan(&gotBookID, &gotStartedAt, &gotFinishedAt, &gotAbandonedAt, &gotRating, &gotNotes, &createdAt, &updatedAt)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if gotBookID != bookID || gotStartedAt.String != startedAt || gotFinishedAt.Valid || gotAbandonedAt.String != abandonedAt || gotRating.Float64 != rating || gotNotes.String != notes {
-		t.Fatalf("unexpected persisted read values")
-	}
-	if _, err := time.Parse(time.RFC3339, createdAt); err != nil {
-		t.Fatalf("invalid created_at: %v", err)
-	}
-	if _, err := time.Parse(time.RFC3339, updatedAt); err != nil {
-		t.Fatalf("invalid updated_at: %v", err)
-	}
+	testsupport.AssertReadRow(t, db, created.ID, testsupport.ReadRowAssertion{
+		BookID:      bookID,
+		StartedAt:   &startedAt,
+		AbandonedAt: &abandonedAt,
+		Rating:      &rating,
+		Notes:       &notes,
+	})
 }
 
 func TestSQLiteRepositoryCreateReturnsBookNotFound(t *testing.T) {

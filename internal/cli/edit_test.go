@@ -23,7 +23,7 @@ func TestBooksEditPatchesOnlyChanges(t *testing.T) {
 	}))
 	defer server.Close()
 
-	code, stdout, stderr := runCLI([]string{"books", "edit", "12", "--title", "Dune Messiah", "--pages", "256", "--author", "4", "--author", "8", "--server", server.URL})
+	code, stdout, stderr := runCLI([]string{"books", "edit", "--title", "Dune Messiah", "--pages", "256", "--author", "4", "--author", "8", "--server", server.URL, "12"})
 	if code != 0 || stderr != "" || stdout != "12\tDune Messiah\n" {
 		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
@@ -52,7 +52,7 @@ func TestBooksEditClearSendsNullAndResolvesTitle(t *testing.T) {
 	}))
 	defer server.Close()
 
-	code, _, stderr := runCLI([]string{"books", "edit", "kindred", "--clear", "authors", "--clear", "cover", "--server", server.URL})
+	code, _, stderr := runCLI([]string{"books", "edit", "--clear", "authors", "--clear", "cover", "--server", server.URL, "kindred"})
 	if code != 0 || stderr != "" {
 		t.Fatalf("unexpected result: exit=%d stderr=%q", code, stderr)
 	}
@@ -71,7 +71,7 @@ func TestReadsEditPatchesNullableFields(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(reads.Read{ID: 9, BookID: 3})
 	}))
 	defer server.Close()
-	code, stdout, stderr := runCLI([]string{"reads", "edit", "9", "--rating", "4.5", "--clear", "notes", "--server", server.URL})
+	code, stdout, stderr := runCLI([]string{"reads", "edit", "--rating", "4.5", "--clear", "notes", "--server", server.URL, "9"})
 	if code != 0 || stdout != "9\t3\n" || stderr != "" || body["rating"] != 4.5 || body["notes"] != nil || len(body) != 2 {
 		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q body=%#v", code, stdout, stderr, body)
 	}
@@ -92,7 +92,7 @@ func TestListsEditResolvesNameAndPatches(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	code, stdout, stderr := runCLI([]string{"lists", "edit", "favorites", "--name", "Best", "--clear", "description", "--server", server.URL})
+	code, stdout, stderr := runCLI([]string{"lists", "edit", "--name", "Best", "--clear", "description", "--server", server.URL, "favorites"})
 	if code != 0 || stdout != "5\tBest\n" || stderr != "" || body["name"] != "Best" || body["description"] != nil || len(body) != 2 {
 		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q body=%#v", code, stdout, stderr, body)
 	}
@@ -112,7 +112,7 @@ func TestAuthorsEditResolvesNameAndPatches(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(authors.Author{ID: 6, Name: "Ursula K. Le Guin"})
 	}))
 	defer server.Close()
-	code, stdout, stderr := runCLI([]string{"authors", "edit", "Ursula Le Guin", "--name", "Ursula K. Le Guin", "--server", server.URL})
+	code, stdout, stderr := runCLI([]string{"authors", "edit", "--name", "Ursula K. Le Guin", "--server", server.URL, "Ursula Le Guin"})
 	if code != 0 || stdout != "6\tUrsula K. Le Guin\n" || stderr != "" || len(body) != 1 || body["name"] != "Ursula K. Le Guin" {
 		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q body=%#v", code, stdout, stderr, body)
 	}
@@ -123,13 +123,13 @@ func TestEditValidationHappensBeforeNetwork(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { requests++ }))
 	defer server.Close()
 	tests := [][]string{
-		{"books", "edit", "Dune", "--server", server.URL},
-		{"books", "edit", "Dune", "--isbn", "1", "--clear", "isbn", "--server", server.URL},
-		{"books", "edit", "Dune", "--author", "", "--server", server.URL},
-		{"reads", "edit", "1", "--clear", "unknown", "--server", server.URL},
-		{"lists", "edit", "Favorites", "--clear", "name", "--server", server.URL},
-		{"authors", "edit", "Le Guin", "--clear", "name", "--server", server.URL},
-		{"books", "edit", "Dune", "extra", "--title", "New", "--server", server.URL},
+		{"books", "edit", "--server", server.URL, "Dune"},
+		{"books", "edit", "--isbn", "1", "--clear", "isbn", "--server", server.URL, "Dune"},
+		{"books", "edit", "--author", "", "--server", server.URL, "Dune"},
+		{"reads", "edit", "--clear", "unknown", "--server", server.URL, "1"},
+		{"lists", "edit", "--clear", "name", "--server", server.URL, "Favorites"},
+		{"authors", "edit", "--clear", "name", "--server", server.URL, "Le Guin"},
+		{"books", "edit", "--title", "New", "--server", server.URL, "Dune", "extra"},
 	}
 	for _, args := range tests {
 		code, stdout, stderr := runCLI(args)
@@ -142,11 +142,44 @@ func TestEditValidationHappensBeforeNetwork(t *testing.T) {
 	}
 }
 
-func TestEditHelpShowsTargetFirstSyntax(t *testing.T) {
+func TestEditHelpShowsOptionFirstSyntax(t *testing.T) {
 	for _, resource := range []string{"books", "reads", "lists", "authors"} {
 		code, stdout, stderr := runCLI([]string{resource, "edit", "--help"})
-		if code != 0 || stderr != "" || !strings.Contains(stdout, "edit <") || !strings.Contains(stdout, "[options]") || !strings.Contains(stdout, "--clear string") {
+		if code != 0 || stderr != "" || !strings.Contains(stdout, "edit [options] <") || !strings.Contains(stdout, "--clear string") {
 			t.Fatalf("%s: unexpected help: exit=%d stdout=%q stderr=%q", resource, code, stdout, stderr)
 		}
+	}
+}
+
+func TestBooksEditDoesNotCreateMissingAuthors(t *testing.T) {
+	var methods []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		methods = append(methods, r.Method)
+		if r.Method == http.MethodGet && r.URL.Path == "/api/authors" {
+			_ = json.NewEncoder(w).Encode([]authors.Author{})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	code, stdout, stderr := runCLI([]string{"books", "edit", "--author", "Missing Author", "--server", server.URL, "12"})
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "author not found: Missing Author") {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	if len(methods) != 1 || methods[0] != http.MethodGet {
+		t.Fatalf("expected only an author lookup, got methods %#v", methods)
+	}
+}
+
+func TestEditReportsServerErrorBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "rating must use increments of 0.5", http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	code, stdout, stderr := runCLI([]string{"reads", "edit", "--rating", "4.2", "--server", server.URL, "9"})
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "400 Bad Request: rating must use increments of 0.5") {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 }

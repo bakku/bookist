@@ -4,9 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"time"
 )
+
+const maxCLIErrorBodySize = 4 << 10
 
 func validateClears(changes map[string]any, clears []string, clearable map[string]string) error {
 	cleared := make(map[string]bool)
@@ -40,8 +44,17 @@ func patchEndpoint(endpoint string, changes map[string]any, output any) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	if resp.StatusCode != http.StatusOK {
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxCLIErrorBodySize))
+		if readErr == nil {
+			message := strings.TrimSpace(string(body))
+			if message != "" {
+				return fmt.Errorf("server returned %s: %s", resp.Status, message)
+			}
+		}
 		return fmt.Errorf("server returned %s", resp.Status)
 	}
 	if err := json.NewDecoder(resp.Body).Decode(output); err != nil {

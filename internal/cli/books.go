@@ -94,22 +94,18 @@ func runBooksEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags.Var(&publishedMonth, "published-month", "Publication month (1-12)")
 	flags.Var(&publishedDay, "published-day", "Publication day (1-31)")
 	flags.Var(&clears, "clear", "Field to clear (repeatable)")
-	help := commandHelp{name: "bookist books edit", usage: "bookist books edit <title-or-ID> [options]", description: "Edit a book"}
-	if len(args) == 0 {
+	help := commandHelp{
+		name:        "bookist books edit",
+		usage:       "bookist books edit [options] <title-or-ID>",
+		description: "Edit a book",
+	}
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
+	}
+	if flags.NArg() != 1 {
 		_, _ = fmt.Fprintln(stderr, "Error: books edit requires exactly one title or ID")
-		return 2
-	}
-	if args[0] == "-h" || args[0] == "--help" || args[0] == "-help" {
-		if ok, code := parseFlags(flags, args, stdout, stderr, help); !ok {
-			return code
-		}
-	}
-	target := args[0]
-	if ok, code := parseFlags(flags, args[1:], stdout, stderr, help); !ok {
-		return code
-	}
-	if flags.NArg() != 0 {
-		_, _ = fmt.Fprintln(stderr, "Error: books edit accepts exactly one positional target before options")
+		_, _ = fmt.Fprintln(stderr)
+		printCommandHelp(stderr, help, flags)
 		return 2
 	}
 
@@ -168,7 +164,7 @@ func runBooksEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 			return 2
 		}
 	}
-	bookID, err := resolveBookID(*serverURL, target)
+	bookID, err := resolveBookID(*serverURL, flags.Arg(0))
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
 		return 1
@@ -182,7 +178,7 @@ func runBooksEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 		changes["cover"] = data
 	}
 	if len(authorsFlag) > 0 {
-		ids, err := resolveAuthorIDs(*serverURL, authorsFlag)
+		ids, err := resolveExistingAuthors(*serverURL, authorsFlag)
 		if err != nil {
 			_, _ = fmt.Fprintln(stderr, err)
 			return 1
@@ -200,44 +196,6 @@ func runBooksEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 	_, _ = fmt.Fprintf(stdout, "%d\t%s\n", updated.ID, updated.Title)
-	return 0
-}
-
-func runBooksRM(args []string, stdout io.Writer, stderr io.Writer) int {
-	flags := flag.NewFlagSet("books rm", flag.ContinueOnError)
-	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
-	help := commandHelp{
-		name:        "bookist books rm",
-		usage:       "bookist books rm [options] <title-or-ID>",
-		description: "Remove a book",
-	}
-	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
-		return exitCode
-	}
-	if flags.NArg() != 1 {
-		_, _ = fmt.Fprintln(stderr, "Error: books rm requires exactly one title or ID")
-		_, _ = fmt.Fprintln(stderr)
-		printCommandHelp(stderr, help, flags)
-		return 2
-	}
-
-	bookID, err := resolveBookID(*serverURL, flags.Arg(0))
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "%v\n", err)
-		return 1
-	}
-
-	endpoint, err := joinURL(*serverURL, "/api/books/"+strconv.FormatInt(bookID, 10))
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
-		return 2
-	}
-	if err := deleteEndpoint(endpoint); err != nil {
-		_, _ = fmt.Fprintf(stderr, "remove book: %v\n", err)
-		return 1
-	}
-
-	_, _ = fmt.Fprintf(stdout, "removed book %d\n", bookID)
 	return 0
 }
 
@@ -266,10 +224,12 @@ func runBooksLS(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	var listedBooks []books.Book
+
 	if strings.TrimSpace(*listRef) == "" {
 		listedBooks, err = fetchBooks(*serverURL, *query)
 	} else {
 		var listID int64
+
 		listID, err = resolveListID(*serverURL, *listRef)
 		if err == nil {
 			listedBooks, err = fetchBooksByListID(*serverURL, listID, *query)
@@ -286,6 +246,7 @@ func runBooksLS(args []string, stdout io.Writer, stderr io.Writer) int {
 		if book.ISBN != nil {
 			isbn = *book.ISBN
 		}
+
 		rows = append(rows, []string{strconv.FormatInt(book.ID, 10), book.Title, isbn})
 	}
 
@@ -295,47 +256,6 @@ func runBooksLS(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	return 0
-}
-
-func fetchBooks(serverURL, query string) ([]books.Book, error) {
-	endpoint, err := joinURLWithQuery(serverURL, "/api/books", query)
-	if err != nil {
-		return nil, fmt.Errorf("invalid server URL: %v", err)
-	}
-
-	return fetchBooksFromEndpoint(endpoint)
-}
-
-func fetchBooksByListID(serverURL string, listID int64, query string) ([]books.Book, error) {
-	path := "/api/lists/" + strconv.FormatInt(listID, 10) + "/books"
-	endpoint, err := joinURLWithQuery(serverURL, path, query)
-	if err != nil {
-		return nil, fmt.Errorf("invalid server URL: %v", err)
-	}
-
-	return fetchBooksFromEndpoint(endpoint)
-}
-
-func fetchBooksFromEndpoint(endpoint string) ([]books.Book, error) {
-	client := http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("fetch books: %v", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetch books: server returned %s", resp.Status)
-	}
-
-	var listed []books.Book
-	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
-		return nil, fmt.Errorf("decode books: %v", err)
-	}
-
-	return listed, nil
 }
 
 func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -426,11 +346,12 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	if len(authorFlags) > 0 {
-		authorIDs, err := resolveAuthorIDs(*serverURL, authorFlags)
+		authorIDs, err := resolveOrCreateAuthors(*serverURL, authorFlags)
 		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "%v\n", err)
 			return 1
 		}
+
 		input.AuthorIDs = authorIDs
 	}
 
@@ -440,6 +361,7 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 			_, _ = fmt.Fprintf(stderr, "load cover: %v\n", err)
 			return 1
 		}
+
 		input.Cover = &cover
 	}
 
@@ -456,11 +378,13 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	client := http.Client{Timeout: 10 * time.Second}
+
 	resp, err := client.Post(endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "add book: %v\n", err)
 		return 1
 	}
+
 	defer func() {
 		_ = resp.Body.Close()
 	}()
@@ -477,7 +401,136 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	_, _ = fmt.Fprintf(stdout, "%d\t%s\n", book.ID, book.Title)
+
 	return 0
+}
+
+func runBooksRM(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("books rm", flag.ContinueOnError)
+
+	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+
+	help := commandHelp{
+		name:        "bookist books rm",
+		usage:       "bookist books rm [options] <title-or-ID>",
+		description: "Remove a book",
+	}
+
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
+	}
+
+	if flags.NArg() != 1 {
+		_, _ = fmt.Fprintln(stderr, "Error: books rm requires exactly one title or ID")
+		_, _ = fmt.Fprintln(stderr)
+
+		printCommandHelp(stderr, help, flags)
+
+		return 2
+	}
+
+	bookID, err := resolveBookID(*serverURL, flags.Arg(0))
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "%v\n", err)
+		return 1
+	}
+
+	endpoint, err := joinURL(*serverURL, "/api/books/"+strconv.FormatInt(bookID, 10))
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
+		return 2
+	}
+
+	if err := deleteEndpoint(endpoint); err != nil {
+		_, _ = fmt.Fprintf(stderr, "remove book: %v\n", err)
+		return 1
+	}
+
+	_, _ = fmt.Fprintf(stdout, "removed book %d\n", bookID)
+
+	return 0
+}
+
+func resolveBookID(serverURL, value string) (int64, error) {
+	value = strings.TrimSpace(value)
+
+	id, isID, err := parseIDReference(value)
+	if err != nil {
+		return 0, err
+	}
+
+	if isID {
+		return id, nil
+	}
+
+	existing, err := fetchBooks(serverURL, value)
+	if err != nil {
+		return 0, fmt.Errorf("fetch books: %v", err)
+	}
+
+	byTitle := make(map[string][]int64)
+
+	for _, b := range existing {
+		if strings.EqualFold(b.Title, value) {
+			key := strings.ToLower(b.Title)
+			byTitle[key] = append(byTitle[key], b.ID)
+		}
+	}
+
+	matches := byTitle[strings.ToLower(value)]
+
+	if len(matches) > 1 {
+		return 0, fmt.Errorf("book %q exists multiple times; pass a book ID instead", value)
+	}
+
+	if len(matches) == 1 {
+		return matches[0], nil
+	}
+
+	return 0, fmt.Errorf("book not found: %s", value)
+}
+
+func fetchBooks(serverURL, query string) ([]books.Book, error) {
+	endpoint, err := joinURLWithQuery(serverURL, "/api/books", query)
+	if err != nil {
+		return nil, fmt.Errorf("invalid server URL: %v", err)
+	}
+
+	return fetchBooksFromEndpoint(endpoint)
+}
+
+func fetchBooksByListID(serverURL string, listID int64, query string) ([]books.Book, error) {
+	path := "/api/lists/" + strconv.FormatInt(listID, 10) + "/books"
+	endpoint, err := joinURLWithQuery(serverURL, path, query)
+	if err != nil {
+		return nil, fmt.Errorf("invalid server URL: %v", err)
+	}
+
+	return fetchBooksFromEndpoint(endpoint)
+}
+
+func fetchBooksFromEndpoint(endpoint string) ([]books.Book, error) {
+	client := http.Client{Timeout: 10 * time.Second}
+
+	resp, err := client.Get(endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("fetch books: %v", err)
+	}
+
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("fetch books: server returned %s", resp.Status)
+	}
+
+	var listed []books.Book
+	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
+		return nil, fmt.Errorf("decode books: %v", err)
+	}
+
+	return listed, nil
 }
 
 func loadCover(source string) ([]byte, error) {
@@ -500,111 +553,35 @@ func loadCover(source string) ([]byte, error) {
 				return http.ErrUseLastResponse
 			},
 		}
+
 		var response *http.Response
 		response, err = client.Get(source)
 		if err != nil {
 			return nil, err
 		}
+
 		if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 			_ = response.Body.Close()
 			return nil, fmt.Errorf("cover URL returned %s", response.Status)
 		}
+
 		reader = response.Body
 	default:
 		return nil, fmt.Errorf("unsupported URL scheme %q", parsed.Scheme)
 	}
-	defer reader.Close()
+
+	defer func() {
+		_ = reader.Close()
+	}()
 
 	data, err := io.ReadAll(io.LimitReader(reader, covers.MaxSize+1))
 	if err != nil {
 		return nil, err
 	}
+
 	if err := covers.Validate(data); err != nil {
 		return nil, err
 	}
+
 	return data, nil
-}
-
-func resolveAuthorIDs(serverURL string, values []string) ([]int64, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-
-	var result []int64
-	type authorResolution struct {
-		id    int64
-		found bool
-	}
-	byName := make(map[string]authorResolution)
-
-	for _, val := range values {
-		val = strings.TrimSpace(val)
-		if val == "" {
-			continue
-		}
-
-		id, isID, err := parseIDReference(val)
-		if err != nil {
-			return nil, err
-		}
-
-		if isID {
-			result = append(result, id)
-		} else {
-			key := strings.ToLower(val)
-			resolved, lookedUp := byName[key]
-			if !lookedUp {
-				authorID, found, err := resolveAuthorName(serverURL, val)
-				if err != nil {
-					return nil, err
-				}
-				resolved = authorResolution{id: authorID, found: found}
-				byName[key] = resolved
-			}
-			if resolved.found {
-				result = append(result, resolved.id)
-			} else {
-				// Textual author references create the missing author for convenient book entry.
-				created, err := createAuthor(serverURL, val)
-				if err != nil {
-					return nil, fmt.Errorf("create author %q: %v", val, err)
-				}
-
-				result = append(result, created.ID)
-				byName[key] = authorResolution{id: created.ID, found: true}
-			}
-		}
-	}
-
-	return result, nil
-}
-
-func joinURL(base string, path string) (string, error) {
-	parsed, err := url.Parse(base)
-	if err != nil {
-		return "", err
-	}
-
-	parsed.Path = strings.TrimRight(parsed.Path, "/") + path
-
-	return parsed.String(), nil
-}
-
-func joinURLWithQuery(base, path, query string) (string, error) {
-	endpoint, err := joinURL(base, path)
-	if err != nil {
-		return "", err
-	}
-
-	parsed, err := url.Parse(endpoint)
-	if err != nil {
-		return "", err
-	}
-	if strings.TrimSpace(query) != "" {
-		values := parsed.Query()
-		values.Set("q", query)
-		parsed.RawQuery = values.Encode()
-	}
-
-	return parsed.String(), nil
 }

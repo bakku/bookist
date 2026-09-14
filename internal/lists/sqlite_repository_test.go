@@ -26,7 +26,7 @@ func TestSQLiteRepositoryCreatePersistsList(t *testing.T) {
 		t.Fatal("expected created list to have an ID")
 	}
 
-	testsupport.AssertListRow(t, db, created.ID, "Want to Buy")
+	testsupport.AssertListRow(t, db, created.ID, "Want to Buy", nil)
 }
 
 func TestSQLiteRepositoryCreateWithDescription(t *testing.T) {

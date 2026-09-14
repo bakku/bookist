@@ -70,30 +70,34 @@ func printListsHelp(w io.Writer) {
 
 func runListsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("lists edit", flag.ContinueOnError)
+
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
-	var name, description optionalStringFlag
+
+	var name optionalStringFlag
+	var description optionalStringFlag
 	var clears stringSliceFlag
+
 	flags.Var(&name, "name", "List name")
 	flags.Var(&description, "description", "List description")
 	flags.Var(&clears, "clear", "Field to clear (repeatable)")
-	help := commandHelp{name: "bookist lists edit", usage: "bookist lists edit <name-or-ID> [options]", description: "Edit a book list"}
-	if len(args) == 0 {
+
+	help := commandHelp{
+		name:        "bookist lists edit",
+		usage:       "bookist lists edit [options] <name-or-ID>",
+		description: "Edit a book list",
+	}
+
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
+	}
+
+	if flags.NArg() != 1 {
 		_, _ = fmt.Fprintln(stderr, "Error: lists edit requires exactly one name or ID")
+		_, _ = fmt.Fprintln(stderr)
+		printCommandHelp(stderr, help, flags)
 		return 2
 	}
-	if args[0] == "-h" || args[0] == "--help" || args[0] == "-help" {
-		if ok, code := parseFlags(flags, args, stdout, stderr, help); !ok {
-			return code
-		}
-	}
-	target := args[0]
-	if ok, code := parseFlags(flags, args[1:], stdout, stderr, help); !ok {
-		return code
-	}
-	if flags.NArg() != 0 {
-		_, _ = fmt.Fprintln(stderr, "Error: lists edit accepts exactly one positional target before options")
-		return 2
-	}
+
 	changes := make(map[string]any)
 	if name.value != nil {
 		changes["name"] = *name.value
@@ -109,112 +113,26 @@ func runListsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, "Error: lists edit requires at least one change")
 		return 2
 	}
-	listID, err := resolveListID(*serverURL, target)
+
+	listID, err := resolveListID(*serverURL, flags.Arg(0))
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
 		return 1
 	}
+
 	endpoint, err := joinURL(*serverURL, "/api/lists/"+strconv.FormatInt(listID, 10))
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
 		return 2
 	}
+
 	var updated lists.List
 	if err := patchEndpoint(endpoint, changes, &updated); err != nil {
 		_, _ = fmt.Fprintf(stderr, "edit list: %v\n", err)
 		return 1
 	}
+
 	_, _ = fmt.Fprintf(stdout, "%d\t%s\n", updated.ID, updated.Name)
-	return 0
-}
-
-func runListsRM(args []string, stdout io.Writer, stderr io.Writer) int {
-	flags := flag.NewFlagSet("lists rm", flag.ContinueOnError)
-	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
-	help := commandHelp{
-		name:        "bookist lists rm",
-		usage:       "bookist lists rm [options] <name-or-ID>",
-		description: "Remove a book list",
-	}
-	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
-		return exitCode
-	}
-	if flags.NArg() != 1 {
-		_, _ = fmt.Fprintln(stderr, "Error: lists rm requires exactly one name or ID")
-		_, _ = fmt.Fprintln(stderr)
-		printCommandHelp(stderr, help, flags)
-		return 2
-	}
-
-	listID, err := resolveListID(*serverURL, flags.Arg(0))
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "%v\n", err)
-		return 1
-	}
-
-	endpoint, err := joinURL(*serverURL, "/api/lists/"+strconv.FormatInt(listID, 10))
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
-		return 2
-	}
-	if err := deleteEndpoint(endpoint); err != nil {
-		_, _ = fmt.Fprintf(stderr, "remove list: %v\n", err)
-		return 1
-	}
-
-	_, _ = fmt.Fprintf(stdout, "removed list %d\n", listID)
-	return 0
-}
-
-func runListsRMBook(args []string, stdout io.Writer, stderr io.Writer) int {
-	flags := flag.NewFlagSet("lists rm-book", flag.ContinueOnError)
-	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
-	listRef := flags.String("list", "", "List name or ID")
-	bookRef := flags.String("book", "", "Book title or ID")
-	help := commandHelp{
-		name:        "bookist lists rm-book",
-		usage:       "bookist lists rm-book [options]",
-		description: "Remove a book from a list",
-	}
-	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
-		return exitCode
-	}
-	if flags.NArg() != 0 {
-		_, _ = fmt.Fprintln(stderr, "Error: lists rm-book does not accept positional arguments")
-		return 2
-	}
-	if strings.TrimSpace(*listRef) == "" {
-		_, _ = fmt.Fprintln(stderr, "--list is required")
-		return 2
-	}
-	if strings.TrimSpace(*bookRef) == "" {
-		_, _ = fmt.Fprintln(stderr, "--book is required")
-		return 2
-	}
-
-	listID, err := resolveListID(*serverURL, *listRef)
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "%v\n", err)
-		return 1
-	}
-	bookID, err := resolveBookID(*serverURL, *bookRef)
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "%v\n", err)
-		return 1
-	}
-
-	path := "/api/lists/" + strconv.FormatInt(listID, 10) + "/books/" + strconv.FormatInt(bookID, 10)
-	endpoint, err := joinURL(*serverURL, path)
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
-		return 2
-	}
-	if err := deleteEndpoint(endpoint); err != nil {
-		_, _ = fmt.Fprintf(stderr, "remove book from list: %v\n", err)
-		return 1
-	}
-
-	_, _ = fmt.Fprintf(stdout, "removed book %d from list %d\n", bookID, listID)
 	return 0
 }
 
@@ -392,6 +310,112 @@ func runListsAddBook(args []string, stdout io.Writer, stderr io.Writer) int {
 	return 0
 }
 
+func runListsRM(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("lists rm", flag.ContinueOnError)
+
+	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+
+	help := commandHelp{
+		name:        "bookist lists rm",
+		usage:       "bookist lists rm [options] <name-or-ID>",
+		description: "Remove a book list",
+	}
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
+	}
+
+	if flags.NArg() != 1 {
+		_, _ = fmt.Fprintln(stderr, "Error: lists rm requires exactly one name or ID")
+		_, _ = fmt.Fprintln(stderr)
+
+		printCommandHelp(stderr, help, flags)
+
+		return 2
+	}
+
+	listID, err := resolveListID(*serverURL, flags.Arg(0))
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "%v\n", err)
+		return 1
+	}
+
+	endpoint, err := joinURL(*serverURL, "/api/lists/"+strconv.FormatInt(listID, 10))
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
+		return 2
+	}
+
+	if err := deleteEndpoint(endpoint); err != nil {
+		_, _ = fmt.Fprintf(stderr, "remove list: %v\n", err)
+		return 1
+	}
+
+	_, _ = fmt.Fprintf(stdout, "removed list %d\n", listID)
+
+	return 0
+}
+
+func runListsRMBook(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("lists rm-book", flag.ContinueOnError)
+
+	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	listRef := flags.String("list", "", "List name or ID")
+	bookRef := flags.String("book", "", "Book title or ID")
+
+	help := commandHelp{
+		name:        "bookist lists rm-book",
+		usage:       "bookist lists rm-book [options]",
+		description: "Remove a book from a list",
+	}
+
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
+	}
+
+	if flags.NArg() != 0 {
+		_, _ = fmt.Fprintln(stderr, "Error: lists rm-book does not accept positional arguments")
+		return 2
+	}
+
+	if strings.TrimSpace(*listRef) == "" {
+		_, _ = fmt.Fprintln(stderr, "--list is required")
+		return 2
+	}
+
+	if strings.TrimSpace(*bookRef) == "" {
+		_, _ = fmt.Fprintln(stderr, "--book is required")
+		return 2
+	}
+
+	listID, err := resolveListID(*serverURL, *listRef)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "%v\n", err)
+		return 1
+	}
+
+	bookID, err := resolveBookID(*serverURL, *bookRef)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "%v\n", err)
+		return 1
+	}
+
+	path := "/api/lists/" + strconv.FormatInt(listID, 10) + "/books/" + strconv.FormatInt(bookID, 10)
+	endpoint, err := joinURL(*serverURL, path)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
+		return 2
+	}
+
+	if err := deleteEndpoint(endpoint); err != nil {
+		_, _ = fmt.Fprintf(stderr, "remove book from list: %v\n", err)
+		return 1
+	}
+
+	_, _ = fmt.Fprintf(stdout, "removed book %d from list %d\n", bookID, listID)
+
+	return 0
+}
+
 func resolveListID(serverURL, value string) (int64, error) {
 	value = strings.TrimSpace(value)
 
@@ -423,41 +447,6 @@ func resolveListID(serverURL, value string) (int64, error) {
 	}
 
 	return 0, fmt.Errorf("list not found: %s", value)
-}
-
-func resolveBookID(serverURL, value string) (int64, error) {
-	value = strings.TrimSpace(value)
-
-	id, isID, err := parseIDReference(value)
-	if err != nil {
-		return 0, err
-	}
-	if isID {
-		return id, nil
-	}
-
-	existing, err := fetchBooks(serverURL, value)
-	if err != nil {
-		return 0, fmt.Errorf("fetch books: %v", err)
-	}
-
-	byTitle := make(map[string][]int64)
-	for _, b := range existing {
-		if strings.EqualFold(b.Title, value) {
-			key := strings.ToLower(b.Title)
-			byTitle[key] = append(byTitle[key], b.ID)
-		}
-	}
-
-	matches := byTitle[strings.ToLower(value)]
-	if len(matches) > 1 {
-		return 0, fmt.Errorf("book %q exists multiple times; pass a book ID instead", value)
-	}
-	if len(matches) == 1 {
-		return matches[0], nil
-	}
-
-	return 0, fmt.Errorf("book not found: %s", value)
 }
 
 func fetchLists(serverURL, query string) ([]lists.List, error) {
