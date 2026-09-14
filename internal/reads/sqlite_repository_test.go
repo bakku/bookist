@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
+	"bakku.dev/bookist/internal/optional"
 	"bakku.dev/bookist/internal/reads"
 	"bakku.dev/bookist/internal/testsupport"
 )
@@ -49,6 +51,34 @@ func TestSQLiteRepositoryCreateReturnsBookNotFound(t *testing.T) {
 	_, err := repository.Create(context.Background(), 999999, reads.CreateReadRequest{})
 	if !errors.Is(err, reads.ErrBookNotFound) {
 		t.Fatalf("expected ErrBookNotFound, got %v", err)
+	}
+}
+
+// ── GetByID ───────────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryGetByIDReturnsPersistedRead(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
+		ID: 100, BookID: bookID, FinishedAt: new("2026-01-03"), Rating: new(5.0),
+		CreatedAt: "2026-01-04T00:00:00Z",
+	})
+
+	got, err := reads.NewSQLiteRepository(db).GetByID(context.Background(), 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != 100 || got.BookID != bookID || got.FinishedAt == nil || *got.FinishedAt != "2026-01-03" {
+		t.Fatalf("unexpected read: %#v", got)
+	}
+}
+
+func TestSQLiteRepositoryGetByIDReturnsReadNotFound(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+
+	_, err := reads.NewSQLiteRepository(db).GetByID(context.Background(), 999999)
+	if !errors.Is(err, reads.ErrReadNotFound) {
+		t.Fatalf("expected ErrReadNotFound, got %v", err)
 	}
 }
 
@@ -104,6 +134,50 @@ func TestSQLiteRepositoryListByBookIDReturnsBookNotFound(t *testing.T) {
 	_, err := reads.NewSQLiteRepository(db).ListByBookID(context.Background(), 999999)
 	if !errors.Is(err, reads.ErrBookNotFound) {
 		t.Fatalf("expected ErrBookNotFound, got %v", err)
+	}
+}
+
+// ── Update ────────────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryUpdateOnlyChangesPresentFields(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	readID := int64(100)
+	createdAt := "2026-01-01T00:00:00Z"
+	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
+		ID: readID, BookID: bookID, StartedAt: new("2026-01-01"), FinishedAt: new("2026-01-02"),
+		Rating: new(4.5), Notes: new("Original"), CreatedAt: createdAt,
+	})
+
+	updated, err := reads.NewSQLiteRepository(db).Update(context.Background(), readID, reads.UpdateReadRequest{
+		FinishedAt: optional.Value[string]{Present: true},
+		Notes:      optional.Value[string]{Present: true, Value: new("Revised")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.BookID != bookID || updated.CreatedAt.Format(time.RFC3339) != createdAt {
+		t.Fatalf("book_id or created_at changed: %#v", updated)
+	}
+	if updated.FinishedAt != nil || updated.Notes == nil || *updated.Notes != "Revised" {
+		t.Fatalf("explicit fields not updated: %#v", updated)
+	}
+	if updated.StartedAt == nil || *updated.StartedAt != "2026-01-01" || updated.Rating == nil || *updated.Rating != 4.5 {
+		t.Fatalf("omitted fields changed: %#v", updated)
+	}
+	if !updated.UpdatedAt.After(updated.CreatedAt) {
+		t.Fatalf("expected updated_at to advance, got %s", updated.UpdatedAt)
+	}
+}
+
+func TestSQLiteRepositoryUpdateReturnsReadNotFound(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+
+	_, err := reads.NewSQLiteRepository(db).Update(context.Background(), 999999, reads.UpdateReadRequest{
+		Notes: optional.Value[string]{Present: true, Value: new("Missing")},
+	})
+	if !errors.Is(err, reads.ErrReadNotFound) {
+		t.Fatalf("expected ErrReadNotFound, got %v", err)
 	}
 }
 

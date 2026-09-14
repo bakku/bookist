@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"bakku.dev/bookist/internal/lists"
+	"bakku.dev/bookist/internal/optional"
 	"bakku.dev/bookist/internal/testsupport"
 )
 
@@ -75,6 +76,104 @@ func TestServiceCreateRejectsCaseInsensitiveDuplicate(t *testing.T) {
 		t.Fatalf("expected ErrNameConflict, got %v", err)
 	}
 	testsupport.AssertSQLCount(t, db, 1, `SELECT COUNT(*) FROM lists`)
+}
+
+// ── Update ────────────────────────────────────────────────────────────────────
+
+func TestServiceUpdateAppliesPartialTrimmedFields(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	service := lists.NewService(lists.NewSQLiteRepository(db))
+	id := testsupport.InsertListRowWithDescription(t, db, "Nightstand", "Old description")
+	name := "  Bedside  "
+
+	updated, err := service.Update(context.Background(), id, lists.UpdateListRequest{
+		Name: optional.Value[string]{Present: true, Value: &name},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Name != "Bedside" || updated.Description == nil || *updated.Description != "Old description" {
+		t.Fatalf("unexpected updated list: %#v", updated)
+	}
+}
+
+func TestServiceUpdateDescriptionRequiresExplicitNullToClear(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	service := lists.NewService(lists.NewSQLiteRepository(db))
+	id := testsupport.InsertListRowWithDescription(t, db, "Nightstand", "Up next")
+	blank := "  "
+
+	_, err := service.Update(context.Background(), id, lists.UpdateListRequest{
+		Description: optional.Value[string]{Present: true, Value: &blank},
+	})
+	if !errors.Is(err, lists.ErrDescriptionRequired) {
+		t.Fatalf("expected ErrDescriptionRequired, got %v", err)
+	}
+
+	updated, err := service.Update(context.Background(), id, lists.UpdateListRequest{
+		Description: optional.Value[string]{Present: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Description != nil {
+		t.Fatalf("expected description to be cleared, got %q", *updated.Description)
+	}
+}
+
+func TestServiceUpdateValidatesRequestAndNameUniqueness(t *testing.T) {
+	tests := []struct {
+		name  string
+		input lists.UpdateListRequest
+		want  error
+	}{
+		{name: "empty request", want: lists.ErrNoFieldsToUpdate},
+		{name: "null name", input: lists.UpdateListRequest{Name: optional.Value[string]{Present: true}}, want: lists.ErrNameRequired},
+		{name: "blank name", input: lists.UpdateListRequest{Name: optional.Value[string]{Present: true, Value: listStringPointer(" ")}}, want: lists.ErrNameRequired},
+		{name: "duplicate name", input: lists.UpdateListRequest{Name: optional.Value[string]{Present: true, Value: listStringPointer("NIGHTSTAND")}}, want: lists.ErrNameConflict},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := testsupport.OpenMigratedDB(t)
+			service := lists.NewService(lists.NewSQLiteRepository(db))
+			testsupport.InsertListRow(t, db, "Nightstand")
+			id := testsupport.InsertListRow(t, db, "Want to Buy")
+
+			_, err := service.Update(context.Background(), id, tt.input)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("expected %v, got %v", tt.want, err)
+			}
+			testsupport.AssertListRow(t, db, id, "Want to Buy", nil)
+		})
+	}
+}
+
+func TestServiceUpdateAllowsCurrentListName(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	service := lists.NewService(lists.NewSQLiteRepository(db))
+	id := testsupport.InsertListRow(t, db, "Nightstand")
+	name := "NIGHTSTAND"
+
+	if _, err := service.Update(context.Background(), id, lists.UpdateListRequest{
+		Name: optional.Value[string]{Present: true, Value: &name},
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestServiceUpdateReturnsNotFoundBeforeNameConflict(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	service := lists.NewService(lists.NewSQLiteRepository(db))
+	testsupport.InsertListRow(t, db, "Nightstand")
+	name := "NIGHTSTAND"
+
+	_, err := service.Update(context.Background(), 999999, lists.UpdateListRequest{
+		Name: optional.Value[string]{Present: true, Value: &name},
+	})
+	if !errors.Is(err, lists.ErrListNotFound) {
+		t.Fatalf("expected ErrListNotFound, got %v", err)
+	}
 }
 
 // ── List ──────────────────────────────────────────────────────────────────────
@@ -181,4 +280,8 @@ func TestServiceRemoveBookFromListDelegates(t *testing.T) {
 	if count != 0 {
 		t.Fatalf("expected membership to be removed, got %d rows", count)
 	}
+}
+
+func listStringPointer(value string) *string {
+	return &value
 }

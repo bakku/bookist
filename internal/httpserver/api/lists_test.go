@@ -82,6 +82,68 @@ func TestListAPICreateReturnsConflictForDuplicateName(t *testing.T) {
 	}
 }
 
+// ── Update ────────────────────────────────────────────────────────────────────
+
+func TestListAPIUpdateAndClear(t *testing.T) {
+	app := newTestApp(t)
+	listID := testsupport.InsertListRowWithDescription(t, app.db, "Nightstand", "Currently reading")
+
+	resp := patchJSON(t, app.handler, fmt.Sprintf("/api/lists/%d", listID), `{"name":" Favorites ","description":null}`)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, resp.Code, resp.Body.String())
+	}
+	var updated lists.List
+	if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated.Name != "Favorites" || updated.Description != nil {
+		t.Fatalf("unexpected response: %#v", updated)
+	}
+	var name string
+	var description any
+	if err := app.db.QueryRow(`SELECT name, description FROM lists WHERE id = ?`, listID).Scan(&name, &description); err != nil {
+		t.Fatal(err)
+	}
+	if name != "Favorites" || description != nil {
+		t.Fatalf("unexpected persisted values: name=%q description=%#v", name, description)
+	}
+}
+
+func TestListAPIUpdateRejectsInvalidRequests(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		path   string
+		body   string
+		status int
+	}{
+		{name: "invalid ID", path: "/api/lists/0", body: `{"name":"New"}`, status: http.StatusBadRequest},
+		{name: "empty", path: "/api/lists/1", body: `{}`, status: http.StatusBadRequest},
+		{name: "unknown field", path: "/api/lists/1", body: `{"books":[]}`, status: http.StatusBadRequest},
+		{name: "blank description", path: "/api/lists/1", body: `{"description":" "}`, status: http.StatusBadRequest},
+		{name: "not found", path: "/api/lists/999999", body: `{"name":"New"}`, status: http.StatusNotFound},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			app := newTestApp(t)
+			testsupport.InsertListRow(t, app.db, "Nightstand")
+			resp := patchJSON(t, app.handler, test.path, test.body)
+			if resp.Code != test.status {
+				t.Fatalf("expected status %d, got %d: %s", test.status, resp.Code, resp.Body.String())
+			}
+		})
+	}
+}
+
+func TestListAPIUpdateReturnsConflict(t *testing.T) {
+	app := newTestApp(t)
+	listID := testsupport.InsertListRow(t, app.db, "Nightstand")
+	testsupport.InsertListRow(t, app.db, "Favorites")
+	resp := patchJSON(t, app.handler, fmt.Sprintf("/api/lists/%d", listID), `{"name":"FAVORITES"}`)
+	if resp.Code != http.StatusConflict {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusConflict, resp.Code, resp.Body.String())
+	}
+	testsupport.AssertListRow(t, app.db, listID, "Nightstand", nil)
+}
+
 // ── List ──────────────────────────────────────────────────────────────────────
 
 func TestListAPIList(t *testing.T) {

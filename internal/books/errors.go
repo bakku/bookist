@@ -13,3 +13,5 @@ var ErrInvalidSeriesPosition = errors.New("series_position must be greater than 
 var ErrInvalidPublishedYear = errors.New("published_year must be at least 1")
 var ErrInvalidPublishedMonth = errors.New("published_month must be between 1 and 12 and requires published_year")
 var ErrInvalidPublishedDay = errors.New("published_day must form a valid date and requires published_year and published_month")
+var ErrNoFieldsToUpdate = errors.New("no fields to update")
+var ErrBlankOptionalString = errors.New("optional string fields must not be blank; use null to clear")

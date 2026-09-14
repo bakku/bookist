@@ -27,6 +27,8 @@ func runReads(args []string, stdout io.Writer, stderr io.Writer) int {
 		return runReadsLS(args[1:], stdout, stderr)
 	case "add":
 		return runReadsAdd(args[1:], stdout, stderr)
+	case "edit":
+		return runReadsEdit(args[1:], stdout, stderr)
 	case "rm":
 		return runReadsRM(args[1:], stdout, stderr)
 	case "help", "-h", "--help":
@@ -47,9 +49,107 @@ func printReadsHelp(w io.Writer) {
 		commands: []helpCommand{
 			{name: "ls", description: "List reads for a book"},
 			{name: "add", description: "Record a read for a book"},
+			{name: "edit", description: "Edit a read"},
 			{name: "rm", description: "Remove a read"},
 		},
 	}, nil)
+}
+
+func runReadsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("reads edit", flag.ContinueOnError)
+
+	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+
+	var startedAt optionalStringFlag
+	var finishedAt optionalStringFlag
+	var abandonedAt optionalStringFlag
+	var notes optionalStringFlag
+	var rating optionalFloatFlag
+	var clears stringSliceFlag
+
+	flags.Var(&startedAt, "started-at", "Date reading started (YYYY-MM-DD)")
+	flags.Var(&finishedAt, "finished-at", "Date reading finished (YYYY-MM-DD)")
+	flags.Var(&abandonedAt, "abandoned-at", "Date reading abandoned (YYYY-MM-DD)")
+	flags.Var(&rating, "rating", "Rating from 1 to 5 in increments of 0.5")
+	flags.Var(&notes, "notes", "Read notes")
+	flags.Var(&clears, "clear", "Field to clear (repeatable)")
+
+	help := commandHelp{
+		name:        "bookist reads edit",
+		usage:       "bookist reads edit [options] <read-ID>",
+		description: "Edit a read",
+	}
+
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
+	}
+
+	if flags.NArg() != 1 {
+		_, _ = fmt.Fprintln(stderr, "Error: reads edit requires exactly one read ID")
+		_, _ = fmt.Fprintln(stderr)
+		printCommandHelp(stderr, help, flags)
+		return 2
+	}
+
+	changes := make(map[string]any)
+	for _, field := range []struct {
+		key   string
+		value *string
+	}{
+		{"started_at", startedAt.value},
+		{"finished_at", finishedAt.value},
+		{"abandoned_at", abandonedAt.value},
+		{"notes", notes.value},
+	} {
+		if field.value != nil {
+			changes[field.key] = *field.value
+		}
+	}
+	if rating.value != nil {
+		changes["rating"] = *rating.value
+	}
+
+	clearable := map[string]string{
+		"started-at":   "started_at",
+		"finished-at":  "finished_at",
+		"abandoned-at": "abandoned_at",
+		"rating":       "rating",
+		"notes":        "notes",
+	}
+	if err := validateClears(changes, clears, clearable); err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+	if len(changes) == 0 {
+		_, _ = fmt.Fprintln(stderr, "Error: reads edit requires at least one change")
+		return 2
+	}
+
+	readRef := strings.TrimSpace(flags.Arg(0))
+	readID, isID, err := parseIDReference(readRef)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, err)
+		return 2
+	}
+	if !isID {
+		_, _ = fmt.Fprintf(stderr, "invalid read ID %q\n", readRef)
+		return 2
+	}
+
+	endpoint, err := joinURL(*serverURL, "/api/reads/"+strconv.FormatInt(readID, 10))
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
+		return 2
+	}
+
+	var updated reads.Read
+	if err := patchEndpoint(endpoint, changes, &updated); err != nil {
+		_, _ = fmt.Fprintf(stderr, "edit read: %v\n", err)
+		return 1
+	}
+
+	_, _ = fmt.Fprintf(stdout, "%d\t%d\n", updated.ID, updated.BookID)
+	return 0
 }
 
 func runReadsLS(args []string, stdout io.Writer, stderr io.Writer) int {

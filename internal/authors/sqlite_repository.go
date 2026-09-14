@@ -3,6 +3,7 @@ package authors
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -28,6 +29,27 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateAuthorRequest
 	`, input.Name, createdAt, updatedAt)
 
 	return scanAuthor(row)
+}
+
+func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateAuthorRequest) (Author, error) {
+	var name any
+	if input.Name.Value != nil {
+		name = *input.Name.Value
+	}
+
+	row := r.db.QueryRowContext(ctx, `
+		UPDATE authors
+		SET name = CASE WHEN ? THEN ? ELSE name END,
+			updated_at = ?
+		WHERE id = ?
+		RETURNING id, name, created_at, updated_at
+	`, input.Name.Present, name, time.Now().UTC().Format(time.RFC3339), id)
+
+	author, err := scanAuthor(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Author{}, ErrAuthorNotFound
+	}
+	return author, err
 }
 
 func (r *SQLiteRepository) List(ctx context.Context) ([]Author, error) {
