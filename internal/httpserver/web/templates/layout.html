@@ -31,7 +31,7 @@
     </div>
   </header>
 
-  <aside id="mobile-sidebar" popover class="mobile-sidebar">
+  <aside id="mobile-sidebar" popover class="mobile-sidebar has-text-inherit">
     <div class="is-flex is-align-items-center is-justify-content-space-between p-5 pb-0">
       <a class="is-flex is-align-items-center brand-link" href="/">
         <span class="icon has-text-primary" aria-hidden="true">
@@ -46,8 +46,8 @@
     </nav>
   </aside>
 
-  <div class="columns is-gapless app-layout">
-    <aside data-desktop-sidebar class="column is-narrow app-sidebar">
+  <div class="columns is-gapless mb-0 app-layout">
+    <aside data-desktop-sidebar class="column is-narrow is-hidden-touch app-sidebar">
       <div class="p-5">
         <nav aria-label="Primary" class="menu">
           {{template "sidebar-menu" .Layout}}
@@ -71,16 +71,7 @@
 <p class="menu-label">Library</p>
 <ul class="menu-list">
   {{range .LibraryNav}}
-  <li><a href="{{.Href}}" {{if .Active}}aria-current="page" class="is-active"{{end}}>
-    <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><use href="#icon-{{.IconID}}"></use></svg></span>
-    <span>{{.Label}}</span>
-  </a></li>
-  {{end}}
-</ul>
-<p class="menu-label">Lists</p>
-<ul class="menu-list">
-  {{range .UserListNav}}
-  <li><a href="{{.Href}}">
+  <li><a class="is-flex is-align-items-center is-gap-1{{if .Active}} is-active{{end}}" href="{{.Href}}" {{if .Active}}aria-current="page"{{end}}>
     <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><use href="#icon-{{.IconID}}"></use></svg></span>
     <span>{{.Label}}</span>
   </a></li>

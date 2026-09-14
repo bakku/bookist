@@ -41,10 +41,16 @@ func TestIndexListsBooks(t *testing.T) {
 	if !bytes.Contains(resp.Body.Bytes(), []byte(`aria-label="Cover unavailable for Kindred"`)) {
 		t.Fatalf("expected index response to contain a cover placeholder, got %s", resp.Body.String())
 	}
+	if !bytes.Contains(resp.Body.Bytes(), []byte(`class="image is-3by4 has-background-primary-soft"`)) {
+		t.Fatalf("expected index response to contain a theme-aware cover background, got %s", resp.Body.String())
+	}
+	if !bytes.Contains(resp.Body.Bytes(), []byte(`class="is-overlay is-flex is-align-items-center is-justify-content-center has-text-primary-bold"`)) {
+		t.Fatalf("expected index response to position the cover placeholder with Bulma helpers, got %s", resp.Body.String())
+	}
 	if !bytes.Contains(resp.Body.Bytes(), []byte(`data-book-grid class="columns is-multiline"`)) {
 		t.Fatalf("expected index response to render the book grid, got %s", resp.Body.String())
 	}
-	if !bytes.Contains(resp.Body.Bytes(), []byte(`class="column is-half-tablet is-one-third-desktop is-one-quarter-fullhd book-column"`)) {
+	if !bytes.Contains(resp.Body.Bytes(), []byte(`class="column is-half-tablet is-one-third-desktop is-one-quarter-fullhd is-flex"`)) {
 		t.Fatalf("expected index response to render responsive book columns, got %s", resp.Body.String())
 	}
 	if !bytes.Contains(resp.Body.Bytes(), []byte(`1 in library`)) {
@@ -70,19 +76,19 @@ func TestIndexRendersBulmaAppShell(t *testing.T) {
 		`href="/static/app.css"`,
 		`aria-label="Primary"`,
 		`aria-label="Mobile primary"`,
-		`id="mobile-sidebar" popover class="mobile-sidebar"`,
+		`id="mobile-sidebar" popover class="mobile-sidebar has-text-inherit"`,
 		`popovertarget="mobile-sidebar" aria-label="Open navigation"`,
 		`class="navbar has-shadow app-header" role="banner"`,
 		`<strong class="is-size-5 ml-2">Bookist</strong>`,
 		`href="#icon-books"`,
-		`href="#icon-user"`,
-		`href="#icon-list"`,
-		`data-desktop-sidebar class="column is-narrow app-sidebar"`,
+		`data-desktop-sidebar class="column is-narrow is-hidden-touch app-sidebar"`,
+		`class="columns is-gapless mb-0 app-layout"`,
 		`class="navbar-burger"`,
 		`class="menu"`,
 		`class="notification is-primary is-light"`,
 		`class="tag is-primary is-light is-rounded"`,
-		`aria-current="page" class="is-active"`,
+		`class="is-flex is-align-items-center is-gap-1 is-active"`,
+		`aria-current="page"`,
 	} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("expected index response to contain %q", expected)
@@ -93,6 +99,9 @@ func TestIndexRendersBulmaAppShell(t *testing.T) {
 	}
 	if strings.Contains(body, `>Navigation</strong>`) {
 		t.Error("expected the mobile sidebar to use Bookist branding instead of a navigation heading")
+	}
+	if strings.Contains(body, `href="/authors"`) || strings.Contains(body, `href="/lists/`) {
+		t.Error("expected navigation to hide destinations without web pages")
 	}
 }
 

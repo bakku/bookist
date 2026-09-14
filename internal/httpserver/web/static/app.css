@@ -10,7 +10,6 @@
 }
 
 .app-layout {
-  margin-bottom: 0 !important;
   min-height: calc(100dvh - var(--bulma-navbar-height));
 }
 
@@ -63,37 +62,13 @@ body:has(.mobile-sidebar:popover-open) {
   background: rgb(10 10 10 / 45%);
 }
 
-.menu-list a {
-  align-items: center;
-  display: flex;
-  gap: 0.5rem;
-}
-
 .icon svg {
   height: 100%;
   width: 100%;
 }
 
-.book-column {
-  display: flex;
-}
-
-.book-card {
-  width: 100%;
-}
-
-.book-card .image img {
-  height: 100%;
+.book-cover {
   object-fit: cover;
-  width: 100%;
-}
-
-.book-cover-placeholder {
-  align-items: center;
-  display: flex;
-  inset: 0;
-  justify-content: center;
-  position: absolute;
 }
 
 .book-value {
@@ -105,12 +80,6 @@ body:has(.mobile-sidebar:popover-open) {
 
 @media screen and (max-width: 768px) {
   .section {
-    padding: 1.5rem 1rem;
-  }
-}
-
-@media screen and (max-width: 1023px) {
-  .app-sidebar {
-    display: none;
+    padding: 1rem 0.75rem;
   }
 }

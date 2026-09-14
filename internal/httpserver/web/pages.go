@@ -14,9 +14,8 @@ type navItemView struct {
 }
 
 type layoutView struct {
-	PageTitle   string
-	LibraryNav  []navItemView
-	UserListNav []navItemView
+	PageTitle  string
+	LibraryNav []navItemView
 }
 
 type indexPageView struct {
@@ -36,12 +35,6 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 			PageTitle: "Bookist Library",
 			LibraryNav: []navItemView{
 				{Href: "/", Label: "Books", IconID: "books", Active: true},
-				{Href: "/authors", Label: "Authors", IconID: "user"},
-			},
-			UserListNav: []navItemView{
-				{Href: "/lists/to-read", Label: "To Read", IconID: "list"},
-				{Href: "/lists/sci-fi-favorites", Label: "Sci-Fi Favorites", IconID: "list"},
-				{Href: "/lists/summer-reading", Label: "Summer Reading", IconID: "list"},
 			},
 		},
 		Books: bookList,
