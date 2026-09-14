@@ -14,22 +14,28 @@
   min-height: calc(100dvh - var(--bulma-navbar-height));
 }
 
-.app-sidebar {
-  border-right: 1px solid var(--bulma-border-weak);
-  width: 16rem;
-}
-
-.app-sidebar .menu {
+.app-header {
   position: sticky;
   top: 0;
+}
+
+.app-sidebar {
+  align-self: flex-start;
+  border-right: 1px solid var(--bulma-border-weak);
+  height: calc(100dvh - var(--bulma-navbar-height));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  position: sticky;
+  top: var(--bulma-navbar-height);
+  width: 16rem;
 }
 
 .mobile-sidebar {
   background: var(--bulma-scheme-main);
   border: 0;
   border-right: 1px solid var(--bulma-border-weak);
-  height: calc(100dvh - var(--bulma-navbar-height));
-  inset: var(--bulma-navbar-height) auto 0 0;
+  height: 100dvh;
+  inset: 0 auto 0 0;
   margin: 0;
   max-height: none;
   overscroll-behavior: contain;

@@ -10,10 +10,10 @@
   </div>
 
   {{if .Books}}
-  <div data-book-grid class="columns is-mobile is-multiline">
+  <div data-book-grid class="columns is-multiline">
     {{range .Books}}
     {{$book := .}}
-    <div class="column is-half-mobile is-one-third-tablet is-one-quarter-desktop is-one-fifth-widescreen book-column">
+    <div class="column is-half-tablet is-one-third-desktop book-column">
       <article class="card book-card">
         <div class="card-image">
           <figure class="image is-3by4 has-background-primary-light">

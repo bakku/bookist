@@ -41,8 +41,11 @@ func TestIndexListsBooks(t *testing.T) {
 	if !bytes.Contains(resp.Body.Bytes(), []byte(`aria-label="Cover unavailable for Kindred"`)) {
 		t.Fatalf("expected index response to contain a cover placeholder, got %s", resp.Body.String())
 	}
-	if !bytes.Contains(resp.Body.Bytes(), []byte(`data-book-grid class="columns is-mobile is-multiline"`)) {
+	if !bytes.Contains(resp.Body.Bytes(), []byte(`data-book-grid class="columns is-multiline"`)) {
 		t.Fatalf("expected index response to render the book grid, got %s", resp.Body.String())
+	}
+	if !bytes.Contains(resp.Body.Bytes(), []byte(`class="column is-half-tablet is-one-third-desktop book-column"`)) {
+		t.Fatalf("expected index response to render responsive book columns, got %s", resp.Body.String())
 	}
 	if !bytes.Contains(resp.Body.Bytes(), []byte(`1 in library`)) {
 		t.Fatalf("expected index response to describe the singular book count, got %s", resp.Body.String())
@@ -69,7 +72,7 @@ func TestIndexRendersBulmaAppShell(t *testing.T) {
 		`aria-label="Mobile primary"`,
 		`id="mobile-sidebar" popover class="mobile-sidebar"`,
 		`popovertarget="mobile-sidebar" aria-label="Open navigation"`,
-		`class="navbar has-shadow" role="banner"`,
+		`class="navbar has-shadow app-header" role="banner"`,
 		`<strong class="is-size-5 ml-2">Bookist</strong>`,
 		`href="#icon-books"`,
 		`href="#icon-user"`,
