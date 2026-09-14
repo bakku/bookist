@@ -19,6 +19,12 @@
   top: 0;
 }
 
+.brand-link,
+.brand-link:hover {
+  background-color: transparent;
+  color: inherit;
+}
+
 .app-sidebar {
   align-self: flex-start;
   border-right: 1px solid var(--bulma-border-weak);

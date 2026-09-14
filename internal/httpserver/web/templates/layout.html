@@ -15,7 +15,7 @@
   <header class="navbar has-shadow app-header" role="banner">
     <div class="container is-fluid">
       <div class="navbar-brand">
-        <a class="navbar-item" href="/">
+        <a class="navbar-item brand-link" href="/">
           <span class="icon has-text-primary" aria-hidden="true">
             <svg viewBox="0 0 24 24"><use href="#icon-books"></use></svg>
           </span>
@@ -33,7 +33,12 @@
 
   <aside id="mobile-sidebar" popover class="mobile-sidebar">
     <div class="is-flex is-align-items-center is-justify-content-space-between p-5 pb-0">
-      <strong class="is-size-5">Navigation</strong>
+      <a class="is-flex is-align-items-center brand-link" href="/">
+        <span class="icon has-text-primary" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><use href="#icon-books"></use></svg>
+        </span>
+        <strong class="is-size-5 ml-2">Bookist</strong>
+      </a>
       <button type="button" class="delete" popovertarget="mobile-sidebar" popovertargetaction="hide" aria-label="Close navigation"></button>
     </div>
     <nav aria-label="Mobile primary" class="menu p-5">

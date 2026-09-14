@@ -88,6 +88,12 @@ func TestIndexRendersBulmaAppShell(t *testing.T) {
 			t.Errorf("expected index response to contain %q", expected)
 		}
 	}
+	if got := strings.Count(body, `<strong class="is-size-5 ml-2">Bookist</strong>`); got != 2 {
+		t.Errorf("expected Bookist branding in the header and mobile sidebar, got %d instances", got)
+	}
+	if strings.Contains(body, `>Navigation</strong>`) {
+		t.Error("expected the mobile sidebar to use Bookist branding instead of a navigation heading")
+	}
 }
 
 // ── Static Assets ─────────────────────────────────────────────────────────────
