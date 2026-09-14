@@ -44,7 +44,7 @@ func TestIndexListsBooks(t *testing.T) {
 	if !bytes.Contains(resp.Body.Bytes(), []byte(`data-book-grid class="columns is-multiline"`)) {
 		t.Fatalf("expected index response to render the book grid, got %s", resp.Body.String())
 	}
-	if !bytes.Contains(resp.Body.Bytes(), []byte(`class="column is-half-tablet is-one-third-desktop book-column"`)) {
+	if !bytes.Contains(resp.Body.Bytes(), []byte(`class="column is-half-tablet is-one-third-desktop is-one-quarter-fullhd book-column"`)) {
 		t.Fatalf("expected index response to render responsive book columns, got %s", resp.Body.String())
 	}
 	if !bytes.Contains(resp.Body.Bytes(), []byte(`1 in library`)) {
