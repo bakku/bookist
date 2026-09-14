@@ -355,7 +355,6 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateBookRequest)
 		return Book{}, ErrInvalidPublishedDay
 	}
 
-	updatedAuthors := make([]authors.Author, 0)
 	if input.AuthorIDs.Present {
 		var deduped []int64
 		seen := make(map[int64]bool)
@@ -376,25 +375,15 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateBookRequest)
 			if err != nil {
 				return Book{}, err
 			}
-			foundByID := make(map[int64]authors.Author)
+			foundIDs := make(map[int64]bool)
 			for _, author := range found {
-				foundByID[author.ID] = author
+				foundIDs[author.ID] = true
 			}
 			for _, authorID := range deduped {
-				author, ok := foundByID[authorID]
-				if !ok {
+				if !foundIDs[authorID] {
 					return Book{}, ErrAuthorNotFound
 				}
-				updatedAuthors = append(updatedAuthors, author)
 			}
-		}
-	} else {
-		authorsByBook, err := s.authorRepo.ListByBookIDs(ctx, []int64{id})
-		if err != nil {
-			return Book{}, err
-		}
-		if currentAuthors, ok := authorsByBook[id]; ok {
-			updatedAuthors = currentAuthors
 		}
 	}
 
@@ -411,7 +400,7 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateBookRequest)
 		}
 	}
 
-	book, priorCoverKey, err := s.repository.Update(ctx, id, input)
+	result, err := s.repository.Update(ctx, id, input)
 	if err != nil {
 		if newCoverKey != nil {
 			if cleanupErr := s.coverStore.Delete(*newCoverKey); cleanupErr != nil {
@@ -420,13 +409,14 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateBookRequest)
 		}
 		return Book{}, err
 	}
+	book := result.Book
+	priorCoverKey := result.PriorCoverImageKey
 	if priorCoverKey != nil && (newCoverKey == nil || *priorCoverKey != *newCoverKey) {
 		// The database update has committed, so old-cover cleanup is best effort.
 		// Reporting an error here would incorrectly tell clients that the update failed.
 		_ = s.coverStore.Delete(*priorCoverKey)
 	}
 
-	book.Authors = updatedAuthors
 	setCoverURL(&book)
 	return book, nil
 }

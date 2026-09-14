@@ -193,6 +193,9 @@ func TestSQLiteRepositoryUpdatePersistsScalarsAndReconcilesAuthors(t *testing.T)
 	if _, err := db.Exec(`UPDATE books SET created_at = '2000-01-01T00:00:00Z', updated_at = '2000-01-01T00:00:00Z' WHERE id = ?`, created.ID); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := db.Exec(`UPDATE book_authors SET created_at = '2000-01-01T00:00:00Z', updated_at = '2000-01-01T00:00:00Z' WHERE book_id = ?`, created.ID); err != nil {
+		t.Fatal(err)
+	}
 	created, err = repository.GetByID(context.Background(), created.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -205,7 +208,7 @@ func TestSQLiteRepositoryUpdatePersistsScalarsAndReconcilesAuthors(t *testing.T)
 	}
 	newCover := "22222222222222222222222222222222.png"
 
-	updated, priorCover, err := repository.Update(context.Background(), created.ID, books.UpdateBookRequest{
+	result, err := repository.Update(context.Background(), created.ID, books.UpdateBookRequest{
 		ISBN:          optionalNull[string](),
 		AuthorIDs:     updateValueOf([]int64{author2, author3}),
 		CoverImageKey: updateValueOf(newCover),
@@ -213,6 +216,8 @@ func TestSQLiteRepositoryUpdatePersistsScalarsAndReconcilesAuthors(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
+	updated := result.Book
+	priorCover := result.PriorCoverImageKey
 	if updated.Title != "Dune" || updated.ISBN != nil || updated.CoverImageKey == nil || *updated.CoverImageKey != newCover {
 		t.Fatalf("unexpected updated book: %#v", updated)
 	}
@@ -223,6 +228,9 @@ func TestSQLiteRepositoryUpdatePersistsScalarsAndReconcilesAuthors(t *testing.T)
 		t.Fatalf("expected created_at preserved and updated_at advanced: created=%v updated=%v", created, updated)
 	}
 	testsupport.AssertBookAuthors(t, db, created.ID, author2, author3)
+	if len(updated.Authors) != 2 || updated.Authors[0].ID != author3 || updated.Authors[1].ID != author2 {
+		t.Fatalf("expected canonical relationship order [%d %d], got %#v", author3, author2, updated.Authors)
+	}
 
 	var gotID int64
 	var gotCreatedAt, gotUpdatedAt string

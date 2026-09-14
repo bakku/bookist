@@ -37,6 +37,11 @@ func newTestApp(t *testing.T) testApp {
 	t.Helper()
 
 	db := testsupport.OpenMigratedDB(t)
+	return newTestAppWithReadRepository(t, db, reads.NewSQLiteRepository(db))
+}
+
+func newTestAppWithReadRepository(t *testing.T, db *sql.DB, readRepo reads.Repository) testApp {
+	t.Helper()
 
 	authorRepo := authors.NewSQLiteRepository(db)
 	authorService := authors.NewService(authorRepo)
@@ -52,7 +57,6 @@ func newTestApp(t *testing.T) testApp {
 	}
 	bookService := books.NewService(bookRepo, authorRepo, coverStore)
 
-	readRepo := reads.NewSQLiteRepository(db)
 	readService := reads.NewService(readRepo)
 
 	mux := http.NewServeMux()

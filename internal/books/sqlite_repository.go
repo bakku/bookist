@@ -258,19 +258,19 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 	return book, nil
 }
 
-func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateBookRequest) (Book, *string, error) {
+func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateBookRequest) (UpdateResult, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return Book{}, nil, err
+		return UpdateResult{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	var priorCover sql.NullString
 	if err := tx.QueryRowContext(ctx, `SELECT cover_image_key FROM books WHERE id = ?`, id).Scan(&priorCover); err != nil {
 		if err == sql.ErrNoRows {
-			return Book{}, nil, ErrBookNotFound
+			return UpdateResult{}, ErrBookNotFound
 		}
-		return Book{}, nil, err
+		return UpdateResult{}, err
 	}
 
 	updatedAt := time.Now().UTC().Format(time.RFC3339)
@@ -321,7 +321,7 @@ func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateBoo
 			cover_image_key, created_at, updated_at
 	`, args...))
 	if err != nil {
-		return Book{}, nil, err
+		return UpdateResult{}, err
 	}
 
 	if input.AuthorIDs.Present {
@@ -334,28 +334,28 @@ func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateBoo
 
 		rows, err := tx.QueryContext(ctx, `SELECT author_id FROM book_authors WHERE book_id = ?`, id)
 		if err != nil {
-			return Book{}, nil, err
+			return UpdateResult{}, err
 		}
 		existing := make(map[int64]bool)
 		for rows.Next() {
 			var authorID int64
 			if err := rows.Scan(&authorID); err != nil {
 				_ = rows.Close()
-				return Book{}, nil, err
+				return UpdateResult{}, err
 			}
 			existing[authorID] = true
 		}
 		if err := rows.Close(); err != nil {
-			return Book{}, nil, err
+			return UpdateResult{}, err
 		}
 		if err := rows.Err(); err != nil {
-			return Book{}, nil, err
+			return UpdateResult{}, err
 		}
 
 		for authorID := range existing {
 			if !desired[authorID] {
 				if _, err := tx.ExecContext(ctx, `DELETE FROM book_authors WHERE book_id = ? AND author_id = ?`, id, authorID); err != nil {
-					return Book{}, nil, err
+					return UpdateResult{}, err
 				}
 			}
 		}
@@ -369,22 +369,59 @@ func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateBoo
 					INSERT INTO book_authors (book_id, author_id, created_at, updated_at)
 					VALUES (?, ?, ?, ?)
 				`, id, authorID, updatedAt, updatedAt); err != nil {
-					return Book{}, nil, err
+					return UpdateResult{}, err
 				}
 				inserted[authorID] = true
 			}
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
-		return Book{}, nil, err
+	authorRows, err := tx.QueryContext(ctx, `
+		SELECT a.id, a.name, a.created_at, a.updated_at
+		FROM book_authors ba
+		JOIN authors a ON a.id = ba.author_id
+		WHERE ba.book_id = ?
+		ORDER BY ba.updated_at DESC, ba.id ASC
+	`, id)
+	if err != nil {
+		return UpdateResult{}, err
 	}
-	book.Authors = []authors.Author{}
+	book.Authors = make([]authors.Author, 0)
+	for authorRows.Next() {
+		var author authors.Author
+		var createdAt, updatedAt string
+		if err := authorRows.Scan(&author.ID, &author.Name, &createdAt, &updatedAt); err != nil {
+			_ = authorRows.Close()
+			return UpdateResult{}, err
+		}
+		author.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
+		if err != nil {
+			_ = authorRows.Close()
+			return UpdateResult{}, fmt.Errorf("parse author created_at: %w", err)
+		}
+		author.UpdatedAt, err = time.Parse(time.RFC3339, updatedAt)
+		if err != nil {
+			_ = authorRows.Close()
+			return UpdateResult{}, fmt.Errorf("parse author updated_at: %w", err)
+		}
+		book.Authors = append(book.Authors, author)
+	}
+	if err := authorRows.Close(); err != nil {
+		return UpdateResult{}, err
+	}
+	if err := authorRows.Err(); err != nil {
+		return UpdateResult{}, err
+	}
 
-	if input.CoverImageKey.Present && priorCover.Valid {
-		return book, &priorCover.String, nil
+	if err := tx.Commit(); err != nil {
+		return UpdateResult{}, err
 	}
-	return book, nil, nil
+
+	result := UpdateResult{Book: book}
+	if input.CoverImageKey.Present && priorCover.Valid {
+		result.PriorCoverImageKey = &priorCover.String
+	}
+	return result, nil
 }
 
 func (r *SQLiteRepository) Delete(ctx context.Context, id int64) error {

@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -172,6 +173,52 @@ func TestReadAPIUpdateRejectsInvalidRequests(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReadAPIUpdateReturnsValidationErrorAfterConcurrentEdit(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	readID := int64(100)
+	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
+		ID: readID, BookID: bookID, StartedAt: new("2026-01-01"), CreatedAt: "2026-01-01T00:00:00Z",
+	})
+
+	repository := &afterGetReadRepository{
+		Repository: reads.NewSQLiteRepository(db),
+		afterGet: func() {
+			if _, err := db.Exec(`UPDATE reads SET finished_at = '2026-01-02' WHERE id = ?`, readID); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+	app := newTestAppWithReadRepository(t, db, repository)
+	resp := patchJSON(t, app.handler, "/api/reads/100", `{"started_at":"2026-01-03"}`)
+	if resp.Code != http.StatusBadRequest || resp.Body.String() != "finished_at must not be before started_at\n" {
+		t.Fatalf("expected date validation response, got status %d: %s", resp.Code, resp.Body.String())
+	}
+
+	var startedAt, finishedAt string
+	if err := db.QueryRow(`SELECT started_at, finished_at FROM reads WHERE id = ?`, readID).Scan(&startedAt, &finishedAt); err != nil {
+		t.Fatal(err)
+	}
+	if startedAt != "2026-01-01" || finishedAt != "2026-01-02" {
+		t.Fatalf("expected failed patch to preserve the concurrent state, got started_at=%q finished_at=%q", startedAt, finishedAt)
+	}
+}
+
+type afterGetReadRepository struct {
+	reads.Repository
+	afterGet func()
+}
+
+func (r *afterGetReadRepository) GetByID(ctx context.Context, id int64) (reads.Read, error) {
+	result, err := r.Repository.GetByID(ctx, id)
+	if err == nil && r.afterGet != nil {
+		afterGet := r.afterGet
+		r.afterGet = nil
+		afterGet()
+	}
+	return result, err
 }
 
 // ── List ──────────────────────────────────────────────────────────────────────

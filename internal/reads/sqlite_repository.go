@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 type SQLiteRepository struct {
@@ -127,7 +130,38 @@ func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateRea
 	if errors.Is(err, sql.ErrNoRows) {
 		return Read{}, ErrReadNotFound
 	}
-	return read, err
+	return read, translateUpdateConstraintError(err)
+}
+
+func translateUpdateConstraintError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	var sqliteErr *sqlite.Error
+	if !errors.As(err, &sqliteErr) || sqliteErr.Code() != sqlite3.SQLITE_CONSTRAINT_CHECK {
+		return err
+	}
+
+	message := sqliteErr.Error()
+	switch {
+	case strings.Contains(message, "finished_at IS NULL OR abandoned_at IS NULL"):
+		return ErrConflictingTerminalDates
+	case strings.Contains(message, "started_at IS NULL OR finished_at IS NULL OR finished_at >= started_at"):
+		return ErrFinishedBeforeStarted
+	case strings.Contains(message, "started_at IS NULL OR abandoned_at IS NULL OR abandoned_at >= started_at"):
+		return ErrAbandonedBeforeStarted
+	case strings.Contains(message, "started_at IS NULL OR ("):
+		return ErrInvalidStartedAt
+	case strings.Contains(message, "finished_at IS NULL OR ("):
+		return ErrInvalidFinishedAt
+	case strings.Contains(message, "abandoned_at IS NULL OR ("):
+		return ErrInvalidAbandonedAt
+	case strings.Contains(message, "rating IS NULL OR"):
+		return ErrInvalidRating
+	default:
+		return err
+	}
 }
 
 func (r *SQLiteRepository) Delete(ctx context.Context, id int64) error {

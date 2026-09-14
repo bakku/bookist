@@ -493,6 +493,36 @@ func TestServiceUpdateReplacesAndHydratesAuthors(t *testing.T) {
 	testsupport.AssertBookAuthors(t, db, bookID)
 }
 
+func TestServiceUpdateReturnsAuthorsInPersistedRelationshipOrder(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	retainedAuthorID := testsupport.InsertAuthorRow(t, db, "Author One")
+	newAuthorID := testsupport.InsertAuthorRow(t, db, "Author Two")
+	testsupport.InsertBookAuthorRow(t, db, bookID, retainedAuthorID)
+	if _, err := db.Exec(`UPDATE book_authors SET created_at = '2000-01-01T00:00:00Z', updated_at = '2000-01-01T00:00:00Z' WHERE book_id = ?`, bookID); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := service.Update(context.Background(), bookID, books.UpdateBookRequest{
+		AuthorIDs: updateValueOf([]int64{retainedAuthorID, newAuthorID}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated.Authors) != 2 || updated.Authors[0].ID != newAuthorID || updated.Authors[1].ID != retainedAuthorID {
+		t.Fatalf("expected newly added author before retained author, got %#v", updated.Authors)
+	}
+
+	listed, err := service.List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || len(listed[0].Authors) != 2 ||
+		listed[0].Authors[0].ID != updated.Authors[0].ID || listed[0].Authors[1].ID != updated.Authors[1].ID {
+		t.Fatalf("expected update and list author order to match, update=%#v list=%#v", updated.Authors, listed)
+	}
+}
+
 func TestServiceUpdatePreservesAndHydratesAuthorsWhenOmitted(t *testing.T) {
 	service, db := testsupport.NewBookService(t)
 	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
