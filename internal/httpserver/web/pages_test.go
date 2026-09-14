@@ -116,7 +116,7 @@ func TestStaticStylesheetsAreServed(t *testing.T) {
 		contains    []byte
 	}{
 		{path: "/static/bulma.min.css", contentType: "text/css", contains: []byte("bulma.io v1.0.4")},
-		{path: "/static/app.css", contentType: "text/css", contains: []byte(".app-sidebar")},
+		{path: "/static/app.css", contentType: "text/css", contains: []byte(".column.app-sidebar")},
 	}
 
 	for _, tt := range tests {
