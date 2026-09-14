@@ -16,7 +16,6 @@ type TemplateSet struct {
 func Templates() (TemplateSet, error) {
 	base, err := template.ParseFS(
 		files,
-		"templates/components.html",
 		"templates/icons.html",
 		"templates/layout.html",
 	)
