@@ -5,33 +5,76 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Layout.PageTitle}}</title>
+  <link rel="stylesheet" href="/static/bulma.min.css">
   <link rel="stylesheet" href="/static/app.css">
 </head>
-<body class="font-sans">
+<body>
   {{template "icon-sprite" .}}
   <a href="#main-content" class="skip-link">Skip to content</a>
-  {{template "app-shell" .}}
+
+  <header class="navbar has-shadow app-header" role="banner">
+    <div class="container is-fluid">
+      <div class="navbar-brand">
+        <a class="navbar-item brand-link" href="/">
+          <span class="icon has-text-primary" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><use href="#icon-books"></use></svg>
+          </span>
+          <strong class="is-size-5 ml-2">Bookist</strong>
+        </a>
+        <button type="button" class="navbar-burger" popovertarget="mobile-sidebar" aria-label="Open navigation">
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <aside id="mobile-sidebar" popover class="mobile-sidebar has-text-inherit">
+    <div class="is-flex is-align-items-center is-justify-content-space-between p-5 pb-0">
+      <a class="is-flex is-align-items-center brand-link" href="/">
+        <span class="icon has-text-primary" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><use href="#icon-books"></use></svg>
+        </span>
+        <strong class="is-size-5 ml-2">Bookist</strong>
+      </a>
+      <button type="button" class="delete" popovertarget="mobile-sidebar" popovertargetaction="hide" aria-label="Close navigation"></button>
+    </div>
+    <nav aria-label="Mobile primary" class="menu p-5">
+      {{template "sidebar-menu" .Layout}}
+    </nav>
+  </aside>
+
+  <div class="columns is-gapless mb-0 app-layout">
+    <aside data-desktop-sidebar class="column is-narrow is-hidden-touch app-sidebar">
+      <div class="p-5">
+        <nav aria-label="Primary" class="menu">
+          {{template "sidebar-menu" .Layout}}
+        </nav>
+      </div>
+    </aside>
+
+    <main id="main-content" tabindex="-1" class="column">
+      <section class="section">
+        <div class="container is-fluid">
+          {{template "page-content" .}}
+        </div>
+      </section>
+    </main>
+  </div>
 </body>
 </html>
 {{end}}
 
-{{define "app-shell"}}
-<div class="flex h-dvh flex-col overflow-hidden bg-light">
-  <header data-app-header class="flex h-18 shrink-0 items-center border-b border-border bg-light">
-    <div class="flex h-16 w-32 shrink-0 items-center gap-1 px-4 sidebar:w-64">
-      <div class="sidebar:hidden">
-        {{template "mobile-sidebar" .Layout}}
-      </div>
-      {{template "brand" .}}
-    </div>
-  </header>
-  <div class="relative flex min-h-0 w-full grow overflow-y-auto">
-    {{template "sidebar" .Layout}}
-    <div class="bookist-scrollbar h-full min-w-0 w-full grow overflow-auto bg-light">
-      <main id="main-content" tabindex="-1" class="w-full p-4 sm:p-6 lg:p-8">
-        {{template "page-content" .}}
-      </main>
-    </div>
-  </div>
-</div>
+{{define "sidebar-menu"}}
+<p class="menu-label">Library</p>
+<ul class="menu-list">
+  {{range .LibraryNav}}
+  <li><a class="is-flex is-align-items-center is-gap-1{{if .Active}} is-active{{end}}" href="{{.Href}}" {{if .Active}}aria-current="page"{{end}}>
+    <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><use href="#icon-{{.IconID}}"></use></svg></span>
+    <span>{{.Label}}</span>
+  </a></li>
+  {{end}}
+</ul>
 {{end}}
