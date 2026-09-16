@@ -1,8 +1,10 @@
 package api_test
 
 import (
+	"bytes"
 	"database/sql"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"bakku.dev/bookist/internal/authors"
@@ -20,10 +22,26 @@ type testApp struct {
 	coverDir string
 }
 
+func patchJSON(t *testing.T, handler http.Handler, path, body string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodPatch, path, bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+
+	return resp
+}
+
 func newTestApp(t *testing.T) testApp {
 	t.Helper()
 
 	db := testsupport.OpenMigratedDB(t)
+	return newTestAppWithReadRepository(t, db, reads.NewSQLiteRepository(db))
+}
+
+func newTestAppWithReadRepository(t *testing.T, db *sql.DB, readRepo reads.Repository) testApp {
+	t.Helper()
 
 	authorRepo := authors.NewSQLiteRepository(db)
 	authorService := authors.NewService(authorRepo)
@@ -39,7 +57,6 @@ func newTestApp(t *testing.T) testApp {
 	}
 	bookService := books.NewService(bookRepo, authorRepo, coverStore)
 
-	readRepo := reads.NewSQLiteRepository(db)
 	readService := reads.NewService(readRepo)
 
 	mux := http.NewServeMux()

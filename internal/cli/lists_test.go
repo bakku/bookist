@@ -389,3 +389,27 @@ func TestListsRemoveBookRequiresBothFlags(t *testing.T) {
 		}
 	}
 }
+
+// ── Lists Edit ───────────────────────────────────────────────────────────────
+
+func TestListsEditResolvesNameAndPatches(t *testing.T) {
+	var body map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			_ = json.NewEncoder(w).Encode([]lists.List{{ID: 5, Name: "Favorites"}})
+		case http.MethodPatch:
+			if r.URL.Path != "/api/lists/5" {
+				t.Fatalf("unexpected path %s", r.URL.Path)
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			_ = json.NewEncoder(w).Encode(lists.List{ID: 5, Name: "Best"})
+		}
+	}))
+	defer server.Close()
+
+	code, stdout, stderr := runCLI([]string{"lists", "edit", "--name", "Best", "--clear", "description", "--server", server.URL, "favorites"})
+	if code != 0 || stdout != "5\tBest\n" || stderr != "" || body["name"] != "Best" || body["description"] != nil || len(body) != 2 {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q body=%#v", code, stdout, stderr, body)
+	}
+}

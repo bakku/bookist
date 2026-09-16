@@ -1,6 +1,10 @@
 package authors
 
-import "time"
+import (
+	"time"
+
+	"bakku.dev/bookist/internal/optional"
+)
 
 type Author struct {
 	ID        int64     `json:"id"`
@@ -11,4 +15,8 @@ type Author struct {
 
 type CreateAuthorRequest struct {
 	Name string `json:"name"`
+}
+
+type UpdateAuthorRequest struct {
+	Name optional.Value[string] `json:"name"`
 }

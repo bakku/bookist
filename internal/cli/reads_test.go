@@ -174,3 +174,22 @@ func TestReadsRemoveRejectsInvalidIDsWithoutRequest(t *testing.T) {
 		})
 	}
 }
+
+// ── Reads Edit ───────────────────────────────────────────────────────────────
+
+func TestReadsEditPatchesNullableFields(t *testing.T) {
+	var body map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch || r.URL.Path != "/api/reads/9" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_ = json.NewEncoder(w).Encode(reads.Read{ID: 9, BookID: 3})
+	}))
+	defer server.Close()
+
+	code, stdout, stderr := runCLI([]string{"reads", "edit", "--rating", "4.5", "--clear", "notes", "--server", server.URL, "9"})
+	if code != 0 || stdout != "9\t3\n" || stderr != "" || body["rating"] != 4.5 || body["notes"] != nil || len(body) != 2 {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q body=%#v", code, stdout, stderr, body)
+	}
+}

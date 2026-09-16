@@ -84,7 +84,7 @@ CREATE TABLE book_lists (
 CREATE TABLE reads (
     id INTEGER PRIMARY KEY,
     book_id INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
-    started_at TEXT NULL CHECK (
+    started_at TEXT NULL CONSTRAINT reads_started_at_valid CHECK (
         started_at IS NULL OR (
             length(started_at) = 10 AND started_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND
             CAST(substr(started_at, 1, 4) AS INTEGER) >= 1 AND
@@ -96,7 +96,7 @@ CREATE TABLE reads (
             END
         )
     ),
-    finished_at TEXT NULL CHECK (
+    finished_at TEXT NULL CONSTRAINT reads_finished_at_valid CHECK (
         finished_at IS NULL OR (
             length(finished_at) = 10 AND finished_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND
             CAST(substr(finished_at, 1, 4) AS INTEGER) >= 1 AND
@@ -108,7 +108,7 @@ CREATE TABLE reads (
             END
         )
     ),
-    abandoned_at TEXT NULL CHECK (
+    abandoned_at TEXT NULL CONSTRAINT reads_abandoned_at_valid CHECK (
         abandoned_at IS NULL OR (
             length(abandoned_at) = 10 AND abandoned_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND
             CAST(substr(abandoned_at, 1, 4) AS INTEGER) >= 1 AND
@@ -120,16 +120,16 @@ CREATE TABLE reads (
             END
         )
     ),
-    rating REAL NULL CHECK (
+    rating REAL NULL CONSTRAINT reads_rating_valid CHECK (
         rating IS NULL OR
         (rating >= 1 AND rating <= 5 AND rating * 2 = CAST(rating * 2 AS INTEGER))
     ),
     notes TEXT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    CHECK (finished_at IS NULL OR abandoned_at IS NULL),
-    CHECK (started_at IS NULL OR finished_at IS NULL OR finished_at >= started_at),
-    CHECK (started_at IS NULL OR abandoned_at IS NULL OR abandoned_at >= started_at)
+    CONSTRAINT reads_terminal_dates_exclusive CHECK (finished_at IS NULL OR abandoned_at IS NULL),
+    CONSTRAINT reads_finished_not_before_started CHECK (started_at IS NULL OR finished_at IS NULL OR finished_at >= started_at),
+    CONSTRAINT reads_abandoned_not_before_started CHECK (started_at IS NULL OR abandoned_at IS NULL OR abandoned_at >= started_at)
 );
 CREATE INDEX reads_book_id_idx ON reads(book_id);
 

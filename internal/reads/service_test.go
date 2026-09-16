@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"bakku.dev/bookist/internal/optional"
 	"bakku.dev/bookist/internal/reads"
 	"bakku.dev/bookist/internal/testsupport"
 )
@@ -112,6 +113,102 @@ func TestServiceCreatePermitsAbandonedReadWithoutStart(t *testing.T) {
 	}
 }
 
+// ── Update ────────────────────────────────────────────────────────────────────
+
+func TestServiceUpdateMergesNormalizesAndClearsFields(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	readID := int64(100)
+	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
+		ID: readID, BookID: bookID, StartedAt: new("2026-01-01"), AbandonedAt: new("2026-01-03"),
+		Rating: new(4.5), Notes: new("Old notes"), CreatedAt: "2026-01-04T00:00:00Z",
+	})
+
+	updated, err := reads.NewService(reads.NewSQLiteRepository(db)).Update(context.Background(), readID, reads.UpdateReadRequest{
+		StartedAt:   present(" 2026-01-02 "),
+		AbandonedAt: null[string](),
+		Notes:       present(" Revised "),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.StartedAt == nil || *updated.StartedAt != "2026-01-02" || updated.AbandonedAt != nil {
+		t.Fatalf("unexpected updated dates: %#v", updated)
+	}
+	if updated.Notes == nil || *updated.Notes != "Revised" || updated.Rating == nil || *updated.Rating != 4.5 {
+		t.Fatalf("expected normalized notes and unchanged rating, got %#v", updated)
+	}
+}
+
+func TestServiceUpdateRejectsEmptyAndBlankValues(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	readID := int64(100)
+	testsupport.InsertReadRow(t, db, testsupport.ReadRow{ID: readID, BookID: bookID, CreatedAt: "2026-01-01T00:00:00Z"})
+	service := reads.NewService(reads.NewSQLiteRepository(db))
+
+	for _, test := range []struct {
+		name  string
+		input reads.UpdateReadRequest
+		want  error
+	}{
+		{name: "no fields", input: reads.UpdateReadRequest{}, want: reads.ErrNoFieldsToUpdate},
+		{name: "blank started date", input: reads.UpdateReadRequest{StartedAt: present("  ")}, want: reads.ErrBlankOptionalString},
+		{name: "blank finished date", input: reads.UpdateReadRequest{FinishedAt: present("")}, want: reads.ErrBlankOptionalString},
+		{name: "blank abandoned date", input: reads.UpdateReadRequest{AbandonedAt: present(" ")}, want: reads.ErrBlankOptionalString},
+		{name: "blank notes", input: reads.UpdateReadRequest{Notes: present("  ")}, want: reads.ErrBlankOptionalString},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := service.Update(context.Background(), readID, test.input)
+			if !errors.Is(err, test.want) {
+				t.Fatalf("expected %v, got %v", test.want, err)
+			}
+		})
+	}
+}
+
+func TestServiceUpdateValidatesMergedRead(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		row   testsupport.ReadRow
+		input reads.UpdateReadRequest
+		want  error
+	}{
+		{
+			name:  "finished before existing start",
+			row:   testsupport.ReadRow{StartedAt: new("2026-02-02")},
+			input: reads.UpdateReadRequest{FinishedAt: present("2026-02-01")},
+			want:  reads.ErrFinishedBeforeStarted,
+		},
+		{
+			name:  "finished conflicts with existing abandoned date",
+			row:   testsupport.ReadRow{AbandonedAt: new("2026-02-02")},
+			input: reads.UpdateReadRequest{FinishedAt: present("2026-02-03")},
+			want:  reads.ErrConflictingTerminalDates,
+		},
+		{
+			name:  "invalid rating",
+			row:   testsupport.ReadRow{},
+			input: reads.UpdateReadRequest{Rating: present(4.2)},
+			want:  reads.ErrInvalidRating,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			db := testsupport.OpenMigratedDB(t)
+			bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+			test.row.ID = 100
+			test.row.BookID = bookID
+			test.row.CreatedAt = "2026-01-01T00:00:00Z"
+			testsupport.InsertReadRow(t, db, test.row)
+
+			_, err := reads.NewService(reads.NewSQLiteRepository(db)).Update(context.Background(), test.row.ID, test.input)
+			if !errors.Is(err, test.want) {
+				t.Fatalf("expected %v, got %v", test.want, err)
+			}
+		})
+	}
+}
+
 // ── ListByBookID ──────────────────────────────────────────────────────────────
 
 func TestServiceListByBookIDReturnsReads(t *testing.T) {
@@ -159,4 +256,12 @@ func TestServiceDeleteRemovesRead(t *testing.T) {
 	if count != 0 {
 		t.Fatalf("expected read to be deleted, got %d rows", count)
 	}
+}
+
+func present[T any](value T) optional.Value[T] {
+	return optional.Value[T]{Present: true, Value: &value}
+}
+
+func null[T any]() optional.Value[T] {
+	return optional.Value[T]{Present: true}
 }

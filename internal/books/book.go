@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"bakku.dev/bookist/internal/authors"
+	"bakku.dev/bookist/internal/optional"
 )
 
 type Format string
@@ -74,4 +75,38 @@ type CreateBookRequest struct {
 	PublishedDay      *int       `json:"published_day"`
 	Cover             *[]byte    `json:"cover"`
 	CoverImageKey     *string    `json:"-"`
+}
+
+type UpdateBookRequest struct {
+	Title             optional.Value[string]    `json:"title"`
+	ISBN              optional.Value[string]    `json:"isbn"`
+	AuthorIDs         optional.Value[[]int64]   `json:"author_ids"`
+	Language          optional.Value[string]    `json:"language"`
+	Publisher         optional.Value[string]    `json:"publisher"`
+	Edition           optional.Value[string]    `json:"edition"`
+	Format            optional.Value[Format]    `json:"format"`
+	PurchasedAt       optional.Value[string]    `json:"purchased_at"`
+	PurchasePrice     optional.Value[string]    `json:"purchase_price"`
+	Pages             optional.Value[int]       `json:"pages"`
+	Notes             optional.Value[string]    `json:"notes"`
+	Summary           optional.Value[string]    `json:"summary"`
+	SeriesName        optional.Value[string]    `json:"series_name"`
+	SeriesPosition    optional.Value[float64]   `json:"series_position"`
+	Location          optional.Value[string]    `json:"location"`
+	Condition         optional.Value[Condition] `json:"condition"`
+	AcquisitionSource optional.Value[string]    `json:"acquisition_source"`
+	PublishedYear     optional.Value[int]       `json:"published_year"`
+	PublishedMonth    optional.Value[int]       `json:"published_month"`
+	PublishedDay      optional.Value[int]       `json:"published_day"`
+	Cover             optional.Value[[]byte]    `json:"cover"`
+	CoverImageKey     optional.Value[string]    `json:"-"`
+}
+
+func (r UpdateBookRequest) hasFields() bool {
+	return r.Title.Present || r.ISBN.Present || r.AuthorIDs.Present || r.Language.Present ||
+		r.Publisher.Present || r.Edition.Present || r.Format.Present || r.PurchasedAt.Present ||
+		r.PurchasePrice.Present || r.Pages.Present || r.Notes.Present || r.Summary.Present ||
+		r.SeriesName.Present || r.SeriesPosition.Present || r.Location.Present ||
+		r.Condition.Present || r.AcquisitionSource.Present || r.PublishedYear.Present ||
+		r.PublishedMonth.Present || r.PublishedDay.Present || r.Cover.Present
 }

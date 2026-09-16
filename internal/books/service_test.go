@@ -1,15 +1,19 @@
 package books_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"math"
 	"os"
+	"strings"
 	"testing"
 
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
 	"bakku.dev/bookist/internal/covers"
+	"bakku.dev/bookist/internal/optional"
 	"bakku.dev/bookist/internal/testsupport"
 )
 
@@ -423,6 +427,297 @@ func TestServiceCreateRejectsInvalidPurchasedAt(t *testing.T) {
 		t.Fatalf("expected ErrInvalidPurchasedAt, got %v", err)
 	}
 	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
+}
+
+// ── Update ────────────────────────────────────────────────────────────────────
+
+func TestServiceUpdateRejectsEmptyAndBlankValues(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+
+	if _, err := service.Update(context.Background(), bookID, books.UpdateBookRequest{}); !errors.Is(err, books.ErrNoFieldsToUpdate) {
+		t.Fatalf("expected ErrNoFieldsToUpdate, got %v", err)
+	}
+	if _, err := service.Update(context.Background(), bookID, books.UpdateBookRequest{
+		Title: optional.Value[string]{Present: true},
+	}); !errors.Is(err, books.ErrTitleRequired) {
+		t.Fatalf("expected ErrTitleRequired for null title, got %v", err)
+	}
+	if _, err := service.Update(context.Background(), bookID, books.UpdateBookRequest{
+		Publisher: updateValueOf(" "),
+	}); !errors.Is(err, books.ErrBlankOptionalString) {
+		t.Fatalf("expected ErrBlankOptionalString, got %v", err)
+	}
+	testsupport.AssertBookRow(t, db, bookID, "Dune", nil)
+}
+
+func TestServiceUpdateRejectsInvalidSharedBookFields(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+
+	tests := []struct {
+		name  string
+		input books.UpdateBookRequest
+		want  error
+	}{
+		{name: "format", input: books.UpdateBookRequest{Format: updateValueOf(books.Format("invalid"))}, want: books.ErrInvalidFormat},
+		{name: "condition", input: books.UpdateBookRequest{Condition: updateValueOf(books.Condition("like_new"))}, want: books.ErrInvalidCondition},
+		{name: "purchased date", input: books.UpdateBookRequest{PurchasedAt: updateValueOf("2025-02-29")}, want: books.ErrInvalidPurchasedAt},
+		{name: "pages", input: books.UpdateBookRequest{Pages: updateValueOf(0)}, want: books.ErrInvalidPages},
+		{name: "series position", input: books.UpdateBookRequest{SeriesPosition: updateValueOf(0.0)}, want: books.ErrInvalidSeriesPosition},
+		{name: "published year", input: books.UpdateBookRequest{PublishedYear: updateValueOf(0)}, want: books.ErrInvalidPublishedYear},
+		{name: "published month", input: books.UpdateBookRequest{PublishedYear: updateValueOf(2026), PublishedMonth: updateValueOf(13)}, want: books.ErrInvalidPublishedMonth},
+		{name: "published day", input: books.UpdateBookRequest{PublishedYear: updateValueOf(2026), PublishedMonth: updateValueOf(2), PublishedDay: updateValueOf(29)}, want: books.ErrInvalidPublishedDay},
+		{name: "unknown author", input: books.UpdateBookRequest{AuthorIDs: updateValueOf([]int64{999999})}, want: books.ErrAuthorNotFound},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := service.Update(context.Background(), bookID, tt.input)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("expected %v, got %v", tt.want, err)
+			}
+			testsupport.AssertBookRow(t, db, bookID, "Dune", nil)
+		})
+	}
+}
+
+func TestServiceUpdateMergesPublicationDateBeforeValidation(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	if _, err := db.Exec(`UPDATE books SET published_year = 2024, published_month = 2, published_day = 29 WHERE id = ?`, bookID); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := service.Update(context.Background(), bookID, books.UpdateBookRequest{
+		PublishedYear: updateValueOf(2023),
+	})
+	if !errors.Is(err, books.ErrInvalidPublishedDay) {
+		t.Fatalf("expected ErrInvalidPublishedDay, got %v", err)
+	}
+}
+
+func TestServiceUpdateReplacesAndHydratesAuthors(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	author1 := testsupport.InsertAuthorRow(t, db, "Author One")
+	author2 := testsupport.InsertAuthorRow(t, db, "Author Two")
+	testsupport.InsertBookAuthorRow(t, db, bookID, author1)
+
+	updated, err := service.Update(context.Background(), bookID, books.UpdateBookRequest{
+		AuthorIDs: updateValueOf([]int64{author2, author2}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated.Authors) != 1 || updated.Authors[0].ID != author2 {
+		t.Fatalf("expected hydrated replacement author, got %#v", updated.Authors)
+	}
+	testsupport.AssertBookAuthors(t, db, bookID, author2)
+
+	updated, err = service.Update(context.Background(), bookID, books.UpdateBookRequest{
+		AuthorIDs: optional.Value[[]int64]{Present: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Authors == nil || len(updated.Authors) != 0 {
+		t.Fatalf("expected non-nil empty authors, got %#v", updated.Authors)
+	}
+	testsupport.AssertBookAuthors(t, db, bookID)
+}
+
+func TestServiceUpdateReturnsAuthorsInPersistedRelationshipOrder(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	retainedAuthorID := testsupport.InsertAuthorRow(t, db, "Author One")
+	newAuthorID := testsupport.InsertAuthorRow(t, db, "Author Two")
+	testsupport.InsertBookAuthorRow(t, db, bookID, retainedAuthorID)
+	if _, err := db.Exec(`UPDATE book_authors SET created_at = '2000-01-01T00:00:00Z', updated_at = '2000-01-01T00:00:00Z' WHERE book_id = ?`, bookID); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := service.Update(context.Background(), bookID, books.UpdateBookRequest{
+		AuthorIDs: updateValueOf([]int64{retainedAuthorID, newAuthorID}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated.Authors) != 2 || updated.Authors[0].ID != newAuthorID || updated.Authors[1].ID != retainedAuthorID {
+		t.Fatalf("expected newly added author before retained author, got %#v", updated.Authors)
+	}
+
+	listed, err := service.List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || len(listed[0].Authors) != 2 ||
+		listed[0].Authors[0].ID != updated.Authors[0].ID || listed[0].Authors[1].ID != updated.Authors[1].ID {
+		t.Fatalf("expected update and list author order to match, update=%#v list=%#v", updated.Authors, listed)
+	}
+}
+
+func TestServiceUpdatePreservesAndHydratesAuthorsWhenOmitted(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	authorID := testsupport.InsertAuthorRow(t, db, "Frank Herbert")
+	testsupport.InsertBookAuthorRow(t, db, bookID, authorID)
+
+	updated, err := service.Update(context.Background(), bookID, books.UpdateBookRequest{
+		Title: updateValueOf("Dune Messiah"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated.Authors) != 1 || updated.Authors[0].ID != authorID {
+		t.Fatalf("expected preserved hydrated author, got %#v", updated.Authors)
+	}
+	testsupport.AssertBookAuthors(t, db, bookID, authorID)
+}
+
+func TestServiceUpdateReplacesAndClearsCover(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	coverDir := t.TempDir()
+	coverStore, err := covers.NewStore(coverDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var logOutput bytes.Buffer
+	service := books.NewServiceWithLogger(
+		books.NewSQLiteRepository(db), authors.NewSQLiteRepository(db), coverStore,
+		slog.New(slog.NewTextHandler(&logOutput, nil)),
+	)
+	created, err := service.Create(context.Background(), books.CreateBookRequest{Title: "Dune", Cover: new([]byte("\x89PNG\r\n\x1a\nold cover"))})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldKey := *created.CoverImageKey
+
+	updated, err := service.Update(context.Background(), created.ID, books.UpdateBookRequest{
+		Cover: updateValueOf([]byte("\x89PNG\r\n\x1a\nnew cover")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.CoverImageKey == nil || *updated.CoverImageKey == oldKey || updated.CoverURL == nil {
+		t.Fatalf("expected hydrated replacement cover, got %#v", updated)
+	}
+	if _, err := os.Stat(coverDir + "/" + oldKey); !os.IsNotExist(err) {
+		t.Fatalf("expected old cover removed, got %v", err)
+	}
+
+	newKey := *updated.CoverImageKey
+	updated, err = service.Update(context.Background(), created.ID, books.UpdateBookRequest{
+		Cover: optional.Value[[]byte]{Present: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.CoverImageKey != nil || updated.CoverURL != nil {
+		t.Fatalf("expected cleared cover, got %#v", updated)
+	}
+	if _, err := os.Stat(coverDir + "/" + newKey); !os.IsNotExist(err) {
+		t.Fatalf("expected replaced cover removed, got %v", err)
+	}
+	if logOutput.Len() != 0 {
+		t.Fatalf("expected successful cleanup not to log, got %q", logOutput.String())
+	}
+}
+
+func TestServiceUpdateCleansNewCoverWhenPersistenceFails(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	coverDir := t.TempDir()
+	coverStore, err := covers.NewStore(coverDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := books.NewService(books.NewSQLiteRepository(db), authors.NewSQLiteRepository(db), coverStore)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	if _, err := db.Exec(`
+		CREATE TRIGGER reject_book_update BEFORE UPDATE ON books
+		BEGIN
+			SELECT RAISE(ABORT, 'update rejected');
+		END
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = service.Update(context.Background(), bookID, books.UpdateBookRequest{
+		Cover: updateValueOf([]byte("\x89PNG\r\n\x1a\nnew cover")),
+	})
+	if err == nil {
+		t.Fatal("expected persistence failure")
+	}
+	entries, err := os.ReadDir(coverDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("expected failed update to clean new cover, found %d files", len(entries))
+	}
+}
+
+func TestServiceUpdateSucceedsWhenOldCoverCleanupFails(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	oldKey := "00000000000000000000000000000000.png"
+	newKey := "11111111111111111111111111111111.png"
+	if _, err := db.Exec(`UPDATE books SET cover_image_key = ? WHERE id = ?`, oldKey, bookID); err != nil {
+		t.Fatal(err)
+	}
+
+	var logOutput bytes.Buffer
+	coverStore := &cleanupFailingCoverStore{savedKey: newKey}
+	service := books.NewServiceWithLogger(
+		books.NewSQLiteRepository(db),
+		authors.NewSQLiteRepository(db),
+		coverStore,
+		slog.New(slog.NewTextHandler(&logOutput, nil)),
+	)
+	updated, err := service.Update(context.Background(), bookID, books.UpdateBookRequest{
+		Cover: updateValueOf([]byte("replacement cover")),
+	})
+	if err != nil {
+		t.Fatalf("expected committed update to succeed despite cleanup failure: %v", err)
+	}
+	if updated.CoverImageKey == nil || *updated.CoverImageKey != newKey {
+		t.Fatalf("expected new cover key, got %#v", updated.CoverImageKey)
+	}
+
+	var persistedKey string
+	if err := db.QueryRow(`SELECT cover_image_key FROM books WHERE id = ?`, bookID).Scan(&persistedKey); err != nil {
+		t.Fatal(err)
+	}
+	if persistedKey != newKey {
+		t.Fatalf("expected persisted cover key %q, got %q", newKey, persistedKey)
+	}
+	if len(coverStore.deletedKeys) != 1 || coverStore.deletedKeys[0] != oldKey {
+		t.Fatalf("expected only old cover cleanup, got %#v", coverStore.deletedKeys)
+	}
+	logged := logOutput.String()
+	for _, expected := range []string{"failed to delete previous book cover", "book_id=", oldKey, "cleanup failed"} {
+		if !strings.Contains(logged, expected) {
+			t.Errorf("expected warning to contain %q, got %q", expected, logged)
+		}
+	}
+}
+
+type cleanupFailingCoverStore struct {
+	savedKey    string
+	deletedKeys []string
+}
+
+func (s *cleanupFailingCoverStore) Save([]byte) (string, error) {
+	return s.savedKey, nil
+}
+
+func (s *cleanupFailingCoverStore) Delete(key string) error {
+	s.deletedKeys = append(s.deletedKeys, key)
+	return errors.New("cleanup failed")
+}
+
+func updateValueOf[T any](value T) optional.Value[T] {
+	return optional.Value[T]{Present: true, Value: &value}
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────

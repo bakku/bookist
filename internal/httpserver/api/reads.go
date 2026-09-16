@@ -54,6 +54,26 @@ func (s *Server) handleAPICreateRead(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, result)
 }
 
+func (s *Server) handleAPIUpdateRead(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid read ID", http.StatusBadRequest)
+		return
+	}
+
+	var input reads.UpdateReadRequest
+	if !decodePatchJSON(w, r, &input, maxPatchBodySize) {
+		return
+	}
+
+	result, err := s.reads.Update(r.Context(), id, input)
+	if err != nil {
+		writeUpdateReadError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
 func (s *Server) handleAPIDeleteRead(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r.PathValue("id"))
 	if err != nil {
@@ -92,4 +112,24 @@ func writeCreateReadError(w http.ResponseWriter, err error) {
 	}
 
 	http.Error(w, "failed to create read", http.StatusInternalServerError)
+}
+
+func writeUpdateReadError(w http.ResponseWriter, err error) {
+	if errors.Is(err, reads.ErrReadNotFound) {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if errors.Is(err, reads.ErrNoFieldsToUpdate) ||
+		errors.Is(err, reads.ErrBlankOptionalString) ||
+		errors.Is(err, reads.ErrInvalidStartedAt) ||
+		errors.Is(err, reads.ErrInvalidFinishedAt) ||
+		errors.Is(err, reads.ErrInvalidAbandonedAt) ||
+		errors.Is(err, reads.ErrConflictingTerminalDates) ||
+		errors.Is(err, reads.ErrFinishedBeforeStarted) ||
+		errors.Is(err, reads.ErrAbandonedBeforeStarted) ||
+		errors.Is(err, reads.ErrInvalidRating) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	http.Error(w, "failed to update read", http.StatusInternalServerError)
 }

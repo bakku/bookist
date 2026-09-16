@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"bakku.dev/bookist/internal/authors"
@@ -255,6 +256,172 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 	book.Authors = []authors.Author{}
 
 	return book, nil
+}
+
+func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateBookRequest) (UpdateResult, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return UpdateResult{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var priorCover sql.NullString
+	if err := tx.QueryRowContext(ctx, `SELECT cover_image_key FROM books WHERE id = ?`, id).Scan(&priorCover); err != nil {
+		if err == sql.ErrNoRows {
+			return UpdateResult{}, ErrBookNotFound
+		}
+		return UpdateResult{}, err
+	}
+
+	updatedAt := time.Now().UTC().Format(time.RFC3339)
+	sets := []string{"updated_at = ?"}
+	args := []any{updatedAt}
+	add := func(column string, present bool, value any) {
+		if present {
+			sets = append(sets, column+" = ?")
+			args = append(args, value)
+		}
+	}
+	add("title", input.Title.Present, input.Title.Value)
+	add("isbn", input.ISBN.Present, input.ISBN.Value)
+	add("language", input.Language.Present, input.Language.Value)
+	add("publisher", input.Publisher.Present, input.Publisher.Value)
+	add("edition", input.Edition.Present, input.Edition.Value)
+	var format *string
+	if input.Format.Value != nil {
+		format = new(string(*input.Format.Value))
+	}
+	add("format", input.Format.Present, format)
+	add("purchased_at", input.PurchasedAt.Present, input.PurchasedAt.Value)
+	add("purchase_price", input.PurchasePrice.Present, input.PurchasePrice.Value)
+	add("pages", input.Pages.Present, input.Pages.Value)
+	add("notes", input.Notes.Present, input.Notes.Value)
+	add("summary", input.Summary.Present, input.Summary.Value)
+	add("series_name", input.SeriesName.Present, input.SeriesName.Value)
+	add("series_position", input.SeriesPosition.Present, input.SeriesPosition.Value)
+	add("location", input.Location.Present, input.Location.Value)
+	var condition *string
+	if input.Condition.Value != nil {
+		condition = new(string(*input.Condition.Value))
+	}
+	add("condition", input.Condition.Present, condition)
+	add("acquisition_source", input.AcquisitionSource.Present, input.AcquisitionSource.Value)
+	add("published_year", input.PublishedYear.Present, input.PublishedYear.Value)
+	add("published_month", input.PublishedMonth.Present, input.PublishedMonth.Value)
+	add("published_day", input.PublishedDay.Present, input.PublishedDay.Value)
+	add("cover_image_key", input.CoverImageKey.Present, input.CoverImageKey.Value)
+
+	args = append(args, id)
+	book, err := scanBook(tx.QueryRowContext(ctx, `
+		UPDATE books SET `+strings.Join(sets, ", ")+`
+		WHERE id = ?
+		RETURNING id, title, isbn, language, publisher, edition, format, purchased_at,
+			purchase_price, pages, notes, summary, series_name, series_position, location,
+			condition, acquisition_source, published_year, published_month, published_day,
+			cover_image_key, created_at, updated_at
+	`, args...))
+	if err != nil {
+		return UpdateResult{}, err
+	}
+
+	if input.AuthorIDs.Present {
+		desired := make(map[int64]bool)
+		if input.AuthorIDs.Value != nil {
+			for _, authorID := range *input.AuthorIDs.Value {
+				desired[authorID] = true
+			}
+		}
+
+		rows, err := tx.QueryContext(ctx, `SELECT author_id FROM book_authors WHERE book_id = ?`, id)
+		if err != nil {
+			return UpdateResult{}, err
+		}
+		existing := make(map[int64]bool)
+		for rows.Next() {
+			var authorID int64
+			if err := rows.Scan(&authorID); err != nil {
+				_ = rows.Close()
+				return UpdateResult{}, err
+			}
+			existing[authorID] = true
+		}
+		if err := rows.Close(); err != nil {
+			return UpdateResult{}, err
+		}
+		if err := rows.Err(); err != nil {
+			return UpdateResult{}, err
+		}
+
+		for authorID := range existing {
+			if !desired[authorID] {
+				if _, err := tx.ExecContext(ctx, `DELETE FROM book_authors WHERE book_id = ? AND author_id = ?`, id, authorID); err != nil {
+					return UpdateResult{}, err
+				}
+			}
+		}
+		inserted := make(map[int64]bool)
+		if input.AuthorIDs.Value != nil {
+			for _, authorID := range *input.AuthorIDs.Value {
+				if existing[authorID] || inserted[authorID] {
+					continue
+				}
+				if _, err := tx.ExecContext(ctx, `
+					INSERT INTO book_authors (book_id, author_id, created_at, updated_at)
+					VALUES (?, ?, ?, ?)
+				`, id, authorID, updatedAt, updatedAt); err != nil {
+					return UpdateResult{}, err
+				}
+				inserted[authorID] = true
+			}
+		}
+	}
+
+	authorRows, err := tx.QueryContext(ctx, `
+		SELECT a.id, a.name, a.created_at, a.updated_at
+		FROM book_authors ba
+		JOIN authors a ON a.id = ba.author_id
+		WHERE ba.book_id = ?
+		ORDER BY ba.updated_at DESC, ba.id ASC
+	`, id)
+	if err != nil {
+		return UpdateResult{}, err
+	}
+	book.Authors = make([]authors.Author, 0)
+	for authorRows.Next() {
+		var author authors.Author
+		var createdAt, updatedAt string
+		if err := authorRows.Scan(&author.ID, &author.Name, &createdAt, &updatedAt); err != nil {
+			_ = authorRows.Close()
+			return UpdateResult{}, err
+		}
+		author.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
+		if err != nil {
+			_ = authorRows.Close()
+			return UpdateResult{}, fmt.Errorf("parse author created_at: %w", err)
+		}
+		author.UpdatedAt, err = time.Parse(time.RFC3339, updatedAt)
+		if err != nil {
+			_ = authorRows.Close()
+			return UpdateResult{}, fmt.Errorf("parse author updated_at: %w", err)
+		}
+		book.Authors = append(book.Authors, author)
+	}
+	if err := authorRows.Close(); err != nil {
+		return UpdateResult{}, err
+	}
+	if err := authorRows.Err(); err != nil {
+		return UpdateResult{}, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return UpdateResult{}, err
+	}
+
+	result := UpdateResult{Book: book}
+	if input.CoverImageKey.Present && priorCover.Valid {
+		result.PriorCoverImageKey = &priorCover.String
+	}
+	return result, nil
 }
 
 func (r *SQLiteRepository) Delete(ctx context.Context, id int64) error {

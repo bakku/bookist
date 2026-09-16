@@ -209,3 +209,26 @@ func TestAuthorsRemoveRejectsAmbiguousName(t *testing.T) {
 		t.Fatal("expected ambiguity to prevent DELETE")
 	}
 }
+
+// ── Authors Edit ─────────────────────────────────────────────────────────────
+
+func TestAuthorsEditResolvesNameAndPatches(t *testing.T) {
+	var body map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			_ = json.NewEncoder(w).Encode([]authors.Author{{ID: 6, Name: "Ursula Le Guin"}})
+			return
+		}
+		if r.Method != http.MethodPatch || r.URL.Path != "/api/authors/6" {
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_ = json.NewEncoder(w).Encode(authors.Author{ID: 6, Name: "Ursula K. Le Guin"})
+	}))
+	defer server.Close()
+
+	code, stdout, stderr := runCLI([]string{"authors", "edit", "--name", "Ursula K. Le Guin", "--server", server.URL, "Ursula Le Guin"})
+	if code != 0 || stdout != "6\tUrsula K. Le Guin\n" || stderr != "" || len(body) != 1 || body["name"] != "Ursula K. Le Guin" {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q body=%#v", code, stdout, stderr, body)
+	}
+}

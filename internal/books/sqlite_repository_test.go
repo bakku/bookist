@@ -3,9 +3,11 @@ package books_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"bakku.dev/bookist/internal/books"
+	"bakku.dev/bookist/internal/optional"
 	"bakku.dev/bookist/internal/testsupport"
 )
 
@@ -171,6 +173,145 @@ func TestSQLiteRepositoryGetByIDReturnsErrBookNotFound(t *testing.T) {
 	if !errors.Is(err, books.ErrBookNotFound) {
 		t.Fatalf("expected ErrBookNotFound, got %v", err)
 	}
+}
+
+// ── Update ────────────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryUpdatePersistsScalarsAndReconcilesAuthors(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	author1 := testsupport.InsertAuthorRow(t, db, "Author One")
+	author2 := testsupport.InsertAuthorRow(t, db, "Author Two")
+	author3 := testsupport.InsertAuthorRow(t, db, "Author Three")
+	oldISBN := "old-isbn"
+	oldCover := "11111111111111111111111111111111.png"
+	created, err := repository.Create(context.Background(), books.CreateBookRequest{
+		Title: "Dune", ISBN: &oldISBN, AuthorIDs: []int64{author1, author2}, CoverImageKey: &oldCover,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE books SET created_at = '2000-01-01T00:00:00Z', updated_at = '2000-01-01T00:00:00Z' WHERE id = ?`, created.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE book_authors SET created_at = '2000-01-01T00:00:00Z', updated_at = '2000-01-01T00:00:00Z' WHERE book_id = ?`, created.ID); err != nil {
+		t.Fatal(err)
+	}
+	created, err = repository.GetByID(context.Background(), created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var relationshipID int64
+	var relationshipCreatedAt, relationshipUpdatedAt string
+	if err := db.QueryRow(`SELECT id, created_at, updated_at FROM book_authors WHERE book_id = ? AND author_id = ?`, created.ID, author2).
+		Scan(&relationshipID, &relationshipCreatedAt, &relationshipUpdatedAt); err != nil {
+		t.Fatal(err)
+	}
+	newCover := "22222222222222222222222222222222.png"
+
+	result, err := repository.Update(context.Background(), created.ID, books.UpdateBookRequest{
+		ISBN:          optionalNull[string](),
+		AuthorIDs:     updateValueOf([]int64{author2, author3}),
+		CoverImageKey: updateValueOf(newCover),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := result.Book
+	priorCover := result.PriorCoverImageKey
+	if updated.Title != "Dune" || updated.ISBN != nil || updated.CoverImageKey == nil || *updated.CoverImageKey != newCover {
+		t.Fatalf("unexpected updated book: %#v", updated)
+	}
+	if priorCover == nil || *priorCover != oldCover {
+		t.Fatalf("expected prior cover %q, got %#v", oldCover, priorCover)
+	}
+	if !updated.CreatedAt.Equal(created.CreatedAt) || !updated.UpdatedAt.After(created.UpdatedAt) {
+		t.Fatalf("expected created_at preserved and updated_at advanced: created=%v updated=%v", created, updated)
+	}
+	testsupport.AssertBookAuthors(t, db, created.ID, author2, author3)
+	if len(updated.Authors) != 2 || updated.Authors[0].ID != author3 || updated.Authors[1].ID != author2 {
+		t.Fatalf("expected canonical relationship order [%d %d], got %#v", author3, author2, updated.Authors)
+	}
+
+	var gotID int64
+	var gotCreatedAt, gotUpdatedAt string
+	if err := db.QueryRow(`SELECT id, created_at, updated_at FROM book_authors WHERE book_id = ? AND author_id = ?`, created.ID, author2).
+		Scan(&gotID, &gotCreatedAt, &gotUpdatedAt); err != nil {
+		t.Fatal(err)
+	}
+	if gotID != relationshipID || gotCreatedAt != relationshipCreatedAt || gotUpdatedAt != relationshipUpdatedAt {
+		t.Fatalf("expected unchanged relationship row to be preserved")
+	}
+}
+
+func TestSQLiteRepositoryUpdateRollsBackBookAndRelationshipsAfterAuthorInsertFails(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	originalAuthorID := testsupport.InsertAuthorRow(t, db, "Original Author")
+	replacementAuthorID := testsupport.InsertAuthorRow(t, db, "Replacement Author")
+	testsupport.InsertBookAuthorRow(t, db, bookID, originalAuthorID)
+
+	originalUpdatedAt := "2000-01-01T00:00:00Z"
+	originalRelationshipCreatedAt := "2000-01-02T00:00:00Z"
+	originalRelationshipUpdatedAt := "2000-01-03T00:00:00Z"
+	if _, err := db.Exec(`UPDATE books SET updated_at = ? WHERE id = ?`, originalUpdatedAt, bookID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE book_authors SET created_at = ?, updated_at = ? WHERE book_id = ? AND author_id = ?`,
+		originalRelationshipCreatedAt, originalRelationshipUpdatedAt, bookID, originalAuthorID); err != nil {
+		t.Fatal(err)
+	}
+
+	var originalRelationshipID int64
+	if err := db.QueryRow(`SELECT id FROM book_authors WHERE book_id = ? AND author_id = ?`, bookID, originalAuthorID).
+		Scan(&originalRelationshipID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(fmt.Sprintf(`
+		CREATE TRIGGER reject_replacement_author
+		BEFORE INSERT ON book_authors
+		WHEN NEW.author_id = %d
+		BEGIN
+			SELECT RAISE(ABORT, 'replacement rejected');
+		END
+	`, replacementAuthorID)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := repository.Update(context.Background(), bookID, books.UpdateBookRequest{
+		Title:     updateValueOf("Dune Messiah"),
+		AuthorIDs: updateValueOf([]int64{replacementAuthorID}),
+	})
+	if err == nil {
+		t.Fatal("expected replacement relationship insert to fail")
+	}
+
+	var title, updatedAt string
+	if err := db.QueryRow(`SELECT title, updated_at FROM books WHERE id = ?`, bookID).Scan(&title, &updatedAt); err != nil {
+		t.Fatal(err)
+	}
+	if title != "Dune" || updatedAt != originalUpdatedAt {
+		t.Fatalf("expected book rollback, got title=%q updated_at=%q", title, updatedAt)
+	}
+
+	var relationshipID int64
+	var relationshipCreatedAt, relationshipUpdatedAt string
+	if err := db.QueryRow(`
+		SELECT id, created_at, updated_at
+		FROM book_authors
+		WHERE book_id = ? AND author_id = ?
+	`, bookID, originalAuthorID).Scan(&relationshipID, &relationshipCreatedAt, &relationshipUpdatedAt); err != nil {
+		t.Fatal(err)
+	}
+	if relationshipID != originalRelationshipID || relationshipCreatedAt != originalRelationshipCreatedAt || relationshipUpdatedAt != originalRelationshipUpdatedAt {
+		t.Fatalf("expected original relationship rollback, got id=%d created_at=%q updated_at=%q", relationshipID, relationshipCreatedAt, relationshipUpdatedAt)
+	}
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM book_authors WHERE book_id = ? AND author_id = ?`, bookID, replacementAuthorID)
+}
+
+func optionalNull[T any]() optional.Value[T] {
+	return optional.Value[T]{Present: true}
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────

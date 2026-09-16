@@ -22,6 +22,23 @@ func (s *Service) Create(ctx context.Context, input CreateAuthorRequest) (Author
 	return s.repository.Create(ctx, input)
 }
 
+func (s *Service) Update(ctx context.Context, id int64, input UpdateAuthorRequest) (Author, error) {
+	if !input.Name.Present {
+		return Author{}, ErrNoFieldsToUpdate
+	}
+	if input.Name.Value == nil {
+		return Author{}, ErrNameRequired
+	}
+
+	name := strings.TrimSpace(*input.Name.Value)
+	if name == "" {
+		return Author{}, ErrNameRequired
+	}
+	input.Name.Value = &name
+
+	return s.repository.Update(ctx, id, input)
+}
+
 func (s *Service) List(ctx context.Context) ([]Author, error) {
 	return s.repository.List(ctx)
 }

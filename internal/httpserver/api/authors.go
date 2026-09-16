@@ -42,6 +42,26 @@ func (s *Server) handleAPICreateAuthor(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, author)
 }
 
+func (s *Server) handleAPIUpdateAuthor(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid author ID", http.StatusBadRequest)
+		return
+	}
+
+	var input authors.UpdateAuthorRequest
+	if !decodePatchJSON(w, r, &input, maxPatchBodySize) {
+		return
+	}
+
+	author, err := s.authors.Update(r.Context(), id, input)
+	if err != nil {
+		writeUpdateAuthorError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, author)
+}
+
 func (s *Server) handleAPIDeleteAuthor(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r.PathValue("id"))
 	if err != nil {
@@ -60,4 +80,15 @@ func (s *Server) handleAPIDeleteAuthor(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+func writeUpdateAuthorError(w http.ResponseWriter, err error) {
+	if errors.Is(err, authors.ErrAuthorNotFound) {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if errors.Is(err, authors.ErrNameRequired) || errors.Is(err, authors.ErrNoFieldsToUpdate) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	http.Error(w, "failed to update author", http.StatusInternalServerError)
 }

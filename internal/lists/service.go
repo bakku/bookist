@@ -42,6 +42,44 @@ func (s *Service) Create(ctx context.Context, input CreateListRequest) (List, er
 	return s.repository.Create(ctx, input)
 }
 
+func (s *Service) Update(ctx context.Context, id int64, input UpdateListRequest) (List, error) {
+	if !input.Name.Present && !input.Description.Present {
+		return List{}, ErrNoFieldsToUpdate
+	}
+	if _, err := s.repository.GetByID(ctx, id); err != nil {
+		return List{}, err
+	}
+
+	if input.Name.Present {
+		if input.Name.Value == nil {
+			return List{}, ErrNameRequired
+		}
+		name := strings.TrimSpace(*input.Name.Value)
+		if name == "" {
+			return List{}, ErrNameRequired
+		}
+		input.Name.Value = &name
+
+		exists, err := s.repository.NameExistsExcludingID(ctx, name, id)
+		if err != nil {
+			return List{}, err
+		}
+		if exists {
+			return List{}, ErrNameConflict
+		}
+	}
+
+	if input.Description.Present && input.Description.Value != nil {
+		description := strings.TrimSpace(*input.Description.Value)
+		if description == "" {
+			return List{}, ErrDescriptionRequired
+		}
+		input.Description.Value = &description
+	}
+
+	return s.repository.Update(ctx, id, input)
+}
+
 func (s *Service) List(ctx context.Context) ([]List, error) {
 	return s.repository.List(ctx)
 }

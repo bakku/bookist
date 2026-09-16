@@ -17,6 +17,8 @@ type commandHelp struct {
 	name        string
 	usage       string
 	description string
+	details     []string
+	examples    []string
 	commands    []helpCommand
 }
 
@@ -25,6 +27,20 @@ func printCommandHelp(w io.Writer, help commandHelp, flags *flag.FlagSet) {
 
 	_, _ = fmt.Fprintf(tw, "NAME:\n   %s - %s\n\n", help.name, help.description)
 	_, _ = fmt.Fprintf(tw, "USAGE:\n   %s\n", help.usage)
+
+	if len(help.details) > 0 {
+		_, _ = fmt.Fprintln(tw, "\nDESCRIPTION:")
+		for _, detail := range help.details {
+			_, _ = fmt.Fprintf(tw, "   %s\n", detail)
+		}
+	}
+
+	if len(help.examples) > 0 {
+		_, _ = fmt.Fprintln(tw, "\nEXAMPLES:")
+		for _, example := range help.examples {
+			_, _ = fmt.Fprintf(tw, "   %s\n", example)
+		}
+	}
 
 	if len(help.commands) > 0 {
 		_, _ = fmt.Fprintln(tw, "\nCOMMANDS:")

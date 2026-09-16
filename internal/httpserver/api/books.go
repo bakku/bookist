@@ -48,6 +48,26 @@ func (s *Server) handleAPICreateBook(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, book)
 }
 
+func (s *Server) handleAPIUpdateBook(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "invalid book ID", http.StatusBadRequest)
+		return
+	}
+
+	var input books.UpdateBookRequest
+	if !decodePatchJSON(w, r, &input, maxCreateBookBodySize) {
+		return
+	}
+
+	book, err := s.books.Update(r.Context(), id, input)
+	if err != nil {
+		writeUpdateBookError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, book)
+}
+
 func (s *Server) handleAPIDeleteBook(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r.PathValue("id"))
 	if err != nil {
@@ -94,4 +114,38 @@ func writeCreateBookError(w http.ResponseWriter, err error) {
 	}
 
 	http.Error(w, "failed to create book", http.StatusInternalServerError)
+}
+
+func writeUpdateBookError(w http.ResponseWriter, err error) {
+	if errors.Is(err, books.ErrBookNotFound) {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if errors.Is(err, books.ErrNoFieldsToUpdate) || errors.Is(err, books.ErrBlankOptionalString) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if errors.Is(err, covers.ErrTooLarge) {
+		http.Error(w, err.Error(), http.StatusRequestEntityTooLarge)
+		return
+	}
+	if errors.Is(err, covers.ErrUnsupportedMediaType) {
+		http.Error(w, err.Error(), http.StatusUnsupportedMediaType)
+		return
+	}
+
+	if errors.Is(err, books.ErrTitleRequired) ||
+		errors.Is(err, books.ErrAuthorNotFound) ||
+		errors.Is(err, books.ErrInvalidFormat) ||
+		errors.Is(err, books.ErrInvalidPurchasedAt) ||
+		errors.Is(err, books.ErrInvalidPages) ||
+		errors.Is(err, books.ErrInvalidCondition) ||
+		errors.Is(err, books.ErrInvalidSeriesPosition) ||
+		errors.Is(err, books.ErrInvalidPublishedYear) ||
+		errors.Is(err, books.ErrInvalidPublishedMonth) ||
+		errors.Is(err, books.ErrInvalidPublishedDay) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	http.Error(w, "failed to update book", http.StatusInternalServerError)
 }

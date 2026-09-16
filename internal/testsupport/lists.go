@@ -24,6 +24,23 @@ func InsertListRow(t testing.TB, db *sql.DB, name string) int64 {
 	return id
 }
 
+func InsertListRowWithDescription(t testing.TB, db *sql.DB, name, description string) int64 {
+	t.Helper()
+
+	now := "2026-01-02T03:04:05Z"
+	var id int64
+	err := db.QueryRowContext(context.Background(), `
+		INSERT INTO lists (name, description, created_at, updated_at)
+		VALUES (?, ?, ?, ?)
+		RETURNING id
+	`, name, description, now, now).Scan(&id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return id
+}
+
 func AssertListRow(t testing.TB, db *sql.DB, id int64, wantName string, wantDescription *string) {
 	t.Helper()
 

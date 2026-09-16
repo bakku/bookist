@@ -58,7 +58,8 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	listService := lists.NewService(listRepo)
 
 	bookRepo := books.NewSQLiteRepository(db)
-	bookService := books.NewService(bookRepo, authorRepo, coverStore)
+	appLogger := slog.New(slog.NewTextHandler(stderr, nil))
+	bookService := books.NewServiceWithLogger(bookRepo, authorRepo, coverStore, appLogger)
 
 	readRepo := reads.NewSQLiteRepository(db)
 	readService := reads.NewService(readRepo)
@@ -76,7 +77,7 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 		Addr:              *addr,
 		Handler:           server.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
-		ErrorLog:          slog.NewLogLogger(slog.NewTextHandler(stderr, nil), slog.LevelError),
+		ErrorLog:          slog.NewLogLogger(appLogger.Handler(), slog.LevelError),
 	}
 
 	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

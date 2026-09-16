@@ -14,6 +14,8 @@ import (
 	"bakku.dev/bookist/internal/lists"
 )
 
+var listClearableFields = map[string]string{"description": "description"}
+
 func runLists(args []string, stdout io.Writer, stderr io.Writer) int {
 	if len(args) == 0 {
 		_, _ = fmt.Fprintln(stderr, "Error: missing lists command")
@@ -28,6 +30,9 @@ func runLists(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	case "add":
 		return runListsAdd(args[1:], stdout, stderr)
+
+	case "edit":
+		return runListsEdit(args[1:], stdout, stderr)
 
 	case "add-book":
 		return runListsAddBook(args[1:], stdout, stderr)
@@ -57,11 +62,85 @@ func printListsHelp(w io.Writer) {
 		commands: []helpCommand{
 			{name: "ls", description: "List book lists"},
 			{name: "add", description: "Add a book list"},
+			{name: "edit", description: "Edit a book list"},
 			{name: "add-book", description: "Add a book to a list"},
 			{name: "rm", description: "Remove a book list"},
 			{name: "rm-book", description: "Remove a book from a list"},
 		},
 	}, nil)
+}
+
+func runListsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("lists edit", flag.ContinueOnError)
+
+	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+
+	var name optionalStringFlag
+	var description optionalStringFlag
+	var clears stringSliceFlag
+
+	flags.Var(&name, "name", "List name")
+	flags.Var(&description, "description", "List description")
+	flags.Var(&clears, "clear", clearFlagUsage(listClearableFields))
+
+	help := commandHelp{
+		name:        "bookist lists edit",
+		usage:       "bookist lists edit <name-or-ID> [options]",
+		description: "Edit a book list",
+		details:     []string{partialUpdateHelp},
+		examples: []string{
+			`bookist lists edit 5 --name "Best Books"`,
+			"bookist lists edit 5 --clear description",
+		},
+	}
+
+	if ok, exitCode := parseEditFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
+	}
+
+	if flags.NArg() != 1 {
+		_, _ = fmt.Fprintln(stderr, "Error: lists edit requires exactly one name or ID")
+		_, _ = fmt.Fprintln(stderr)
+		printCommandHelp(stderr, help, flags)
+		return 2
+	}
+
+	changes := make(map[string]any)
+	if name.value != nil {
+		changes["name"] = *name.value
+	}
+	if description.value != nil {
+		changes["description"] = *description.value
+	}
+	if err := validateClears(changes, clears, listClearableFields); err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+	if len(changes) == 0 {
+		_, _ = fmt.Fprintln(stderr, "Error: lists edit requires at least one change")
+		return 2
+	}
+
+	listID, err := resolveListID(*serverURL, flags.Arg(0))
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, err)
+		return 1
+	}
+
+	endpoint, err := joinURL(*serverURL, "/api/lists/"+strconv.FormatInt(listID, 10))
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
+		return 2
+	}
+
+	var updated lists.List
+	if err := patchEndpoint(endpoint, changes, &updated); err != nil {
+		_, _ = fmt.Fprintf(stderr, "edit list: %v\n", err)
+		return 1
+	}
+
+	_, _ = fmt.Fprintf(stdout, "%d\t%s\n", updated.ID, updated.Name)
+	return 0
 }
 
 func runListsLS(args []string, stdout io.Writer, stderr io.Writer) int {

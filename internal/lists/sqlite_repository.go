@@ -39,9 +39,44 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateListRequest) 
 	return list, err
 }
 
+func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateListRequest) (List, error) {
+	var name any
+	if input.Name.Value != nil {
+		name = *input.Name.Value
+	}
+	var description any
+	if input.Description.Value != nil {
+		description = *input.Description.Value
+	}
+
+	row := r.db.QueryRowContext(ctx, `
+		UPDATE lists
+		SET name = CASE WHEN ? THEN ? ELSE name END,
+			description = CASE WHEN ? THEN ? ELSE description END,
+			updated_at = ?
+		WHERE id = ?
+		RETURNING id, name, description, created_at, updated_at
+	`, input.Name.Present, name, input.Description.Present, description, time.Now().UTC().Format(time.RFC3339), id)
+
+	list, err := scanList(row)
+	if err != nil && isUniqueViolation(err) {
+		return List{}, ErrNameConflict
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return List{}, ErrListNotFound
+	}
+	return list, err
+}
+
 func (r *SQLiteRepository) NameExists(ctx context.Context, name string) (bool, error) {
 	var exists bool
 	err := r.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM lists WHERE name = ? COLLATE NOCASE)`, name).Scan(&exists)
+	return exists, err
+}
+
+func (r *SQLiteRepository) NameExistsExcludingID(ctx context.Context, name string, id int64) (bool, error) {
+	var exists bool
+	err := r.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM lists WHERE name = ? COLLATE NOCASE AND id <> ?)`, name, id).Scan(&exists)
 	return exists, err
 }
 
