@@ -1,25 +1,17 @@
 .DEFAULT_GOAL := build
 
-CSS_INPUT := internal/httpserver/web/assets/app.css
-CSS_OUTPUT := internal/httpserver/web/static/app.css
 BINARY := ./bin/bookist
 
-.PHONY: css css-watch build run test clean
+.PHONY: build run test clean
 
-css:
-	mise exec -- tailwindcss -i $(CSS_INPUT) -o $(CSS_OUTPUT) --minify
-
-css-watch:
-	mise exec -- tailwindcss -i $(CSS_INPUT) -o $(CSS_OUTPUT) --watch
-
-build: css
+build:
 	mkdir -p ./bin
 	go build -o $(BINARY) ./cmd/bookist
 
-run: css
+run:
 	go run ./cmd/bookist serve
 
-test: css
+test:
 	go test ./...
 
 clean:
