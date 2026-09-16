@@ -686,3 +686,74 @@ func TestBooksRemoveRequiresNoContentResponse(t *testing.T) {
 		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
 	}
 }
+
+// ── Books Edit ───────────────────────────────────────────────────────────────
+
+func TestBooksEditPatchesOnlyChanges(t *testing.T) {
+	var method, path, contentType string
+	var body map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path, contentType = r.Method, r.URL.Path, r.Header.Get("Content-Type")
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_ = json.NewEncoder(w).Encode(books.Book{ID: 12, Title: "Dune Messiah"})
+	}))
+	defer server.Close()
+
+	code, stdout, stderr := runCLI([]string{"books", "edit", "--title", "Dune Messiah", "--pages", "256", "--author", "4", "--author", "8", "--server", server.URL, "12"})
+	if code != 0 || stderr != "" || stdout != "12\tDune Messiah\n" {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	if method != http.MethodPatch || path != "/api/books/12" || contentType != "application/json" {
+		t.Fatalf("unexpected request: %s %s content-type=%q", method, path, contentType)
+	}
+	expected := `{"author_ids":[4,8],"pages":256,"title":"Dune Messiah"}`
+	encoded, _ := json.Marshal(body)
+	if string(encoded) != expected {
+		t.Fatalf("expected body %s, got %s", expected, encoded)
+	}
+}
+
+func TestBooksEditClearSendsNullAndResolvesTitle(t *testing.T) {
+	var patched map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/books":
+			_ = json.NewEncoder(w).Encode([]books.Book{{ID: 7, Title: "Kindred"}})
+		case r.Method == http.MethodPatch && r.URL.Path == "/api/books/7":
+			_ = json.NewDecoder(r.Body).Decode(&patched)
+			_ = json.NewEncoder(w).Encode(books.Book{ID: 7, Title: "Kindred"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	code, _, stderr := runCLI([]string{"books", "edit", "--clear", "authors", "--clear", "cover", "--server", server.URL, "kindred"})
+	if code != 0 || stderr != "" {
+		t.Fatalf("unexpected result: exit=%d stderr=%q", code, stderr)
+	}
+	if len(patched) != 2 || patched["author_ids"] != nil || patched["cover"] != nil {
+		t.Fatalf("expected only null author_ids and cover, got %#v", patched)
+	}
+}
+
+func TestBooksEditDoesNotCreateMissingAuthors(t *testing.T) {
+	var methods []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		methods = append(methods, r.Method)
+		if r.Method == http.MethodGet && r.URL.Path == "/api/authors" {
+			_ = json.NewEncoder(w).Encode([]authors.Author{})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	code, stdout, stderr := runCLI([]string{"books", "edit", "--author", "Missing Author", "--server", server.URL, "12"})
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "author not found: Missing Author") {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	if len(methods) != 1 || methods[0] != http.MethodGet {
+		t.Fatalf("expected only an author lookup, got methods %#v", methods)
+	}
+}
