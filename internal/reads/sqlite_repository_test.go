@@ -3,9 +3,12 @@ package reads_test
 import (
 	"context"
 	"errors"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"bakku.dev/bookist/internal/database"
 	"bakku.dev/bookist/internal/optional"
 	"bakku.dev/bookist/internal/reads"
 	"bakku.dev/bookist/internal/testsupport"
@@ -178,6 +181,156 @@ func TestSQLiteRepositoryUpdateReturnsReadNotFound(t *testing.T) {
 	})
 	if !errors.Is(err, reads.ErrReadNotFound) {
 		t.Fatalf("expected ErrReadNotFound, got %v", err)
+	}
+}
+
+func TestSQLiteRepositoryUpdateTranslatesNamedCheckConstraints(t *testing.T) {
+	tests := []struct {
+		name  string
+		input reads.UpdateReadRequest
+		want  error
+	}{
+		{
+			name:  "started_at format",
+			input: reads.UpdateReadRequest{StartedAt: optional.Value[string]{Present: true, Value: new("not-a-date")}},
+			want:  reads.ErrInvalidStartedAt,
+		},
+		{
+			name:  "finished_at format",
+			input: reads.UpdateReadRequest{FinishedAt: optional.Value[string]{Present: true, Value: new("not-a-date")}},
+			want:  reads.ErrInvalidFinishedAt,
+		},
+		{
+			name:  "abandoned_at format",
+			input: reads.UpdateReadRequest{AbandonedAt: optional.Value[string]{Present: true, Value: new("not-a-date")}},
+			want:  reads.ErrInvalidAbandonedAt,
+		},
+		{
+			name:  "rating range and increment",
+			input: reads.UpdateReadRequest{Rating: optional.Value[float64]{Present: true, Value: new(4.2)}},
+			want:  reads.ErrInvalidRating,
+		},
+		{
+			name: "terminal dates are mutually exclusive",
+			input: reads.UpdateReadRequest{
+				FinishedAt:  optional.Value[string]{Present: true, Value: new("2026-02-02")},
+				AbandonedAt: optional.Value[string]{Present: true, Value: new("2026-02-03")},
+			},
+			want: reads.ErrConflictingTerminalDates,
+		},
+		{
+			name: "finished_at is not before started_at",
+			input: reads.UpdateReadRequest{
+				StartedAt:  optional.Value[string]{Present: true, Value: new("2026-02-02")},
+				FinishedAt: optional.Value[string]{Present: true, Value: new("2026-02-01")},
+			},
+			want: reads.ErrFinishedBeforeStarted,
+		},
+		{
+			name: "abandoned_at is not before started_at",
+			input: reads.UpdateReadRequest{
+				StartedAt:   optional.Value[string]{Present: true, Value: new("2026-02-02")},
+				AbandonedAt: optional.Value[string]{Present: true, Value: new("2026-02-01")},
+			},
+			want: reads.ErrAbandonedBeforeStarted,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := testsupport.OpenMigratedDB(t)
+			bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+			const readID = int64(100)
+			const timestamp = "2026-01-01T00:00:00Z"
+			testsupport.InsertReadRow(t, db, testsupport.ReadRow{
+				ID: readID, BookID: bookID, CreatedAt: timestamp,
+			})
+
+			_, err := reads.NewSQLiteRepository(db).Update(context.Background(), readID, tt.input)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("expected %v, got %v", tt.want, err)
+			}
+
+			testsupport.AssertReadRow(t, db, readID, testsupport.ReadRowAssertion{BookID: bookID})
+			var updatedAt string
+			if err := db.QueryRow(`SELECT updated_at FROM reads WHERE id = ?`, readID).Scan(&updatedAt); err != nil {
+				t.Fatal(err)
+			}
+			if updatedAt != timestamp {
+				t.Fatalf("failed update changed updated_at: got %q, want %q", updatedAt, timestamp)
+			}
+		})
+	}
+}
+
+func TestSQLiteRepositoryUpdateLeavesUnknownCheckConstraintUnexpected(t *testing.T) {
+	db, err := database.Open(context.Background(), filepath.Join(t.TempDir(), "unknown-constraint.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	_, err = db.Exec(`
+		CREATE TABLE reads (
+			id INTEGER PRIMARY KEY,
+			book_id INTEGER NOT NULL,
+			started_at TEXT NULL,
+			finished_at TEXT NULL,
+			abandoned_at TEXT NULL,
+			rating REAL NULL,
+			notes TEXT NULL,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			CONSTRAINT reads_unrecognized CHECK (notes <> 'blocked')
+		);
+		INSERT INTO reads (id, book_id, notes, created_at, updated_at)
+		VALUES (100, 1, 'original', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+	`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = reads.NewSQLiteRepository(db).Update(context.Background(), 100, reads.UpdateReadRequest{
+		Notes: optional.Value[string]{Present: true, Value: new("blocked")},
+	})
+	if err == nil || !strings.Contains(err.Error(), "reads_unrecognized") {
+		t.Fatalf("expected raw unknown constraint error, got %v", err)
+	}
+	assertNotReadValidationError(t, err)
+}
+
+func TestSQLiteRepositoryUpdateLeavesUnrelatedDatabaseErrorUnexpected(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := reads.NewSQLiteRepository(db)
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := repository.Update(context.Background(), 100, reads.UpdateReadRequest{
+		Notes: optional.Value[string]{Present: true, Value: new("changed")},
+	})
+	if err == nil {
+		t.Fatal("expected closed database error")
+	}
+	assertNotReadValidationError(t, err)
+}
+
+func assertNotReadValidationError(t *testing.T, err error) {
+	t.Helper()
+
+	validationErrors := []error{
+		reads.ErrInvalidStartedAt,
+		reads.ErrInvalidFinishedAt,
+		reads.ErrInvalidAbandonedAt,
+		reads.ErrInvalidRating,
+		reads.ErrConflictingTerminalDates,
+		reads.ErrFinishedBeforeStarted,
+		reads.ErrAbandonedBeforeStarted,
+	}
+	for _, validationErr := range validationErrors {
+		if errors.Is(err, validationErr) {
+			t.Fatalf("unexpectedly translated %v to %v", err, validationErr)
+		}
 	}
 }
 

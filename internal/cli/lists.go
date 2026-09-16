@@ -14,6 +14,8 @@ import (
 	"bakku.dev/bookist/internal/lists"
 )
 
+var listClearableFields = map[string]string{"description": "description"}
+
 func runLists(args []string, stdout io.Writer, stderr io.Writer) int {
 	if len(args) == 0 {
 		_, _ = fmt.Fprintln(stderr, "Error: missing lists command")
@@ -79,15 +81,20 @@ func runListsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	flags.Var(&name, "name", "List name")
 	flags.Var(&description, "description", "List description")
-	flags.Var(&clears, "clear", "Field to clear (repeatable)")
+	flags.Var(&clears, "clear", clearFlagUsage(listClearableFields))
 
 	help := commandHelp{
 		name:        "bookist lists edit",
-		usage:       "bookist lists edit [options] <name-or-ID>",
+		usage:       "bookist lists edit <name-or-ID> [options]",
 		description: "Edit a book list",
+		details:     []string{partialUpdateHelp},
+		examples: []string{
+			`bookist lists edit 5 --name "Best Books"`,
+			"bookist lists edit 5 --clear description",
+		},
 	}
 
-	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+	if ok, exitCode := parseEditFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
 	}
 
@@ -105,7 +112,7 @@ func runListsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 	if description.value != nil {
 		changes["description"] = *description.value
 	}
-	if err := validateClears(changes, clears, map[string]string{"description": "description"}); err != nil {
+	if err := validateClears(changes, clears, listClearableFields); err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}

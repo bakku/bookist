@@ -17,6 +17,14 @@ import (
 	"bakku.dev/bookist/internal/covers"
 )
 
+var bookClearableFields = map[string]string{
+	"isbn": "isbn", "authors": "author_ids", "language": "language", "publisher": "publisher", "edition": "edition",
+	"format": "format", "purchased-at": "purchased_at", "purchase-price": "purchase_price", "pages": "pages",
+	"notes": "notes", "summary": "summary", "series-name": "series_name", "series-position": "series_position",
+	"location": "location", "condition": "condition", "acquisition-source": "acquisition_source",
+	"published-year": "published_year", "published-month": "published_month", "published-day": "published_day", "cover": "cover",
+}
+
 func runBooks(args []string, stdout io.Writer, stderr io.Writer) int {
 	if len(args) == 0 {
 		_, _ = fmt.Fprintln(stderr, "Error: missing books command")
@@ -73,7 +81,7 @@ func runBooksEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 	var seriesPosition optionalFloatFlag
 	var pages, publishedYear, publishedMonth, publishedDay optionalIntFlag
 	flags.Var(&title, "title", "Book title")
-	flags.Var(&authorsFlag, "author", "Author name or ID (repeatable)")
+	flags.Var(&authorsFlag, "author", "Existing author name or ID; supplied authors replace the complete author list (repeatable)")
 	flags.Var(&cover, "cover", "Cover image file path or URL")
 	flags.Var(&isbn, "isbn", "Book ISBN")
 	flags.Var(&language, "language", "Book language")
@@ -93,13 +101,22 @@ func runBooksEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags.Var(&publishedYear, "published-year", "Publication year")
 	flags.Var(&publishedMonth, "published-month", "Publication month (1-12)")
 	flags.Var(&publishedDay, "published-day", "Publication day (1-31)")
-	flags.Var(&clears, "clear", "Field to clear (repeatable)")
+	flags.Var(&clears, "clear", clearFlagUsage(bookClearableFields))
 	help := commandHelp{
 		name:        "bookist books edit",
-		usage:       "bookist books edit [options] <title-or-ID>",
+		usage:       "bookist books edit <title-or-ID> [options]",
 		description: "Edit a book",
+		details: []string{
+			partialUpdateHelp,
+			"Supplying --author replaces the complete author list with existing authors; omitting it preserves current authors, and --clear authors removes all author relationships.",
+		},
+		examples: []string{
+			`bookist books edit 12 --title "Dune Messiah"`,
+			"bookist books edit 12 --clear isbn --clear notes",
+			"bookist books edit 12 --author Alice --author Bob  # complete author list becomes Alice and Bob",
+		},
 	}
-	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+	if ok, exitCode := parseEditFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
 	}
 	if flags.NArg() != 1 {
@@ -143,14 +160,7 @@ func runBooksEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 	if cover.value != nil {
 		changes["cover"] = struct{}{}
 	}
-	clearable := map[string]string{
-		"isbn": "isbn", "authors": "author_ids", "language": "language", "publisher": "publisher", "edition": "edition",
-		"format": "format", "purchased-at": "purchased_at", "purchase-price": "purchase_price", "pages": "pages",
-		"notes": "notes", "summary": "summary", "series-name": "series_name", "series-position": "series_position",
-		"location": "location", "condition": "condition", "acquisition-source": "acquisition_source",
-		"published-year": "published_year", "published-month": "published_month", "published-day": "published_day", "cover": "cover",
-	}
-	if err := validateClears(changes, clears, clearable); err != nil {
+	if err := validateClears(changes, clears, bookClearableFields); err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}

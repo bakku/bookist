@@ -14,6 +14,14 @@ import (
 	"bakku.dev/bookist/internal/reads"
 )
 
+var readClearableFields = map[string]string{
+	"started-at":   "started_at",
+	"finished-at":  "finished_at",
+	"abandoned-at": "abandoned_at",
+	"rating":       "rating",
+	"notes":        "notes",
+}
+
 func runReads(args []string, stdout io.Writer, stderr io.Writer) int {
 	if len(args) == 0 {
 		_, _ = fmt.Fprintln(stderr, "Error: missing reads command")
@@ -72,15 +80,21 @@ func runReadsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags.Var(&abandonedAt, "abandoned-at", "Date reading abandoned (YYYY-MM-DD)")
 	flags.Var(&rating, "rating", "Rating from 1 to 5 in increments of 0.5")
 	flags.Var(&notes, "notes", "Read notes")
-	flags.Var(&clears, "clear", "Field to clear (repeatable)")
+	flags.Var(&clears, "clear", clearFlagUsage(readClearableFields))
 
 	help := commandHelp{
 		name:        "bookist reads edit",
-		usage:       "bookist reads edit [options] <read-ID>",
+		usage:       "bookist reads edit <read-ID> [options]",
 		description: "Edit a read",
+		details:     []string{partialUpdateHelp},
+		examples: []string{
+			"bookist reads edit 9 --rating 4.5",
+			"bookist reads edit 9 --clear rating --clear notes",
+			"bookist reads edit 9 --clear abandoned-at --finished-at 2026-09-16",
+		},
 	}
 
-	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+	if ok, exitCode := parseEditFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
 	}
 
@@ -109,14 +123,7 @@ func runReadsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 		changes["rating"] = *rating.value
 	}
 
-	clearable := map[string]string{
-		"started-at":   "started_at",
-		"finished-at":  "finished_at",
-		"abandoned-at": "abandoned_at",
-		"rating":       "rating",
-		"notes":        "notes",
-	}
-	if err := validateClears(changes, clears, clearable); err != nil {
+	if err := validateClears(changes, clears, readClearableFields); err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}

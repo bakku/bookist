@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ type Service struct {
 	repository Repository
 	authorRepo authors.Repository
 	coverStore CoverStore
+	logger     *slog.Logger
 }
 
 type CoverStore interface {
@@ -25,7 +27,25 @@ type CoverStore interface {
 }
 
 func NewService(repository Repository, authorRepo authors.Repository, coverStore CoverStore) *Service {
-	return &Service{repository: repository, authorRepo: authorRepo, coverStore: coverStore}
+	return NewServiceWithLogger(repository, authorRepo, coverStore, slog.Default())
+}
+
+func NewServiceWithLogger(repository Repository, authorRepo authors.Repository, coverStore CoverStore, logger *slog.Logger) *Service {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &Service{repository: repository, authorRepo: authorRepo, coverStore: coverStore, logger: logger}
+}
+
+type bookValidationState struct {
+	format         *Format
+	purchasedAt    *string
+	pages          *int
+	seriesPosition *float64
+	condition      *Condition
+	publishedYear  *int
+	publishedMonth *int
+	publishedDay   *int
 }
 
 func (s *Service) List(ctx context.Context) ([]Book, error) {
@@ -106,25 +126,13 @@ func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, er
 		}
 	}
 
-	if input.Format != nil {
-		f := Format(strings.TrimSpace(string(*input.Format)))
-		switch f {
-		case FormatHardback, FormatPaperback, FormatEpub:
-			input.Format = &f
-		default:
-			return Book{}, ErrInvalidFormat
-		}
-	}
+	input.Format = normalizeBookFormat(input.Format)
 
 	if input.PurchasedAt != nil {
 		v := strings.TrimSpace(*input.PurchasedAt)
 		if v == "" {
 			input.PurchasedAt = nil
 		} else {
-			if !validation.IsCalendarDate(v) {
-				return Book{}, ErrInvalidPurchasedAt
-			}
-
 			input.PurchasedAt = &v
 		}
 	}
@@ -174,15 +182,7 @@ func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, er
 		}
 	}
 
-	if input.Condition != nil {
-		condition := Condition(strings.TrimSpace(string(*input.Condition)))
-		switch condition {
-		case ConditionNew, ConditionVeryGood, ConditionGood, ConditionAcceptable, ConditionPoor:
-			input.Condition = &condition
-		default:
-			return Book{}, ErrInvalidCondition
-		}
-	}
+	input.Condition = normalizeBookCondition(input.Condition)
 
 	if input.AcquisitionSource != nil {
 		v := strings.TrimSpace(*input.AcquisitionSource)
@@ -193,61 +193,19 @@ func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, er
 		}
 	}
 
-	if input.SeriesPosition != nil &&
-		(!(*input.SeriesPosition > 0) || math.IsInf(*input.SeriesPosition, 0) || math.IsNaN(*input.SeriesPosition)) {
-		return Book{}, ErrInvalidSeriesPosition
+	if err := validateBookState(bookValidationState{
+		format: input.Format, purchasedAt: input.PurchasedAt, pages: input.Pages,
+		seriesPosition: input.SeriesPosition, condition: input.Condition,
+		publishedYear: input.PublishedYear, publishedMonth: input.PublishedMonth, publishedDay: input.PublishedDay,
+	}); err != nil {
+		return Book{}, err
 	}
 
-	if input.Pages != nil && *input.Pages < 1 {
-		return Book{}, ErrInvalidPages
+	dedupedAuthorIDs, found, err := s.validateAuthorIDs(ctx, input.AuthorIDs)
+	if err != nil {
+		return Book{}, err
 	}
-
-	if input.PublishedYear != nil && *input.PublishedYear < 1 {
-		return Book{}, ErrInvalidPublishedYear
-	}
-
-	if input.PublishedMonth != nil && (input.PublishedYear == nil || *input.PublishedMonth < 1 || *input.PublishedMonth > 12) {
-		return Book{}, ErrInvalidPublishedMonth
-	}
-
-	if input.PublishedDay != nil {
-		if input.PublishedYear == nil || input.PublishedMonth == nil || *input.PublishedDay < 1 ||
-			*input.PublishedDay > time.Date(*input.PublishedYear, time.Month(*input.PublishedMonth)+1, 0, 0, 0, 0, 0, time.UTC).Day() {
-			return Book{}, ErrInvalidPublishedDay
-		}
-	}
-
-	seen := make(map[int64]bool)
-	var deduped []int64
-	for _, id := range input.AuthorIDs {
-		if id <= 0 {
-			return Book{}, ErrAuthorNotFound
-		}
-		if !seen[id] {
-			seen[id] = true
-			deduped = append(deduped, id)
-		}
-	}
-	input.AuthorIDs = deduped
-
-	var found []authors.Author
-	if len(input.AuthorIDs) > 0 {
-		var err error
-		found, err = s.authorRepo.GetByIDs(ctx, input.AuthorIDs)
-		if err != nil {
-			return Book{}, err
-		}
-
-		foundMap := make(map[int64]bool)
-		for _, a := range found {
-			foundMap[a.ID] = true
-		}
-		for _, id := range input.AuthorIDs {
-			if !foundMap[id] {
-				return Book{}, ErrAuthorNotFound
-			}
-		}
-	}
+	input.AuthorIDs = dedupedAuthorIDs
 
 	if input.Cover != nil {
 		key, err := s.coverStore.Save(*input.Cover)
@@ -311,80 +269,31 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateBookRequest)
 	}
 
 	if input.Format.Present && input.Format.Value != nil {
-		format := Format(strings.TrimSpace(string(*input.Format.Value)))
-		switch format {
-		case FormatHardback, FormatPaperback, FormatEpub:
-			input.Format.Value = &format
-		default:
-			return Book{}, ErrInvalidFormat
-		}
+		input.Format.Value = normalizeBookFormat(input.Format.Value)
 	}
 	if input.Condition.Present && input.Condition.Value != nil {
-		condition := Condition(strings.TrimSpace(string(*input.Condition.Value)))
-		switch condition {
-		case ConditionNew, ConditionVeryGood, ConditionGood, ConditionAcceptable, ConditionPoor:
-			input.Condition.Value = &condition
-		default:
-			return Book{}, ErrInvalidCondition
-		}
+		input.Condition.Value = normalizeBookCondition(input.Condition.Value)
 	}
 
-	finalPurchasedAt := updateValue(current.PurchasedAt, input.PurchasedAt)
-	if finalPurchasedAt != nil && !validation.IsCalendarDate(*finalPurchasedAt) {
-		return Book{}, ErrInvalidPurchasedAt
-	}
-	finalPages := updateValue(current.Pages, input.Pages)
-	if finalPages != nil && *finalPages < 1 {
-		return Book{}, ErrInvalidPages
-	}
-	finalSeriesPosition := updateValue(current.SeriesPosition, input.SeriesPosition)
-	if finalSeriesPosition != nil && (!(*finalSeriesPosition > 0) || math.IsInf(*finalSeriesPosition, 0) || math.IsNaN(*finalSeriesPosition)) {
-		return Book{}, ErrInvalidSeriesPosition
-	}
-	finalYear := updateValue(current.PublishedYear, input.PublishedYear)
-	finalMonth := updateValue(current.PublishedMonth, input.PublishedMonth)
-	finalDay := updateValue(current.PublishedDay, input.PublishedDay)
-	if finalYear != nil && *finalYear < 1 {
-		return Book{}, ErrInvalidPublishedYear
-	}
-	if finalMonth != nil && (finalYear == nil || *finalMonth < 1 || *finalMonth > 12) {
-		return Book{}, ErrInvalidPublishedMonth
-	}
-	if finalDay != nil && (finalYear == nil || finalMonth == nil || *finalDay < 1 ||
-		*finalDay > time.Date(*finalYear, time.Month(*finalMonth)+1, 0, 0, 0, 0, 0, time.UTC).Day()) {
-		return Book{}, ErrInvalidPublishedDay
+	if err := validateBookState(bookValidationState{
+		format:         updateValue(current.Format, input.Format),
+		purchasedAt:    updateValue(current.PurchasedAt, input.PurchasedAt),
+		pages:          updateValue(current.Pages, input.Pages),
+		seriesPosition: updateValue(current.SeriesPosition, input.SeriesPosition),
+		condition:      updateValue(current.Condition, input.Condition),
+		publishedYear:  updateValue(current.PublishedYear, input.PublishedYear),
+		publishedMonth: updateValue(current.PublishedMonth, input.PublishedMonth),
+		publishedDay:   updateValue(current.PublishedDay, input.PublishedDay),
+	}); err != nil {
+		return Book{}, err
 	}
 
 	if input.AuthorIDs.Present {
-		var deduped []int64
-		seen := make(map[int64]bool)
-		if input.AuthorIDs.Value != nil {
-			for _, authorID := range *input.AuthorIDs.Value {
-				if authorID <= 0 {
-					return Book{}, ErrAuthorNotFound
-				}
-				if !seen[authorID] {
-					seen[authorID] = true
-					deduped = append(deduped, authorID)
-				}
-			}
+		deduped, _, err := s.validateAuthorIDs(ctx, valueOrZero(input.AuthorIDs.Value))
+		if err != nil {
+			return Book{}, err
 		}
 		input.AuthorIDs.Value = &deduped
-		if len(deduped) > 0 {
-			found, err := s.authorRepo.GetByIDs(ctx, deduped)
-			if err != nil {
-				return Book{}, err
-			}
-			foundIDs := make(map[int64]bool)
-			for _, author := range found {
-				foundIDs[author.ID] = true
-			}
-			for _, authorID := range deduped {
-				if !foundIDs[authorID] {
-					return Book{}, ErrAuthorNotFound
-				}
-			}
-		}
 	}
 
 	var newCoverKey *string
@@ -414,7 +323,13 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateBookRequest)
 	if priorCoverKey != nil && (newCoverKey == nil || *priorCoverKey != *newCoverKey) {
 		// The database update has committed, so old-cover cleanup is best effort.
 		// Reporting an error here would incorrectly tell clients that the update failed.
-		_ = s.coverStore.Delete(*priorCoverKey)
+		if cleanupErr := s.coverStore.Delete(*priorCoverKey); cleanupErr != nil {
+			s.logger.WarnContext(ctx, "failed to delete previous book cover",
+				"book_id", id,
+				"cover_key", *priorCoverKey,
+				"error", cleanupErr,
+			)
+		}
 	}
 
 	setCoverURL(&book)
@@ -426,6 +341,102 @@ func updateValue[T any](current *T, update optional.Value[T]) *T {
 		return update.Value
 	}
 	return current
+}
+
+func valueOrZero[T any](value *T) T {
+	if value == nil {
+		var zero T
+		return zero
+	}
+	return *value
+}
+
+func normalizeBookFormat(value *Format) *Format {
+	if value == nil {
+		return nil
+	}
+	format := Format(strings.TrimSpace(string(*value)))
+	return &format
+}
+
+func normalizeBookCondition(value *Condition) *Condition {
+	if value == nil {
+		return nil
+	}
+	condition := Condition(strings.TrimSpace(string(*value)))
+	return &condition
+}
+
+func validateBookState(state bookValidationState) error {
+	if state.format != nil {
+		switch *state.format {
+		case FormatHardback, FormatPaperback, FormatEpub:
+		default:
+			return ErrInvalidFormat
+		}
+	}
+	if state.condition != nil {
+		switch *state.condition {
+		case ConditionNew, ConditionVeryGood, ConditionGood, ConditionAcceptable, ConditionPoor:
+		default:
+			return ErrInvalidCondition
+		}
+	}
+	if state.purchasedAt != nil && !validation.IsCalendarDate(*state.purchasedAt) {
+		return ErrInvalidPurchasedAt
+	}
+	if state.seriesPosition != nil &&
+		(!(*state.seriesPosition > 0) || math.IsInf(*state.seriesPosition, 0) || math.IsNaN(*state.seriesPosition)) {
+		return ErrInvalidSeriesPosition
+	}
+	if state.pages != nil && *state.pages < 1 {
+		return ErrInvalidPages
+	}
+	if state.publishedYear != nil && *state.publishedYear < 1 {
+		return ErrInvalidPublishedYear
+	}
+	if state.publishedMonth != nil &&
+		(state.publishedYear == nil || *state.publishedMonth < 1 || *state.publishedMonth > 12) {
+		return ErrInvalidPublishedMonth
+	}
+	if state.publishedDay != nil &&
+		(state.publishedYear == nil || state.publishedMonth == nil || *state.publishedDay < 1 ||
+			*state.publishedDay > time.Date(*state.publishedYear, time.Month(*state.publishedMonth)+1, 0, 0, 0, 0, 0, time.UTC).Day()) {
+		return ErrInvalidPublishedDay
+	}
+	return nil
+}
+
+func (s *Service) validateAuthorIDs(ctx context.Context, authorIDs []int64) ([]int64, []authors.Author, error) {
+	deduped := make([]int64, 0, len(authorIDs))
+	seen := make(map[int64]bool, len(authorIDs))
+	for _, authorID := range authorIDs {
+		if authorID <= 0 {
+			return nil, nil, ErrAuthorNotFound
+		}
+		if !seen[authorID] {
+			seen[authorID] = true
+			deduped = append(deduped, authorID)
+		}
+	}
+
+	if len(deduped) == 0 {
+		return deduped, nil, nil
+	}
+	found, err := s.authorRepo.GetByIDs(ctx, deduped)
+	if err != nil {
+		return nil, nil, err
+	}
+	foundIDs := make(map[int64]bool, len(found))
+	for _, author := range found {
+		foundIDs[author.ID] = true
+	}
+	for _, authorID := range deduped {
+		if !foundIDs[authorID] {
+			return nil, nil, ErrAuthorNotFound
+		}
+	}
+	return deduped, found, nil
 }
 
 func (s *Service) Delete(ctx context.Context, id int64) error {

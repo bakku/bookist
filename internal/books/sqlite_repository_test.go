@@ -3,6 +3,7 @@ package books_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"bakku.dev/bookist/internal/books"
@@ -241,6 +242,72 @@ func TestSQLiteRepositoryUpdatePersistsScalarsAndReconcilesAuthors(t *testing.T)
 	if gotID != relationshipID || gotCreatedAt != relationshipCreatedAt || gotUpdatedAt != relationshipUpdatedAt {
 		t.Fatalf("expected unchanged relationship row to be preserved")
 	}
+}
+
+func TestSQLiteRepositoryUpdateRollsBackBookAndRelationshipsAfterAuthorInsertFails(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	originalAuthorID := testsupport.InsertAuthorRow(t, db, "Original Author")
+	replacementAuthorID := testsupport.InsertAuthorRow(t, db, "Replacement Author")
+	testsupport.InsertBookAuthorRow(t, db, bookID, originalAuthorID)
+
+	originalUpdatedAt := "2000-01-01T00:00:00Z"
+	originalRelationshipCreatedAt := "2000-01-02T00:00:00Z"
+	originalRelationshipUpdatedAt := "2000-01-03T00:00:00Z"
+	if _, err := db.Exec(`UPDATE books SET updated_at = ? WHERE id = ?`, originalUpdatedAt, bookID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE book_authors SET created_at = ?, updated_at = ? WHERE book_id = ? AND author_id = ?`,
+		originalRelationshipCreatedAt, originalRelationshipUpdatedAt, bookID, originalAuthorID); err != nil {
+		t.Fatal(err)
+	}
+
+	var originalRelationshipID int64
+	if err := db.QueryRow(`SELECT id FROM book_authors WHERE book_id = ? AND author_id = ?`, bookID, originalAuthorID).
+		Scan(&originalRelationshipID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(fmt.Sprintf(`
+		CREATE TRIGGER reject_replacement_author
+		BEFORE INSERT ON book_authors
+		WHEN NEW.author_id = %d
+		BEGIN
+			SELECT RAISE(ABORT, 'replacement rejected');
+		END
+	`, replacementAuthorID)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := repository.Update(context.Background(), bookID, books.UpdateBookRequest{
+		Title:     updateValueOf("Dune Messiah"),
+		AuthorIDs: updateValueOf([]int64{replacementAuthorID}),
+	})
+	if err == nil {
+		t.Fatal("expected replacement relationship insert to fail")
+	}
+
+	var title, updatedAt string
+	if err := db.QueryRow(`SELECT title, updated_at FROM books WHERE id = ?`, bookID).Scan(&title, &updatedAt); err != nil {
+		t.Fatal(err)
+	}
+	if title != "Dune" || updatedAt != originalUpdatedAt {
+		t.Fatalf("expected book rollback, got title=%q updated_at=%q", title, updatedAt)
+	}
+
+	var relationshipID int64
+	var relationshipCreatedAt, relationshipUpdatedAt string
+	if err := db.QueryRow(`
+		SELECT id, created_at, updated_at
+		FROM book_authors
+		WHERE book_id = ? AND author_id = ?
+	`, bookID, originalAuthorID).Scan(&relationshipID, &relationshipCreatedAt, &relationshipUpdatedAt); err != nil {
+		t.Fatal(err)
+	}
+	if relationshipID != originalRelationshipID || relationshipCreatedAt != originalRelationshipCreatedAt || relationshipUpdatedAt != originalRelationshipUpdatedAt {
+		t.Fatalf("expected original relationship rollback, got id=%d created_at=%q updated_at=%q", relationshipID, relationshipCreatedAt, relationshipUpdatedAt)
+	}
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM book_authors WHERE book_id = ? AND author_id = ?`, bookID, replacementAuthorID)
 }
 
 func optionalNull[T any]() optional.Value[T] {

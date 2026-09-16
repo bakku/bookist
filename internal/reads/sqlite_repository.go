@@ -145,19 +145,19 @@ func translateUpdateConstraintError(err error) error {
 
 	message := sqliteErr.Error()
 	switch {
-	case strings.Contains(message, "finished_at IS NULL OR abandoned_at IS NULL"):
+	case strings.Contains(message, "reads_terminal_dates_exclusive"):
 		return ErrConflictingTerminalDates
-	case strings.Contains(message, "started_at IS NULL OR finished_at IS NULL OR finished_at >= started_at"):
+	case strings.Contains(message, "reads_finished_not_before_started"):
 		return ErrFinishedBeforeStarted
-	case strings.Contains(message, "started_at IS NULL OR abandoned_at IS NULL OR abandoned_at >= started_at"):
+	case strings.Contains(message, "reads_abandoned_not_before_started"):
 		return ErrAbandonedBeforeStarted
-	case strings.Contains(message, "started_at IS NULL OR ("):
+	case strings.Contains(message, "reads_started_at_valid"):
 		return ErrInvalidStartedAt
-	case strings.Contains(message, "finished_at IS NULL OR ("):
+	case strings.Contains(message, "reads_finished_at_valid"):
 		return ErrInvalidFinishedAt
-	case strings.Contains(message, "abandoned_at IS NULL OR ("):
+	case strings.Contains(message, "reads_abandoned_at_valid"):
 		return ErrInvalidAbandonedAt
-	case strings.Contains(message, "rating IS NULL OR"):
+	case strings.Contains(message, "reads_rating_valid"):
 		return ErrInvalidRating
 	default:
 		return err

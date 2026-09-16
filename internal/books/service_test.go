@@ -1,10 +1,13 @@
 package books_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"math"
 	"os"
+	"strings"
 	"testing"
 
 	"bakku.dev/bookist/internal/authors"
@@ -448,6 +451,37 @@ func TestServiceUpdateRejectsEmptyAndBlankValues(t *testing.T) {
 	testsupport.AssertBookRow(t, db, bookID, "Dune", nil)
 }
 
+func TestServiceUpdateRejectsInvalidSharedBookFields(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+
+	tests := []struct {
+		name  string
+		input books.UpdateBookRequest
+		want  error
+	}{
+		{name: "format", input: books.UpdateBookRequest{Format: updateValueOf(books.Format("invalid"))}, want: books.ErrInvalidFormat},
+		{name: "condition", input: books.UpdateBookRequest{Condition: updateValueOf(books.Condition("like_new"))}, want: books.ErrInvalidCondition},
+		{name: "purchased date", input: books.UpdateBookRequest{PurchasedAt: updateValueOf("2025-02-29")}, want: books.ErrInvalidPurchasedAt},
+		{name: "pages", input: books.UpdateBookRequest{Pages: updateValueOf(0)}, want: books.ErrInvalidPages},
+		{name: "series position", input: books.UpdateBookRequest{SeriesPosition: updateValueOf(0.0)}, want: books.ErrInvalidSeriesPosition},
+		{name: "published year", input: books.UpdateBookRequest{PublishedYear: updateValueOf(0)}, want: books.ErrInvalidPublishedYear},
+		{name: "published month", input: books.UpdateBookRequest{PublishedYear: updateValueOf(2026), PublishedMonth: updateValueOf(13)}, want: books.ErrInvalidPublishedMonth},
+		{name: "published day", input: books.UpdateBookRequest{PublishedYear: updateValueOf(2026), PublishedMonth: updateValueOf(2), PublishedDay: updateValueOf(29)}, want: books.ErrInvalidPublishedDay},
+		{name: "unknown author", input: books.UpdateBookRequest{AuthorIDs: updateValueOf([]int64{999999})}, want: books.ErrAuthorNotFound},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := service.Update(context.Background(), bookID, tt.input)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("expected %v, got %v", tt.want, err)
+			}
+			testsupport.AssertBookRow(t, db, bookID, "Dune", nil)
+		})
+	}
+}
+
 func TestServiceUpdateMergesPublicationDateBeforeValidation(t *testing.T) {
 	service, db := testsupport.NewBookService(t)
 	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
@@ -548,7 +582,11 @@ func TestServiceUpdateReplacesAndClearsCover(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service := books.NewService(books.NewSQLiteRepository(db), authors.NewSQLiteRepository(db), coverStore)
+	var logOutput bytes.Buffer
+	service := books.NewServiceWithLogger(
+		books.NewSQLiteRepository(db), authors.NewSQLiteRepository(db), coverStore,
+		slog.New(slog.NewTextHandler(&logOutput, nil)),
+	)
 	created, err := service.Create(context.Background(), books.CreateBookRequest{Title: "Dune", Cover: new([]byte("\x89PNG\r\n\x1a\nold cover"))})
 	if err != nil {
 		t.Fatal(err)
@@ -580,6 +618,9 @@ func TestServiceUpdateReplacesAndClearsCover(t *testing.T) {
 	}
 	if _, err := os.Stat(coverDir + "/" + newKey); !os.IsNotExist(err) {
 		t.Fatalf("expected replaced cover removed, got %v", err)
+	}
+	if logOutput.Len() != 0 {
+		t.Fatalf("expected successful cleanup not to log, got %q", logOutput.String())
 	}
 }
 
@@ -625,10 +666,13 @@ func TestServiceUpdateSucceedsWhenOldCoverCleanupFails(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	service := books.NewService(
+	var logOutput bytes.Buffer
+	coverStore := &cleanupFailingCoverStore{savedKey: newKey}
+	service := books.NewServiceWithLogger(
 		books.NewSQLiteRepository(db),
 		authors.NewSQLiteRepository(db),
-		cleanupFailingCoverStore{savedKey: newKey},
+		coverStore,
+		slog.New(slog.NewTextHandler(&logOutput, nil)),
 	)
 	updated, err := service.Update(context.Background(), bookID, books.UpdateBookRequest{
 		Cover: updateValueOf([]byte("replacement cover")),
@@ -647,17 +691,28 @@ func TestServiceUpdateSucceedsWhenOldCoverCleanupFails(t *testing.T) {
 	if persistedKey != newKey {
 		t.Fatalf("expected persisted cover key %q, got %q", newKey, persistedKey)
 	}
+	if len(coverStore.deletedKeys) != 1 || coverStore.deletedKeys[0] != oldKey {
+		t.Fatalf("expected only old cover cleanup, got %#v", coverStore.deletedKeys)
+	}
+	logged := logOutput.String()
+	for _, expected := range []string{"failed to delete previous book cover", "book_id=", oldKey, "cleanup failed"} {
+		if !strings.Contains(logged, expected) {
+			t.Errorf("expected warning to contain %q, got %q", expected, logged)
+		}
+	}
 }
 
 type cleanupFailingCoverStore struct {
-	savedKey string
+	savedKey    string
+	deletedKeys []string
 }
 
-func (s cleanupFailingCoverStore) Save([]byte) (string, error) {
+func (s *cleanupFailingCoverStore) Save([]byte) (string, error) {
 	return s.savedKey, nil
 }
 
-func (cleanupFailingCoverStore) Delete(string) error {
+func (s *cleanupFailingCoverStore) Delete(key string) error {
+	s.deletedKeys = append(s.deletedKeys, key)
 	return errors.New("cleanup failed")
 }
 

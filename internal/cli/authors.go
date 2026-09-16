@@ -64,15 +64,15 @@ func runAuthorsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("authors edit", flag.ContinueOnError)
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
 	var name optionalStringFlag
-	var clears stringSliceFlag
 	flags.Var(&name, "name", "Author name")
-	flags.Var(&clears, "clear", "Field to clear (repeatable)")
 	help := commandHelp{
 		name:        "bookist authors edit",
-		usage:       "bookist authors edit [options] <name-or-ID>",
+		usage:       "bookist authors edit <name-or-ID> [options]",
 		description: "Edit an author",
+		details:     []string{"Omitted fields are unchanged; supplied values replace fields. The required author name cannot be cleared."},
+		examples:    []string{`bookist authors edit 6 --name "Ursula K. Le Guin"`},
 	}
-	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
+	if ok, exitCode := parseEditFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
 	}
 	if flags.NArg() != 1 {
@@ -84,10 +84,6 @@ func runAuthorsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 	changes := make(map[string]any)
 	if name.value != nil {
 		changes["name"] = *name.value
-	}
-	if err := validateClears(changes, clears, map[string]string{}); err != nil {
-		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
-		return 2
 	}
 	if len(changes) == 0 {
 		_, _ = fmt.Fprintln(stderr, "Error: authors edit requires at least one change")
