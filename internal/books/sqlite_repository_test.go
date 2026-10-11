@@ -568,6 +568,98 @@ func TestSQLiteRepositorySearchMatchesTitlesCaseInsensitively(t *testing.T) {
 	}
 }
 
+func TestSQLiteRepositorySearchMatchesNonASCIICaseVariants(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	id := testsupport.InsertBookRow(t, db, "Über Menschen", nil)
+	testsupport.InsertBookRow(t, db, "Dune", nil)
+
+	for _, query := range []string{"über", "ÜBER", "Über Menschen", "enschen"} {
+		t.Run(query, func(t *testing.T) {
+			matched, err := repository.Search(ctx, query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(matched) != 1 || matched[0].ID != id {
+				t.Fatalf("expected only book %d, got %#v", id, matched)
+			}
+		})
+	}
+}
+
+func TestSQLiteRepositorySearchIgnoresAccentsAndSharpS(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	uberID := testsupport.InsertBookRow(t, db, "Über Menschen", nil)
+	strasseID := testsupport.InsertBookRow(t, db, "Die Straße", nil)
+	cafeID := testsupport.InsertBookRow(t, db, "Cafe Society", nil)
+
+	tests := []struct {
+		query string
+		want  int64
+	}{
+		{query: "uber", want: uberID},
+		{query: "STRASSE", want: strasseID},
+		{query: "straße", want: strasseID},
+		{query: "café", want: cafeID},
+	}
+
+	for _, test := range tests {
+		t.Run(test.query, func(t *testing.T) {
+			matched, err := repository.Search(ctx, test.query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(matched) != 1 || matched[0].ID != test.want {
+				t.Fatalf("expected only book %d, got %#v", test.want, matched)
+			}
+		})
+	}
+}
+
+func TestSQLiteRepositorySearchMatchesSeriesISBNAndAuthorNames(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	isbn := "9780441172719"
+	seriesID := testsupport.InsertBookRow(t, db, "Das Erste", nil)
+	if _, err := db.Exec(`UPDATE books SET series_name = 'Ängste der Zeit' WHERE id = ?`, seriesID); err != nil {
+		t.Fatal(err)
+	}
+	isbnID := testsupport.InsertBookRow(t, db, "Dune", &isbn)
+	authorBookID := testsupport.InsertBookRow(t, db, "Die Verwandlung", nil)
+	otherAuthorID := testsupport.InsertAuthorRow(t, db, "Franz Kafka")
+	authorID := testsupport.InsertAuthorRow(t, db, "Franz Kafka (Übersetzer)")
+	testsupport.InsertBookAuthorRow(t, db, authorBookID, otherAuthorID)
+	testsupport.InsertBookAuthorRow(t, db, authorBookID, authorID)
+	testsupport.InsertBookRow(t, db, "Foundation", nil)
+
+	tests := []struct {
+		name  string
+		query string
+		want  int64
+	}{
+		{name: "series", query: "angste", want: seriesID},
+		{name: "isbn", query: "978044117", want: isbnID},
+		{name: "author", query: "KAFKA", want: authorBookID},
+		{name: "author accent", query: "ubersetzer", want: authorBookID},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			matched, err := repository.Search(ctx, test.query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(matched) != 1 || matched[0].ID != test.want {
+				t.Fatalf("expected only book %d once, got %#v", test.want, matched)
+			}
+		})
+	}
+}
+
 func TestSQLiteRepositorySearchTreatsSQLWildcardsLiterally(t *testing.T) {
 	ctx := context.Background()
 	db := testsupport.OpenMigratedDB(t)
@@ -707,5 +799,37 @@ func TestSQLiteRepositorySearchByListIDFiltersWithinList(t *testing.T) {
 	}
 	if matched[0].ID != childrenID || matched[1].ID != duneID || matched[2].ID != duneMessiahID {
 		t.Fatalf("expected relationship ordering [%d %d %d], got [%d %d %d]", childrenID, duneID, duneMessiahID, matched[0].ID, matched[1].ID, matched[2].ID)
+	}
+}
+
+func TestSQLiteRepositorySearchByListIDMatchesNonASCIIAndAuthors(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	listID := testsupport.InsertListRow(t, db, "Nightstand")
+	otherListID := testsupport.InsertListRow(t, db, "Archive")
+	titleID := testsupport.InsertBookRow(t, db, "Über Menschen", nil)
+	authorBookID := testsupport.InsertBookRow(t, db, "Die Verwandlung", nil)
+	otherID := testsupport.InsertBookRow(t, db, "Über Alles", nil)
+	authorID := testsupport.InsertAuthorRow(t, db, "Zoë Wicomb")
+	testsupport.InsertBookAuthorRow(t, db, authorBookID, authorID)
+	testsupport.InsertBookListRow(t, db, listID, titleID)
+	testsupport.InsertBookListRow(t, db, listID, authorBookID)
+	testsupport.InsertBookListRow(t, db, otherListID, otherID)
+
+	matched, err := repository.SearchByListID(ctx, listID, "über")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matched) != 1 || matched[0].ID != titleID {
+		t.Fatalf("expected only book %d, got %#v", titleID, matched)
+	}
+
+	matched, err = repository.SearchByListID(ctx, listID, "ZOE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matched) != 1 || matched[0].ID != authorBookID {
+		t.Fatalf("expected only book %d, got %#v", authorBookID, matched)
 	}
 }

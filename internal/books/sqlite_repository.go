@@ -16,6 +16,21 @@ type SQLiteRepository struct {
 	db *sql.DB
 }
 
+// matchesSearch matches a folded query (see database.Fold) as a substring of
+// the title, series name, ISBN or the name of any linked author. Each use binds
+// the query four times. It expects the books table to be aliased as b.
+const matchesSearch = `(
+			instr(bookist_fold(b.title), ?) > 0
+			OR instr(bookist_fold(b.series_name), ?) > 0
+			OR instr(bookist_fold(b.isbn), ?) > 0
+			OR EXISTS (
+				SELECT 1
+				FROM book_authors ba
+				JOIN authors a ON a.id = ba.author_id
+				WHERE ba.book_id = b.id AND instr(bookist_fold(a.name), ?) > 0
+			)
+		)`
+
 func NewSQLiteRepository(db *sql.DB) *SQLiteRepository {
 	return &SQLiteRepository{db: db}
 }
@@ -40,15 +55,16 @@ func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (Book, error) 
 }
 
 func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]Book, error) {
+	folded := database.Fold(query)
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, title, isbn, language, publisher, edition, format, 
 		    purchased_at, purchase_price, pages, notes, summary, series_name, series_position,
 		    location, condition, acquisition_source, published_year,
 		    published_month, published_day, cover_image_key, created_at, updated_at
-		FROM books
-		WHERE instr(lower(title), lower(?)) > 0
+		FROM books b
+		WHERE `+matchesSearch+`
 		ORDER BY updated_at DESC, id ASC
-	`, query)
+	`, folded, folded, folded, folded)
 	if err != nil {
 		return nil, err
 	}
@@ -80,6 +96,7 @@ func (r *SQLiteRepository) ListExists(ctx context.Context, listID int64) (bool, 
 }
 
 func (r *SQLiteRepository) SearchByListID(ctx context.Context, listID int64, query string) ([]Book, error) {
+	folded := database.Fold(query)
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT b.id, b.title, b.isbn, b.language, b.publisher, b.edition, b.format,
 		       b.purchased_at, b.purchase_price, b.pages, b.notes, b.summary, b.series_name,
@@ -88,9 +105,9 @@ func (r *SQLiteRepository) SearchByListID(ctx context.Context, listID int64, que
 		       b.cover_image_key, b.created_at, b.updated_at
 		FROM books b
 		JOIN book_lists bl ON bl.book_id = b.id
-		WHERE bl.list_id = ? AND instr(lower(b.title), lower(?)) > 0
+		WHERE bl.list_id = ? AND `+matchesSearch+`
 		ORDER BY bl.updated_at DESC, bl.id ASC
-	`, listID, query)
+	`, listID, folded, folded, folded, folded)
 	if err != nil {
 		return nil, err
 	}

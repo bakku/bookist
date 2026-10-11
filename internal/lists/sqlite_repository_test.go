@@ -199,6 +199,47 @@ func TestSQLiteRepositorySearchMatchesNamesCaseInsensitively(t *testing.T) {
 	}
 }
 
+func TestSQLiteRepositorySearchMatchesNonASCIIAndIgnoresAccents(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+	id := testsupport.InsertListRow(t, db, "Übersetzungen")
+	testsupport.InsertListRow(t, db, "Want to Buy")
+
+	for _, query := range []string{"über", "ÜBER", "uber", "UBERSETZ"} {
+		t.Run(query, func(t *testing.T) {
+			matched, err := repository.Search(ctx, query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(matched) != 1 || matched[0].ID != id {
+				t.Fatalf("expected only list %d, got %#v", id, matched)
+			}
+		})
+	}
+}
+
+func TestSQLiteRepositorySearchTreatsSQLWildcardsLiterally(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+	percentID := testsupport.InsertListRow(t, db, "100% Read")
+	underscoreID := testsupport.InsertListRow(t, db, "Under_score")
+	testsupport.InsertListRow(t, db, "Want to Buy")
+
+	for query, want := range map[string]int64{"%": percentID, "_": underscoreID} {
+		t.Run(query, func(t *testing.T) {
+			matched, err := repository.Search(ctx, query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(matched) != 1 || matched[0].ID != want {
+				t.Fatalf("expected only list %d, got %#v", want, matched)
+			}
+		})
+	}
+}
+
 // ── GetByID ───────────────────────────────────────────────────────────────────
 
 func TestSQLiteRepositoryGetByIDReturnsList(t *testing.T) {

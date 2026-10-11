@@ -174,6 +174,37 @@ func TestBooksRemoveUnknownNumericReferenceIsNotFound(t *testing.T) {
 	}
 }
 
+// ── Unicode Case-Insensitive References ───────────────────────────────────────
+
+func TestRemoveResolvesNonASCIIReferenceCaseInsensitively(t *testing.T) {
+	tests := []struct {
+		name       string
+		collection string
+		field      string
+		records    map[int64]string
+		args       []string
+		expected   string
+	}{
+		{name: "book", collection: "books", field: "title", records: map[int64]string{4: "Über Menschen", 5: "Über Alles"}, args: []string{"books", "rm", "über menschen"}, expected: "/api/books/4"},
+		{name: "author", collection: "authors", field: "name", records: map[int64]string{4: "Édouard Louis", 5: "Édouard Manet"}, args: []string{"authors", "rm", "ÉDOUARD LOUIS"}, expected: "/api/authors/4"},
+		{name: "list", collection: "lists", field: "name", records: map[int64]string{4: "Übersetzungen", 5: "Übersicht"}, args: []string{"lists", "rm", "übersetzungen"}, expected: "/api/lists/4"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := newRecordServer(t, test.collection, test.field, test.records)
+
+			exitCode, _, stderr := runCLI(append(test.args, "--server", server.URL))
+
+			if exitCode != 0 || stderr != "" {
+				t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
+			}
+			if server.deleted != test.expected {
+				t.Fatalf("expected DELETE %s, got %q", test.expected, server.deleted)
+			}
+		})
+	}
+}
+
 // ── Numeric Author And List References ────────────────────────────────────────
 
 func TestNumericReferencesAreAmbiguousForAuthorsAndLists(t *testing.T) {
