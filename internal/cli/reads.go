@@ -32,6 +32,8 @@ func runReads(args []string, stdout io.Writer, stderr io.Writer) int {
 	switch args[0] {
 	case "ls":
 		return runReadsLS(args[1:], stdout, stderr)
+	case "show":
+		return runReadsShow(args[1:], stdout, stderr)
 	case "add":
 		return runReadsAdd(args[1:], stdout, stderr)
 	case "edit":
@@ -55,6 +57,7 @@ func printReadsHelp(w io.Writer) {
 		description: "Manage book reads",
 		commands: []helpCommand{
 			{name: "ls", description: "List reads for a book"},
+			{name: "show", description: "Show a read"},
 			{name: "add", description: "Record a read for a book"},
 			{name: "edit", description: "Edit a read"},
 			{name: "rm", description: "Remove a read"},
@@ -208,6 +211,76 @@ func runReadsLS(args []string, stdout io.Writer, stderr io.Writer) int {
 	if err := writeListOutput(stdout, format, listed,
 		[]string{"ID", "STARTED_AT", "FINISHED_AT", "ABANDONED_AT", "RATING", "NOTES"}, rows); err != nil {
 		_, _ = fmt.Fprintf(stderr, "list reads: write output: %v\n", err)
+		return 1
+	}
+
+	return 0
+}
+
+func runReadsShow(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("reads show", flag.ContinueOnError)
+
+	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	formatValue := flags.String("format", string(outputFormatPretty), "Output format (tsv|pretty|json)")
+
+	help := commandHelp{
+		name:        "bookist reads show",
+		usage:       "bookist reads show <read-ID> [options]",
+		description: "Show a read",
+		examples:    []string{"bookist reads show 9", "bookist reads show 9 --format json"},
+	}
+	if ok, exitCode := parseEditFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
+	}
+
+	if flags.NArg() != 1 {
+		_, _ = fmt.Fprintln(stderr, "Error: reads show requires exactly one read ID")
+		_, _ = fmt.Fprintln(stderr)
+		printCommandHelp(stderr, help, flags)
+		return 2
+	}
+
+	format, err := parseOutputFormat(*formatValue)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+
+	readRef := strings.TrimSpace(flags.Arg(0))
+	readID, isID, err := parseIDReference(readRef)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, err)
+		return 2
+	}
+	if !isID {
+		_, _ = fmt.Fprintf(stderr, "invalid read ID %q\n", readRef)
+		return 2
+	}
+
+	c := newClient(*serverURL, stderr)
+	if c == nil {
+		return 2
+	}
+
+	read, err := c.Reads.Get(context.Background(), readID)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "show read: %v\n", err)
+		return 1
+	}
+
+	fields := []showField{
+		{"ID", strconv.FormatInt(read.ID, 10)},
+		{"Book ID", strconv.FormatInt(read.BookID, 10)},
+		{"Started at", stringValue(read.StartedAt)},
+		{"Finished at", stringValue(read.FinishedAt)},
+		{"Abandoned at", stringValue(read.AbandonedAt)},
+		{"Rating", floatValue(read.Rating)},
+		{"Notes", stringValue(read.Notes)},
+		{"Created at", timeValue(read.CreatedAt)},
+		{"Updated at", timeValue(read.UpdatedAt)},
+	}
+	if err := writeShowOutput(stdout, format, read, fields); err != nil {
+		_, _ = fmt.Fprintf(stderr, "show read: write output: %v\n", err)
 		return 1
 	}
 

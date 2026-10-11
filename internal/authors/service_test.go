@@ -119,6 +119,32 @@ func TestServiceSearchTrimsQuery(t *testing.T) {
 	}
 }
 
+// ── GetByID ───────────────────────────────────────────────────────────────────
+
+func TestServiceGetByIDReturnsAuthor(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	service := authors.NewService(authors.NewSQLiteRepository(db))
+	id := testsupport.InsertAuthorRow(t, db, "Jane Austen")
+
+	got, err := service.GetByID(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != id || got.Name != "Jane Austen" {
+		t.Fatalf("unexpected author: %#v", got)
+	}
+}
+
+func TestServiceGetByIDReturnsErrAuthorNotFound(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	service := authors.NewService(authors.NewSQLiteRepository(db))
+
+	_, err := service.GetByID(context.Background(), 999999)
+	if !errors.Is(err, authors.ErrAuthorNotFound) {
+		t.Fatalf("expected ErrAuthorNotFound, got %v", err)
+	}
+}
+
 // ── GetByIDs ──────────────────────────────────────────────────────────────────
 
 func TestServiceGetByIDsReturnsSpecifiedAuthors(t *testing.T) {

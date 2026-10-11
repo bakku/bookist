@@ -153,6 +153,51 @@ func TestAuthorAPIListReturnsEmptyArray(t *testing.T) {
 	assertEmptyJSONArray(t, app.handler, "/api/authors")
 }
 
+// ── Get ───────────────────────────────────────────────────────────────────────
+
+func TestAuthorAPIGet(t *testing.T) {
+	app := newTestApp(t)
+	testsupport.InsertAuthorRow(t, app.db, "Other")
+	authorID := testsupport.InsertAuthorRow(t, app.db, "Jane Austen")
+
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/authors/%d", authorID), nil))
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, resp.Code, resp.Body.String())
+	}
+
+	var got authors.Author
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != authorID || got.Name != "Jane Austen" {
+		t.Fatalf("unexpected response: %#v", got)
+	}
+	if got.CreatedAt.IsZero() || got.UpdatedAt.IsZero() {
+		t.Fatalf("expected timestamps, got %#v", got)
+	}
+}
+
+func TestAuthorAPIGetRejectsInvalidRequests(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		path   string
+		status int
+		code   string
+		field  string
+	}{
+		{name: "invalid ID", path: "/api/authors/-1", status: http.StatusBadRequest, code: "invalid_id", field: "id"},
+		{name: "not found", path: "/api/authors/999999", status: http.StatusNotFound, code: "author_not_found"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			app := newTestApp(t)
+			resp := httptest.NewRecorder()
+			app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, test.path, nil))
+			assertAPIError(t, resp, test.status, test.code, test.field)
+		})
+	}
+}
+
 // ── Delete ────────────────────────────────────────────────────────────────────
 
 func TestAuthorAPIDeleteRemovesOnlyAuthorRelationships(t *testing.T) {

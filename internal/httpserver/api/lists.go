@@ -19,6 +19,21 @@ func (s *Server) handleAPIListLists(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, listList)
 }
 
+func (s *Server) handleAPIGetList(w http.ResponseWriter, r *http.Request) {
+	id, ok := parsePathID(w, r, "id", "list")
+	if !ok {
+		return
+	}
+
+	list, err := s.lists.GetByID(r.Context(), id)
+	if err != nil {
+		s.writeError(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, list)
+}
+
 func (s *Server) handleAPICreateList(w http.ResponseWriter, r *http.Request) {
 	var input lists.CreateListRequest
 	if !decodeJSON(w, r, &input, maxJSONBodySize) {

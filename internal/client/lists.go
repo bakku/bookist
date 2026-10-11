@@ -21,6 +21,13 @@ func (s *ListsService) List(ctx context.Context, query string) ([]lists.List, er
 	return listed, err
 }
 
+// Get returns the list with the given ID.
+func (s *ListsService) Get(ctx context.Context, id int64) (lists.List, error) {
+	var got lists.List
+	err := s.client.do(ctx, http.MethodGet, s.client.endpoint("", "api", "lists", strconv.FormatInt(id, 10)), nil, &got, http.StatusOK)
+	return got, err
+}
+
 func (s *ListsService) Create(ctx context.Context, request lists.CreateListRequest) (lists.List, error) {
 	var created lists.List
 	err := s.client.do(ctx, http.MethodPost, s.client.endpoint("", "api", "lists"), request, &created, http.StatusCreated)

@@ -315,6 +315,61 @@ func TestReadAPIListReturnsEmptyArray(t *testing.T) {
 	assertEmptyJSONArray(t, app.handler, fmt.Sprintf("/api/books/%d/reads", bookID))
 }
 
+// ── Get ───────────────────────────────────────────────────────────────────────
+
+func TestReadAPIGet(t *testing.T) {
+	app := newTestApp(t)
+	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
+	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{ID: 100, BookID: bookID, CreatedAt: "2026-01-01T00:00:00Z"})
+	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{
+		ID: 101, BookID: bookID, StartedAt: new("2025-01-01"), FinishedAt: new("2025-01-03"),
+		Rating: new(4.5), Notes: new("Excellent"), CreatedAt: "2026-01-02T00:00:00Z",
+	})
+
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, "/api/reads/101", nil))
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, resp.Code, resp.Body.String())
+	}
+
+	var got reads.Read
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != 101 || got.BookID != bookID {
+		t.Fatalf("unexpected response: %#v", got)
+	}
+	if got.StartedAt == nil || *got.StartedAt != "2025-01-01" || got.FinishedAt == nil || *got.FinishedAt != "2025-01-03" {
+		t.Fatalf("expected dates, got %#v", got)
+	}
+	if got.AbandonedAt != nil {
+		t.Fatalf("expected no abandoned_at, got %#v", got.AbandonedAt)
+	}
+	if got.Rating == nil || *got.Rating != 4.5 || got.Notes == nil || *got.Notes != "Excellent" {
+		t.Fatalf("expected rating and notes, got %#v", got)
+	}
+}
+
+func TestReadAPIGetRejectsInvalidRequests(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		path   string
+		status int
+		code   string
+		field  string
+	}{
+		{name: "invalid ID", path: "/api/reads/abc", status: http.StatusBadRequest, code: "invalid_id", field: "id"},
+		{name: "not found", path: "/api/reads/999999", status: http.StatusNotFound, code: "read_not_found"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			app := newTestApp(t)
+			resp := httptest.NewRecorder()
+			app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, test.path, nil))
+			assertAPIError(t, resp, test.status, test.code, test.field)
+		})
+	}
+}
+
 // ── Delete ────────────────────────────────────────────────────────────────────
 
 func TestReadAPIDeleteLeavesBookAndOtherReads(t *testing.T) {

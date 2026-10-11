@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
@@ -160,6 +161,247 @@ func TestBooksLSResolvesExactListAndForwardsQuery(t *testing.T) {
 	}
 	if gotBookPath != "/api/lists/2/books" || gotBookQuery != "Lord" {
 		t.Fatalf("expected filtered list books request, got path %q query %q", gotBookPath, gotBookQuery)
+	}
+}
+
+// ── Books Show ─────────────────────────────────────────────────────────────────
+
+func TestBooksShowByID(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_ = json.NewEncoder(w).Encode(showTestBook())
+	}))
+	defer server.Close()
+
+	tests := []struct {
+		name     string
+		format   string
+		expected string
+	}{
+		{name: "default pretty", expected: showBookPretty},
+		{name: "pretty", format: "pretty", expected: showBookPretty},
+		{name: "TSV", format: "tsv", expected: showBookTSV},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			args := []string{"books", "show", "--server", server.URL, "12"}
+			if test.format != "" {
+				args = append(args, "--format", test.format)
+			}
+
+			exitCode, stdout, stderr := runCLI(args)
+			if exitCode != 0 || stderr != "" {
+				t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
+			}
+			if stdout != test.expected {
+				t.Fatalf("expected stdout %q, got %q", test.expected, stdout)
+			}
+			if gotPath != "/api/books/12" {
+				t.Fatalf("expected GET /api/books/12, got %s", gotPath)
+			}
+		})
+	}
+}
+
+func TestBooksShowJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(showTestBook())
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"books", "show", "12", "--format", "json", "--server", server.URL})
+	if exitCode != 0 || stderr != "" {
+		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
+	}
+
+	var got books.Book
+	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+		t.Fatalf("expected valid JSON, got %q: %v", stdout, err)
+	}
+	if got.ID != 12 || got.Title != "Dune" || len(got.Authors) != 2 || got.CoverURL == nil || *got.CoverURL != "/book-covers/abc.jpg" {
+		t.Fatalf("expected complete book JSON, got %#v", got)
+	}
+}
+
+func TestBooksShowOmitsUnsetFields(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(books.Book{ID: 3, Title: "Kindred", Authors: []authors.Author{}, PublishedYear: new(1979)})
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"books", "show", "3", "--format", "tsv", "--server", server.URL})
+	if exitCode != 0 || stderr != "" {
+		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
+	}
+	for _, line := range []string{"ISBN\t\n", "Authors\t\n", "Pages\t\n", "Published\t1979\n"} {
+		if !strings.Contains(stdout, line) {
+			t.Fatalf("expected stdout to contain %q, got %q", line, stdout)
+		}
+	}
+}
+
+func TestBooksShowResolvesTitle(t *testing.T) {
+	var gotQuery, gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/books" {
+			gotQuery = r.URL.Query().Get("q")
+			_ = json.NewEncoder(w).Encode([]books.Book{{ID: 2, Title: "Dune Messiah"}, {ID: 7, Title: "Dune"}})
+			return
+		}
+		gotPath = r.URL.Path
+		_ = json.NewEncoder(w).Encode(books.Book{ID: 7, Title: "Dune", Authors: []authors.Author{}})
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"books", "show", "--server", server.URL, "dune"})
+	if exitCode != 0 || stderr != "" {
+		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
+	}
+	if gotQuery != "dune" || gotPath != "/api/books/7" {
+		t.Fatalf("expected title lookup then GET /api/books/7, got query %q path %q", gotQuery, gotPath)
+	}
+	if !strings.Contains(stdout, "Title") || !strings.Contains(stdout, "Dune") {
+		t.Fatalf("expected book output, got %q", stdout)
+	}
+}
+
+func TestBooksShowReportsUnknownBook(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/books" {
+			_ = json.NewEncoder(w).Encode([]books.Book{})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"code":"book_not_found","message":"book not found"}}`))
+	}))
+	defer server.Close()
+
+	tests := []struct {
+		name     string
+		ref      string
+		expected string
+	}{
+		{name: "unknown ID", ref: "999", expected: "show book: server returned 404 Not Found: book not found"},
+		{name: "unknown title", ref: "Missing", expected: "book not found: Missing"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			exitCode, stdout, stderr := runCLI([]string{"books", "show", "--server", server.URL, test.ref})
+			if exitCode != 1 || stdout != "" || !strings.Contains(stderr, test.expected) {
+				t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
+			}
+		})
+	}
+}
+
+func TestBooksShowRejectsAmbiguousTitle(t *testing.T) {
+	getCalled := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/books" {
+			getCalled = true
+		}
+		_ = json.NewEncoder(w).Encode([]books.Book{{ID: 1, Title: "Dune"}, {ID: 2, Title: "dune"}})
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"books", "show", "--server", server.URL, "Dune"})
+	if exitCode != 1 || stdout != "" || !strings.Contains(stderr, "pass a book ID instead") {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
+	}
+	if getCalled {
+		t.Fatal("expected no book to be fetched for an ambiguous title")
+	}
+}
+
+func TestBooksShowRequiresExactlyOneReference(t *testing.T) {
+	for _, args := range [][]string{{"books", "show"}, {"books", "show", "1", "2"}} {
+		exitCode, stdout, stderr := runCLI(args)
+		if exitCode != 2 || stdout != "" || !strings.Contains(stderr, "books show requires exactly one title or ID") {
+			t.Fatalf("unexpected result for %v: exit=%d stdout=%q stderr=%q", args, exitCode, stdout, stderr)
+		}
+	}
+}
+
+const showBookPretty = "ID                  12\n" +
+	"Title               Dune\n" +
+	"ISBN                9780441172719\n" +
+	"Authors             Frank Herbert, Brian Herbert\n" +
+	"Language            en\n" +
+	"Publisher           Chilton\n" +
+	"Edition             1st\n" +
+	"Format              paperback\n" +
+	"Purchased at        2025-06-15\n" +
+	"Purchase price      12.34 EUR\n" +
+	"Pages               412\n" +
+	"Notes               Classic\n" +
+	"Summary             A desert epic\n" +
+	"Series name         Dune\n" +
+	"Series position     1.5\n" +
+	"Location            Living room\n" +
+	"Condition           very_good\n" +
+	"Acquisition source  Bookshop\n" +
+	"Published           1965-08-01\n" +
+	"Cover URL           /book-covers/abc.jpg\n" +
+	"Created at          2026-01-02T03:04:05Z\n" +
+	"Updated at          2026-01-03T03:04:05Z\n"
+
+const showBookTSV = "ID\t12\n" +
+	"Title\tDune\n" +
+	"ISBN\t9780441172719\n" +
+	"Authors\tFrank Herbert, Brian Herbert\n" +
+	"Language\ten\n" +
+	"Publisher\tChilton\n" +
+	"Edition\t1st\n" +
+	"Format\tpaperback\n" +
+	"Purchased at\t2025-06-15\n" +
+	"Purchase price\t12.34 EUR\n" +
+	"Pages\t412\n" +
+	"Notes\tClassic\n" +
+	"Summary\tA desert epic\n" +
+	"Series name\tDune\n" +
+	"Series position\t1.5\n" +
+	"Location\tLiving room\n" +
+	"Condition\tvery_good\n" +
+	"Acquisition source\tBookshop\n" +
+	"Published\t1965-08-01\n" +
+	"Cover URL\t/book-covers/abc.jpg\n" +
+	"Created at\t2026-01-02T03:04:05Z\n" +
+	"Updated at\t2026-01-03T03:04:05Z\n"
+
+func showTestBook() books.Book {
+	format := books.FormatPaperback
+	condition := books.ConditionVeryGood
+
+	return books.Book{
+		ID:    12,
+		Title: "Dune",
+		ISBN:  new("9780441172719"),
+		Authors: []authors.Author{
+			{ID: 1, Name: "Frank Herbert"},
+			{ID: 2, Name: "Brian Herbert"},
+		},
+		Language:          new("en"),
+		Publisher:         new("Chilton"),
+		Edition:           new("1st"),
+		Format:            &format,
+		PurchasedAt:       new("2025-06-15"),
+		PurchasePrice:     new("12.34 EUR"),
+		Pages:             new(412),
+		Notes:             new("Classic"),
+		Summary:           new("A desert epic"),
+		SeriesName:        new("Dune"),
+		SeriesPosition:    new(1.5),
+		Location:          new("Living room"),
+		Condition:         &condition,
+		AcquisitionSource: new("Bookshop"),
+		PublishedYear:     new(1965),
+		PublishedMonth:    new(8),
+		PublishedDay:      new(1),
+		CoverURL:          new("/book-covers/abc.jpg"),
+		CreatedAt:         time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+		UpdatedAt:         time.Date(2026, 1, 3, 3, 4, 5, 0, time.UTC),
 	}
 }
 

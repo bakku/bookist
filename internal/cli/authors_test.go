@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/cli"
@@ -123,6 +124,138 @@ func TestAuthorsLSForwardsQuery(t *testing.T) {
 	}
 	if gotQuery != "Octavia Butler" {
 		t.Fatalf("expected query %q, got %q", "Octavia Butler", gotQuery)
+	}
+}
+
+// ── Authors Show ──────────────────────────────────────────────────────────────
+
+func TestAuthorsShowByID(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_ = json.NewEncoder(w).Encode(showTestAuthor())
+	}))
+	defer server.Close()
+
+	tests := []struct {
+		name     string
+		format   string
+		expected string
+	}{
+		{name: "default pretty", expected: "ID          6\nName        Ursula K. Le Guin\nCreated at  2026-01-02T03:04:05Z\nUpdated at  2026-01-03T03:04:05Z\n"},
+		{name: "TSV", format: "tsv", expected: "ID\t6\nName\tUrsula K. Le Guin\nCreated at\t2026-01-02T03:04:05Z\nUpdated at\t2026-01-03T03:04:05Z\n"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			args := []string{"authors", "show", "6", "--server", server.URL}
+			if test.format != "" {
+				args = append(args, "--format", test.format)
+			}
+
+			exitCode, stdout, stderr := runCLI(args)
+			if exitCode != 0 || stderr != "" {
+				t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
+			}
+			if stdout != test.expected {
+				t.Fatalf("expected stdout %q, got %q", test.expected, stdout)
+			}
+			if gotPath != "/api/authors/6" {
+				t.Fatalf("expected GET /api/authors/6, got %s", gotPath)
+			}
+		})
+	}
+}
+
+func TestAuthorsShowJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(showTestAuthor())
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"authors", "show", "6", "--format", "json", "--server", server.URL})
+	if exitCode != 0 || stderr != "" {
+		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
+	}
+
+	var got authors.Author
+	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+		t.Fatalf("expected valid JSON, got %q: %v", stdout, err)
+	}
+	if got.ID != 6 || got.Name != "Ursula K. Le Guin" {
+		t.Fatalf("expected complete author JSON, got %#v", got)
+	}
+}
+
+func TestAuthorsShowResolvesName(t *testing.T) {
+	var gotQuery, gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/authors" {
+			gotQuery = r.URL.Query().Get("q")
+			_ = json.NewEncoder(w).Encode([]authors.Author{{ID: 2, Name: "Frank Herbert Jr."}, {ID: 3, Name: "Frank Herbert"}})
+			return
+		}
+		gotPath = r.URL.Path
+		_ = json.NewEncoder(w).Encode(authors.Author{ID: 3, Name: "Frank Herbert"})
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"authors", "show", "--server", server.URL, "frank HERBERT"})
+	if exitCode != 0 || stderr != "" {
+		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
+	}
+	if gotQuery != "frank HERBERT" || gotPath != "/api/authors/3" {
+		t.Fatalf("expected name lookup then GET /api/authors/3, got query %q path %q", gotQuery, gotPath)
+	}
+	if !strings.Contains(stdout, "Frank Herbert") {
+		t.Fatalf("expected author output, got %q", stdout)
+	}
+}
+
+func TestAuthorsShowReportsUnknownAuthor(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/authors" {
+			_ = json.NewEncoder(w).Encode([]authors.Author{})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"code":"author_not_found","message":"author not found"}}`))
+	}))
+	defer server.Close()
+
+	tests := []struct {
+		name     string
+		ref      string
+		expected string
+	}{
+		{name: "unknown ID", ref: "999", expected: "show author: server returned 404 Not Found: author not found"},
+		{name: "unknown name", ref: "Missing", expected: "author not found: Missing"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			exitCode, stdout, stderr := runCLI([]string{"authors", "show", "--server", server.URL, test.ref})
+			if exitCode != 1 || stdout != "" || !strings.Contains(stderr, test.expected) {
+				t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
+			}
+		})
+	}
+}
+
+func TestAuthorsShowRequiresExactlyOneReference(t *testing.T) {
+	for _, args := range [][]string{{"authors", "show"}, {"authors", "show", "1", "2"}} {
+		exitCode, stdout, stderr := runCLI(args)
+		if exitCode != 2 || stdout != "" || !strings.Contains(stderr, "authors show requires exactly one name or ID") {
+			t.Fatalf("unexpected result for %v: exit=%d stdout=%q stderr=%q", args, exitCode, stdout, stderr)
+		}
+	}
+}
+
+func showTestAuthor() authors.Author {
+	return authors.Author{
+		ID:        6,
+		Name:      "Ursula K. Le Guin",
+		CreatedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+		UpdatedAt: time.Date(2026, 1, 3, 3, 4, 5, 0, time.UTC),
 	}
 }
 

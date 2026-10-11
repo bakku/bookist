@@ -86,6 +86,18 @@ func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]Author, 
 	return authors, nil
 }
 
+func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (Author, error) {
+	author, err := scanAuthor(r.db.QueryRowContext(ctx, `
+		SELECT id, name, created_at, updated_at
+		FROM authors
+		WHERE id = ?
+	`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Author{}, ErrAuthorNotFound
+	}
+	return author, err
+}
+
 func (r *SQLiteRepository) GetByIDs(ctx context.Context, ids []int64) ([]Author, error) {
 	if len(ids) == 0 {
 		return nil, nil

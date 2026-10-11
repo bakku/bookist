@@ -30,6 +30,35 @@ func TestReadsListReturnsReadsForBook(t *testing.T) {
 	}
 }
 
+// ── Reads Get ─────────────────────────────────────────────────────────────────
+
+func TestReadsGetReturnsRead(t *testing.T) {
+	c, db := newTestClient(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	testsupport.InsertReadRow(t, db, testsupport.ReadRow{ID: 8, BookID: bookID, CreatedAt: "2026-02-01T00:00:00Z"})
+	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
+		ID: 9, BookID: bookID, StartedAt: new("2026-03-01"), Rating: new(4.5), Notes: new("Great"),
+		CreatedAt: "2026-03-01T00:00:00Z",
+	})
+
+	got, err := c.Reads.Get(context.Background(), 9)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != 9 || got.BookID != bookID || got.StartedAt == nil || *got.StartedAt != "2026-03-01" ||
+		got.Rating == nil || *got.Rating != 4.5 || got.Notes == nil || *got.Notes != "Great" {
+		t.Fatalf("unexpected read %#v", got)
+	}
+}
+
+func TestReadsGetMissingReadReturnsNotFound(t *testing.T) {
+	c, _ := newTestClient(t)
+
+	_, err := c.Reads.Get(context.Background(), 999)
+
+	assertClientError(t, err, 404, "read_not_found", "")
+}
+
 // ── Reads Create ──────────────────────────────────────────────────────────────
 
 func TestReadsCreatePersistsRead(t *testing.T) {

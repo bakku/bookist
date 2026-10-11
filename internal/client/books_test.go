@@ -60,6 +60,42 @@ func TestBooksListReturnsEmptySliceForNoBooks(t *testing.T) {
 	}
 }
 
+// ── Books Get ─────────────────────────────────────────────────────────────────
+
+func TestBooksGetReturnsBookWithAuthorsAndCover(t *testing.T) {
+	c, db := newTestClient(t)
+	testsupport.InsertBookRow(t, db, "Kindred", nil)
+	duneID := testsupport.InsertBookRow(t, db, "Dune", new("9780441172719"))
+	herbertID := testsupport.InsertAuthorRow(t, db, "Frank Herbert")
+	testsupport.InsertBookAuthorRow(t, db, duneID, herbertID)
+	coverKey := "0123456789abcdef0123456789abcdef.jpg"
+	if _, err := db.Exec(`UPDATE books SET cover_image_key = ? WHERE id = ?`, coverKey, duneID); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := c.Books.Get(context.Background(), duneID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != duneID || got.Title != "Dune" || got.ISBN == nil || *got.ISBN != "9780441172719" {
+		t.Fatalf("unexpected book %#v", got)
+	}
+	if len(got.Authors) != 1 || got.Authors[0].ID != herbertID {
+		t.Fatalf("expected Frank Herbert, got %#v", got.Authors)
+	}
+	if got.CoverURL == nil || *got.CoverURL != "/book-covers/"+coverKey {
+		t.Fatalf("expected cover URL, got %#v", got.CoverURL)
+	}
+}
+
+func TestBooksGetMissingBookReturnsNotFound(t *testing.T) {
+	c, _ := newTestClient(t)
+
+	_, err := c.Books.Get(context.Background(), 999)
+
+	assertClientError(t, err, 404, "book_not_found", "")
+}
+
 // ── Books Create ──────────────────────────────────────────────────────────────
 
 func TestBooksCreatePersistsBook(t *testing.T) {

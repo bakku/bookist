@@ -28,6 +28,9 @@ func runLists(args []string, stdout io.Writer, stderr io.Writer) int {
 	case "ls":
 		return runListsLS(args[1:], stdout, stderr)
 
+	case "show":
+		return runListsShow(args[1:], stdout, stderr)
+
 	case "add":
 		return runListsAdd(args[1:], stdout, stderr)
 
@@ -61,6 +64,7 @@ func printListsHelp(w io.Writer) {
 		description: "Manage book lists",
 		commands: []helpCommand{
 			{name: "ls", description: "List book lists"},
+			{name: "show", description: "Show a book list"},
 			{name: "add", description: "Add a book list"},
 			{name: "edit", description: "Edit a book list"},
 			{name: "add-book", description: "Add a book to a list"},
@@ -180,6 +184,71 @@ func runListsLS(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	if err := writeListOutput(stdout, format, listed, []string{"ID", "NAME"}, rows); err != nil {
 		_, _ = fmt.Fprintf(stderr, "ls lists: write output: %v\n", err)
+		return 1
+	}
+
+	return 0
+}
+
+func runListsShow(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("lists show", flag.ContinueOnError)
+
+	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	formatValue := flags.String("format", string(outputFormatPretty), "Output format (tsv|pretty|json)")
+
+	help := commandHelp{
+		name:        "bookist lists show",
+		usage:       "bookist lists show <name-or-ID> [options]",
+		description: "Show a book list",
+		examples: []string{
+			"bookist lists show 5",
+			`bookist lists show "Best Books" --format json`,
+		},
+	}
+	if ok, exitCode := parseEditFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
+	}
+
+	if flags.NArg() != 1 {
+		_, _ = fmt.Fprintln(stderr, "Error: lists show requires exactly one name or ID")
+		_, _ = fmt.Fprintln(stderr)
+		printCommandHelp(stderr, help, flags)
+		return 2
+	}
+
+	format, err := parseOutputFormat(*formatValue)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+
+	ctx := context.Background()
+	c := newClient(*serverURL, stderr)
+	if c == nil {
+		return 2
+	}
+
+	listID, err := resolveListID(ctx, c, flags.Arg(0))
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, err)
+		return 1
+	}
+
+	list, err := c.Lists.Get(ctx, listID)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "show list: %v\n", err)
+		return 1
+	}
+
+	fields := []showField{
+		{"ID", strconv.FormatInt(list.ID, 10)},
+		{"Name", list.Name},
+		{"Description", stringValue(list.Description)},
+		{"Created at", timeValue(list.CreatedAt)},
+		{"Updated at", timeValue(list.UpdatedAt)},
+	}
+	if err := writeShowOutput(stdout, format, list, fields); err != nil {
+		_, _ = fmt.Fprintf(stderr, "show list: write output: %v\n", err)
 		return 1
 	}
 

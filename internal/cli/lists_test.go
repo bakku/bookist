@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"bakku.dev/bookist/internal/books"
 	"bakku.dev/bookist/internal/cli"
@@ -103,6 +104,139 @@ func TestListsLSForwardsQuery(t *testing.T) {
 	}
 	if gotQuery != "Want & Buy" {
 		t.Fatalf("expected query %q, got %q", "Want & Buy", gotQuery)
+	}
+}
+
+// ── Lists Show ────────────────────────────────────────────────────────────────
+
+func TestListsShowByID(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_ = json.NewEncoder(w).Encode(showTestList())
+	}))
+	defer server.Close()
+
+	tests := []struct {
+		name     string
+		format   string
+		expected string
+	}{
+		{name: "default pretty", expected: "ID           5\nName         Best Books\nDescription  The very best\nCreated at   2026-01-02T03:04:05Z\nUpdated at   2026-01-03T03:04:05Z\n"},
+		{name: "TSV", format: "tsv", expected: "ID\t5\nName\tBest Books\nDescription\tThe very best\nCreated at\t2026-01-02T03:04:05Z\nUpdated at\t2026-01-03T03:04:05Z\n"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			args := []string{"lists", "show", "5", "--server", server.URL}
+			if test.format != "" {
+				args = append(args, "--format", test.format)
+			}
+
+			exitCode, stdout, stderr := runCLI(args)
+			if exitCode != 0 || stderr != "" {
+				t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
+			}
+			if stdout != test.expected {
+				t.Fatalf("expected stdout %q, got %q", test.expected, stdout)
+			}
+			if gotPath != "/api/lists/5" {
+				t.Fatalf("expected GET /api/lists/5, got %s", gotPath)
+			}
+		})
+	}
+}
+
+func TestListsShowJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(showTestList())
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"lists", "show", "5", "--format", "json", "--server", server.URL})
+	if exitCode != 0 || stderr != "" {
+		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
+	}
+
+	var got lists.List
+	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+		t.Fatalf("expected valid JSON, got %q: %v", stdout, err)
+	}
+	if got.ID != 5 || got.Name != "Best Books" || got.Description == nil || *got.Description != "The very best" {
+		t.Fatalf("expected complete list JSON, got %#v", got)
+	}
+}
+
+func TestListsShowResolvesName(t *testing.T) {
+	var gotQuery, gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/lists" {
+			gotQuery = r.URL.Query().Get("q")
+			_ = json.NewEncoder(w).Encode([]lists.List{{ID: 4, Name: "Best Books 2025"}, {ID: 5, Name: "Best Books"}})
+			return
+		}
+		gotPath = r.URL.Path
+		_ = json.NewEncoder(w).Encode(showTestList())
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"lists", "show", "--server", server.URL, "best books"})
+	if exitCode != 0 || stderr != "" {
+		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
+	}
+	if gotQuery != "best books" || gotPath != "/api/lists/5" {
+		t.Fatalf("expected name lookup then GET /api/lists/5, got query %q path %q", gotQuery, gotPath)
+	}
+	if !strings.Contains(stdout, "Best Books") {
+		t.Fatalf("expected list output, got %q", stdout)
+	}
+}
+
+func TestListsShowReportsUnknownList(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/lists" {
+			_ = json.NewEncoder(w).Encode([]lists.List{})
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"code":"list_not_found","message":"list not found"}}`))
+	}))
+	defer server.Close()
+
+	tests := []struct {
+		name     string
+		ref      string
+		expected string
+	}{
+		{name: "unknown ID", ref: "999", expected: "show list: server returned 404 Not Found: list not found"},
+		{name: "unknown name", ref: "Missing", expected: "list not found: Missing"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			exitCode, stdout, stderr := runCLI([]string{"lists", "show", "--server", server.URL, test.ref})
+			if exitCode != 1 || stdout != "" || !strings.Contains(stderr, test.expected) {
+				t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
+			}
+		})
+	}
+}
+
+func TestListsShowRequiresExactlyOneReference(t *testing.T) {
+	for _, args := range [][]string{{"lists", "show"}, {"lists", "show", "1", "2"}} {
+		exitCode, stdout, stderr := runCLI(args)
+		if exitCode != 2 || stdout != "" || !strings.Contains(stderr, "lists show requires exactly one name or ID") {
+			t.Fatalf("unexpected result for %v: exit=%d stdout=%q stderr=%q", args, exitCode, stdout, stderr)
+		}
+	}
+}
+
+func showTestList() lists.List {
+	return lists.List{
+		ID:          5,
+		Name:        "Best Books",
+		Description: new("The very best"),
+		CreatedAt:   time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+		UpdatedAt:   time.Date(2026, 1, 3, 3, 4, 5, 0, time.UTC),
 	}
 }
 

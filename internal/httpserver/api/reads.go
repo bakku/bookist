@@ -21,6 +21,21 @@ func (s *Server) handleAPIListReads(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+func (s *Server) handleAPIGetRead(w http.ResponseWriter, r *http.Request) {
+	id, ok := parsePathID(w, r, "id", "read")
+	if !ok {
+		return
+	}
+
+	result, err := s.reads.GetByID(r.Context(), id)
+	if err != nil {
+		s.writeError(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
 func (s *Server) handleAPICreateRead(w http.ResponseWriter, r *http.Request) {
 	bookID, ok := parsePathID(w, r, "id", "book")
 	if !ok {
