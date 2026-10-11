@@ -145,6 +145,23 @@ func TestSQLiteRepositoryCreateWithNoAuthorIDsPersistsBookOnly(t *testing.T) {
 	testsupport.AssertBookAuthors(t, db, created.ID)
 }
 
+func TestSQLiteRepositoryCreateReturnsErrAuthorNotFoundForMissingAuthor(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	authorID := testsupport.InsertAuthorRow(t, db, "Frank Herbert")
+
+	_, err := repository.Create(context.Background(), books.CreateBookRequest{
+		Title:     "Dune",
+		AuthorIDs: []int64{authorID, 999999},
+	})
+	if !errors.Is(err, books.ErrAuthorNotFound) {
+		t.Fatalf("expected ErrAuthorNotFound, got %v", err)
+	}
+
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM book_authors`)
+}
+
 // ── GetByID ───────────────────────────────────────────────────────────────────
 
 func TestSQLiteRepositoryGetByIDReturnsPersistedBook(t *testing.T) {
@@ -308,6 +325,25 @@ func TestSQLiteRepositoryUpdateRollsBackBookAndRelationshipsAfterAuthorInsertFai
 		t.Fatalf("expected original relationship rollback, got id=%d created_at=%q updated_at=%q", relationshipID, relationshipCreatedAt, relationshipUpdatedAt)
 	}
 	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM book_authors WHERE book_id = ? AND author_id = ?`, bookID, replacementAuthorID)
+}
+
+func TestSQLiteRepositoryUpdateReturnsErrAuthorNotFoundForMissingAuthor(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	authorID := testsupport.InsertAuthorRow(t, db, "Frank Herbert")
+	testsupport.InsertBookAuthorRow(t, db, bookID, authorID)
+
+	_, err := repository.Update(context.Background(), bookID, books.UpdateBookRequest{
+		Title:     updateValueOf("Dune Messiah"),
+		AuthorIDs: updateValueOf([]int64{999999}),
+	})
+	if !errors.Is(err, books.ErrAuthorNotFound) {
+		t.Fatalf("expected ErrAuthorNotFound, got %v", err)
+	}
+
+	testsupport.AssertBookRow(t, db, bookID, "Dune", nil)
+	testsupport.AssertBookAuthors(t, db, bookID, authorID)
 }
 
 func optionalNull[T any]() optional.Value[T] {

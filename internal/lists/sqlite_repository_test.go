@@ -5,10 +5,14 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	"bakku.dev/bookist/internal/lists"
 	"bakku.dev/bookist/internal/optional"
 	"bakku.dev/bookist/internal/testsupport"
+
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 // ── Create ────────────────────────────────────────────────────────────────────
@@ -58,6 +62,30 @@ func TestSQLiteRepositoryCreateWithNilDescription(t *testing.T) {
 	}
 }
 
+func TestSQLiteRepositoryCreateReturnsErrNameConflict(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+	testsupport.InsertListRow(t, db, "Favorites")
+
+	_, err := repository.Create(ctx, lists.CreateListRequest{Name: "favorites"})
+	if !errors.Is(err, lists.ErrNameConflict) {
+		t.Fatalf("expected ErrNameConflict, got %v", err)
+	}
+
+	testsupport.AssertSQLCount(t, db, 1, `SELECT COUNT(*) FROM lists`)
+}
+
+func TestSQLiteRepositoryCreateLeavesConstraintLookalikeUnexpected(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+	createAbortTrigger(t, db, "INSERT ON lists", "UNIQUE constraint failed")
+
+	_, err := repository.Create(ctx, lists.CreateListRequest{Name: "Favorites"})
+	assertTriggerError(t, err)
+}
+
 // ── Update ────────────────────────────────────────────────────────────────────
 
 func TestSQLiteRepositoryUpdateClearsDescriptionAndPreservesOtherFields(t *testing.T) {
@@ -104,6 +132,19 @@ func TestSQLiteRepositoryUpdateMapsErrors(t *testing.T) {
 	if !errors.Is(err, lists.ErrListNotFound) {
 		t.Fatalf("expected ErrListNotFound, got %v", err)
 	}
+}
+
+func TestSQLiteRepositoryUpdateLeavesConstraintLookalikeUnexpected(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+	id := testsupport.InsertListRow(t, db, "Favorites")
+	createAbortTrigger(t, db, "UPDATE ON lists", "UNIQUE constraint failed")
+
+	_, err := repository.Update(ctx, id, lists.UpdateListRequest{
+		Name: optional.Value[string]{Present: true, Value: new("Changed")},
+	})
+	assertTriggerError(t, err)
 }
 
 // ── List ──────────────────────────────────────────────────────────────────────
@@ -292,6 +333,61 @@ func TestSQLiteRepositoryAddBookToListReturnsErrBookNotFound(t *testing.T) {
 	}
 }
 
+func TestSQLiteRepositoryAddBookToListReturnsListLookupParseErrorUnchanged(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+
+	listID := testsupport.InsertListRow(t, db, "Favorites")
+	if _, err := db.Exec(`UPDATE lists SET created_at = 'invalid' WHERE id = ?`, listID); err != nil {
+		t.Fatal(err)
+	}
+
+	err := repository.AddBookToList(ctx, listID, 999999)
+	var parseErr *time.ParseError
+	if !errors.As(err, &parseErr) {
+		t.Fatalf("expected lookup parse error, got %v", err)
+	}
+
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM book_lists`)
+}
+
+func TestSQLiteRepositoryAddBookToListReturnsListLookupDatabaseErrorUnchanged(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+
+	listID := testsupport.InsertListRow(t, db, "Favorites")
+	if _, err := db.Exec(`ALTER TABLE lists RENAME COLUMN description TO unavailable_description`); err != nil {
+		t.Fatal(err)
+	}
+
+	err := repository.AddBookToList(ctx, listID, 999999)
+	var sqliteErr *sqlite.Error
+	if !errors.As(err, &sqliteErr) || sqliteErr.Code() != sqlite3.SQLITE_ERROR {
+		t.Fatalf("expected lookup database error, got %v", err)
+	}
+
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM book_lists`)
+}
+
+func TestSQLiteRepositoryAddBookToListLeavesConstraintLookalikesUnexpected(t *testing.T) {
+	for _, message := range []string{"UNIQUE constraint failed", "FOREIGN KEY constraint failed"} {
+		t.Run(message, func(t *testing.T) {
+			ctx := context.Background()
+			db := testsupport.OpenMigratedDB(t)
+			repository := lists.NewSQLiteRepository(db)
+
+			listID := testsupport.InsertListRow(t, db, "Favorites")
+			bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+			createAbortTrigger(t, db, "INSERT ON book_lists", message)
+
+			err := repository.AddBookToList(ctx, listID, bookID)
+			assertTriggerError(t, err)
+		})
+	}
+}
+
 // ── RemoveBookFromList ────────────────────────────────────────────────────────
 
 func TestSQLiteRepositoryRemoveBookFromListRemovesExactMembershipOnly(t *testing.T) {
@@ -365,5 +461,24 @@ func TestSQLiteRepositoryRemoveBookFromListClassifiesMissingRows(t *testing.T) {
 				t.Fatalf("expected %v, got %v", tt.wantError, err)
 			}
 		})
+	}
+}
+
+// createAbortTrigger makes the given statement fail with constraint-like text
+// but a trigger error code, so translations must not rely on the message.
+func createAbortTrigger(t *testing.T, db *sql.DB, event, message string) {
+	t.Helper()
+
+	if _, err := db.Exec(`CREATE TRIGGER blocked BEFORE ` + event + ` BEGIN SELECT RAISE(ABORT, '` + message + `'); END`); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertTriggerError(t *testing.T, err error) {
+	t.Helper()
+
+	var sqliteErr *sqlite.Error
+	if !errors.As(err, &sqliteErr) || sqliteErr.Code() != sqlite3.SQLITE_CONSTRAINT_TRIGGER {
+		t.Fatalf("expected unchanged trigger error, got %v", err)
 	}
 }

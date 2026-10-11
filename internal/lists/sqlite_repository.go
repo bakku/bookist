@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"bakku.dev/bookist/internal/database"
 )
 
 type SQLiteRepository struct {
@@ -33,7 +35,7 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateListRequest) 
 	`, input.Name, description, createdAt, updatedAt)
 
 	list, err := scanList(row)
-	if err != nil && isUniqueViolation(err) {
+	if database.IsUniqueViolation(err) {
 		return List{}, ErrNameConflict
 	}
 	return list, err
@@ -59,7 +61,7 @@ func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateLis
 	`, input.Name.Present, name, input.Description.Present, description, time.Now().UTC().Format(time.RFC3339), id)
 
 	list, err := scanList(row)
-	if err != nil && isUniqueViolation(err) {
+	if database.IsUniqueViolation(err) {
 		return List{}, ErrNameConflict
 	}
 	if errors.Is(err, sql.ErrNoRows) {
@@ -158,25 +160,21 @@ func (r *SQLiteRepository) AddBookToList(ctx context.Context, listID, bookID int
 		VALUES (?, ?, ?, ?)
 	`, listID, bookID, now, now)
 
-	if err != nil {
-		if isFKViolation(err) {
-			list, listErr := r.GetByID(ctx, listID)
-
-			if listErr != nil {
-				return ErrListNotFound
-			}
-			_ = list
-			return ErrBookNotFound
+	if database.IsForeignKeyViolation(err) {
+		// Distinguish the missing parent without hiding lookup failures.
+		_, listErr := r.GetByID(ctx, listID)
+		if listErr != nil {
+			return listErr
 		}
 
-		if isUniqueViolation(err) {
-			return ErrBookAlreadyInList
-		}
-
-		return err
+		return ErrBookNotFound
 	}
 
-	return nil
+	if database.IsUniqueViolation(err) {
+		return ErrBookAlreadyInList
+	}
+
+	return err
 }
 
 func (r *SQLiteRepository) RemoveBookFromList(ctx context.Context, listID, bookID int64) error {
@@ -250,28 +248,4 @@ func scanList(scanner listScanner) (List, error) {
 	}
 
 	return list, nil
-}
-
-func isFKViolation(err error) bool {
-	return err != nil && (contains(err.Error(), "FOREIGN KEY constraint failed"))
-}
-
-func isUniqueViolation(err error) bool {
-	return err != nil && (contains(err.Error(), "UNIQUE constraint failed"))
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && (s[0] == substr[0] && containsAt(s, substr, 0) || contains(s[1:], substr)))
-}
-
-func containsAt(s, substr string, start int) bool {
-	if start+len(substr) > len(s) {
-		return false
-	}
-	for i := 0; i < len(substr); i++ {
-		if s[start+i] != substr[i] {
-			return false
-		}
-	}
-	return true
 }

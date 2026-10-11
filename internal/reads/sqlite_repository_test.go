@@ -12,6 +12,9 @@ import (
 	"bakku.dev/bookist/internal/optional"
 	"bakku.dev/bookist/internal/reads"
 	"bakku.dev/bookist/internal/testsupport"
+
+	"modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 )
 
 // ── Create ────────────────────────────────────────────────────────────────────
@@ -54,6 +57,65 @@ func TestSQLiteRepositoryCreateReturnsBookNotFound(t *testing.T) {
 	_, err := repository.Create(context.Background(), 999999, reads.CreateReadRequest{})
 	if !errors.Is(err, reads.ErrBookNotFound) {
 		t.Fatalf("expected ErrBookNotFound, got %v", err)
+	}
+}
+
+func TestSQLiteRepositoryCreateTranslatesNamedCheckConstraints(t *testing.T) {
+	tests := []struct {
+		name  string
+		input reads.CreateReadRequest
+		want  error
+	}{
+		{name: "started_at format", input: reads.CreateReadRequest{StartedAt: new("not-a-date")}, want: reads.ErrInvalidStartedAt},
+		{name: "finished_at format", input: reads.CreateReadRequest{FinishedAt: new("not-a-date")}, want: reads.ErrInvalidFinishedAt},
+		{name: "abandoned_at format", input: reads.CreateReadRequest{AbandonedAt: new("not-a-date")}, want: reads.ErrInvalidAbandonedAt},
+		{name: "rating range and increment", input: reads.CreateReadRequest{Rating: new(4.2)}, want: reads.ErrInvalidRating},
+		{
+			name:  "terminal dates are mutually exclusive",
+			input: reads.CreateReadRequest{FinishedAt: new("2026-02-02"), AbandonedAt: new("2026-02-03")},
+			want:  reads.ErrConflictingTerminalDates,
+		},
+		{
+			name:  "finished_at is not before started_at",
+			input: reads.CreateReadRequest{StartedAt: new("2026-02-02"), FinishedAt: new("2026-02-01")},
+			want:  reads.ErrFinishedBeforeStarted,
+		},
+		{
+			name:  "abandoned_at is not before started_at",
+			input: reads.CreateReadRequest{StartedAt: new("2026-02-02"), AbandonedAt: new("2026-02-01")},
+			want:  reads.ErrAbandonedBeforeStarted,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := testsupport.OpenMigratedDB(t)
+			bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+
+			_, err := reads.NewSQLiteRepository(db).Create(context.Background(), bookID, tt.input)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("expected %v, got %v", tt.want, err)
+			}
+
+			testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM reads`)
+		})
+	}
+}
+
+func TestSQLiteRepositoryCreateLeavesConstraintLookalikeUnexpected(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	if _, err := db.Exec(`CREATE TRIGGER blocked BEFORE INSERT ON reads BEGIN SELECT RAISE(ABORT, 'FOREIGN KEY constraint failed'); END`); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := reads.NewSQLiteRepository(db).Create(context.Background(), bookID, reads.CreateReadRequest{})
+	var sqliteErr *sqlite.Error
+	if !errors.As(err, &sqliteErr) || sqliteErr.Code() != sqlite3.SQLITE_CONSTRAINT_TRIGGER {
+		t.Fatalf("expected unchanged trigger error, got %v", err)
+	}
+	if errors.Is(err, reads.ErrBookNotFound) {
+		t.Fatalf("unexpectedly translated %v to ErrBookNotFound", err)
 	}
 }
 
