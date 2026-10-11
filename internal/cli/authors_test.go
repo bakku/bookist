@@ -70,7 +70,7 @@ func TestAuthorsListTableFormats(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			args := []string{"authors", "ls", "--server", server.URL}
 			if test.format != "" {
-				args = append(args, "--format", test.format)
+				args = append(args, "--output", test.format)
 			}
 
 			exitCode, stdout, stderr := runCLI(args)
@@ -93,7 +93,7 @@ func TestAuthorsListJSON(t *testing.T) {
 	}))
 	defer server.Close()
 
-	exitCode, stdout, stderr := runCLI([]string{"authors", "ls", "--server", server.URL, "--format", "json"})
+	exitCode, stdout, stderr := runCLI([]string{"authors", "ls", "--server", server.URL, "--output", "json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
 	}
@@ -153,7 +153,7 @@ func TestAuthorsShowByID(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			args := []string{"authors", "show", "6", "--server", server.URL}
 			if test.format != "" {
-				args = append(args, "--format", test.format)
+				args = append(args, "--output", test.format)
 			}
 
 			exitCode, stdout, stderr := runCLI(args)
@@ -180,7 +180,7 @@ func TestAuthorsShowJSON(t *testing.T) {
 	}))
 	defer server.Close()
 
-	exitCode, stdout, stderr := runCLI([]string{"authors", "show", "6", "--format", "json", "--server", server.URL})
+	exitCode, stdout, stderr := runCLI([]string{"authors", "show", "6", "--output", "json", "--server", server.URL})
 	if exitCode != 0 || stderr != "" {
 		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
 	}

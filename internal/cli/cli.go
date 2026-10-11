@@ -1,8 +1,11 @@
 package cli
 
 import (
+	"flag"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 
 	"bakku.dev/bookist/internal/client"
 )
@@ -12,7 +15,12 @@ const (
 	defaultDBPath    = "bookist.db"
 	defaultDataDir   = "./data"
 	defaultServerURL = "http://localhost:8080"
+
+	serverEnvVar = "BOOKIST_SERVER"
 )
+
+// lookupEnv reads environment variables for flag defaults. Tests replace it.
+var lookupEnv = os.LookupEnv
 
 func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 	if len(args) == 0 {
@@ -55,6 +63,17 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 		printRootHelp(stderr)
 		return 2
 	}
+}
+
+// serverFlag registers --server. Its default is $BOOKIST_SERVER when set and
+// non-blank, otherwise defaultServerURL.
+func serverFlag(flags *flag.FlagSet) *string {
+	defaultURL := defaultServerURL
+	if value, ok := lookupEnv(serverEnvVar); ok && strings.TrimSpace(value) != "" {
+		defaultURL = strings.TrimSpace(value)
+	}
+
+	return flags.String("server", defaultURL, "Bookist server URL (env: "+serverEnvVar+")")
 }
 
 // newClient returns an API client for serverURL. It reports an invalid URL to

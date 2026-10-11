@@ -40,7 +40,7 @@ func TestListsListTableFormats(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			args := []string{"lists", "ls", "--server", server.URL}
 			if test.format != "" {
-				args = append(args, "--format", test.format)
+				args = append(args, "--output", test.format)
 			}
 
 			exitCode, stdout, stderr := runCLI(args)
@@ -67,7 +67,7 @@ func TestListsListJSONPreservesNullableDescription(t *testing.T) {
 	}))
 	defer server.Close()
 
-	exitCode, stdout, stderr := runCLI([]string{"lists", "ls", "--server", server.URL, "--format", "json"})
+	exitCode, stdout, stderr := runCLI([]string{"lists", "ls", "--server", server.URL, "--output", "json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
 	}
@@ -133,7 +133,7 @@ func TestListsShowByID(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			args := []string{"lists", "show", "5", "--server", server.URL}
 			if test.format != "" {
-				args = append(args, "--format", test.format)
+				args = append(args, "--output", test.format)
 			}
 
 			exitCode, stdout, stderr := runCLI(args)
@@ -160,7 +160,7 @@ func TestListsShowJSON(t *testing.T) {
 	}))
 	defer server.Close()
 
-	exitCode, stdout, stderr := runCLI([]string{"lists", "show", "5", "--format", "json", "--server", server.URL})
+	exitCode, stdout, stderr := runCLI([]string{"lists", "show", "5", "--output", "json", "--server", server.URL})
 	if exitCode != 0 || stderr != "" {
 		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
 	}

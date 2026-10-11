@@ -53,7 +53,7 @@ func TestReadsListResolvesBookAndPrintsTableFormats(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			args := []string{"reads", "ls", "--book", "Dune", "--server", server.URL}
 			if test.format != "" {
-				args = append(args, "--format", test.format)
+				args = append(args, "--output", test.format)
 			}
 			exitCode, stdout, stderr := runCLI(args)
 			if exitCode != 0 || stderr != "" || stdout != test.expected {
@@ -76,7 +76,7 @@ func TestReadsListJSONUsesFullReadRepresentation(t *testing.T) {
 
 	defer server.Close()
 
-	exitCode, stdout, stderr := runCLI([]string{"reads", "ls", "--book", "1", "--server", server.URL, "--format", "json"})
+	exitCode, stdout, stderr := runCLI([]string{"reads", "ls", "--book", "1", "--server", server.URL, "--output", "json"})
 
 	if exitCode != 0 || stderr != "" {
 		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
@@ -117,7 +117,7 @@ func TestReadsShowByID(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			args := []string{"reads", "show", "9", "--server", server.URL}
 			if test.format != "" {
-				args = append(args, "--format", test.format)
+				args = append(args, "--output", test.format)
 			}
 
 			exitCode, stdout, stderr := runCLI(args)
@@ -140,7 +140,7 @@ func TestReadsShowJSON(t *testing.T) {
 	}))
 	defer server.Close()
 
-	exitCode, stdout, stderr := runCLI([]string{"reads", "show", "9", "--format", "json", "--server", server.URL})
+	exitCode, stdout, stderr := runCLI([]string{"reads", "show", "9", "--output", "json", "--server", server.URL})
 	if exitCode != 0 || stderr != "" {
 		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
 	}

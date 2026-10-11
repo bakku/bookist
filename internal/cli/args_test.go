@@ -52,13 +52,13 @@ func TestFlagsAfterPositionalsAreParsed(t *testing.T) {
 	}{
 		{name: "books rm by ID", args: []string{"books", "rm", "7"}, expected: "DELETE /api/books/7"},
 		{name: "books rm by title", args: []string{"books", "rm", "Dune"}, expected: "DELETE /api/books/7"},
-		{name: "books show", args: []string{"books", "show", "Dune", "--format", "json"}, expected: "GET /api/books/7"},
+		{name: "books show", args: []string{"books", "show", "Dune", "--output", "json"}, expected: "GET /api/books/7"},
 		{name: "authors rm", args: []string{"authors", "rm", "6"}, expected: "DELETE /api/authors/6"},
-		{name: "authors show", args: []string{"authors", "show", "6", "--format", "json"}, expected: "GET /api/authors/6"},
+		{name: "authors show", args: []string{"authors", "show", "6", "--output", "json"}, expected: "GET /api/authors/6"},
 		{name: "lists rm", args: []string{"lists", "rm", "5"}, expected: "DELETE /api/lists/5"},
-		{name: "lists show", args: []string{"lists", "show", "5", "--format", "json"}, expected: "GET /api/lists/5"},
+		{name: "lists show", args: []string{"lists", "show", "5", "--output", "json"}, expected: "GET /api/lists/5"},
 		{name: "reads rm", args: []string{"reads", "rm", "9"}, expected: "DELETE /api/reads/9"},
-		{name: "reads show", args: []string{"reads", "show", "9", "--format", "json"}, expected: "GET /api/reads/9"},
+		{name: "reads show", args: []string{"reads", "show", "9", "--output", "json"}, expected: "GET /api/reads/9"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

@@ -23,7 +23,12 @@ import (
 func TestBooksListTableFormats(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]books.Book{
-			{ID: 1, Title: "Dune", ISBN: new("9780441172719")},
+			{
+				ID:      1,
+				Title:   "Dune",
+				ISBN:    new("9780441172719"),
+				Authors: []authors.Author{{ID: 10, Name: "Frank Herbert"}, {ID: 11, Name: "Brian Herbert"}},
+			},
 			{ID: 2, Title: "Kindred", ISBN: nil},
 		})
 	}))
@@ -34,16 +39,16 @@ func TestBooksListTableFormats(t *testing.T) {
 		format   string
 		expected string
 	}{
-		{name: "default pretty", expected: "ID  TITLE    ISBN\n1   Dune     9780441172719\n2   Kindred\n"},
-		{name: "explicit TSV", format: "tsv", expected: "1\tDune\t9780441172719\n2\tKindred\t\n"},
-		{name: "pretty", format: "pretty", expected: "ID  TITLE    ISBN\n1   Dune     9780441172719\n2   Kindred\n"},
+		{name: "default pretty", expected: "ID  TITLE    AUTHORS                       ISBN\n1   Dune     Frank Herbert, Brian Herbert  9780441172719\n2   Kindred\n"},
+		{name: "explicit TSV", format: "tsv", expected: "1\tDune\tFrank Herbert, Brian Herbert\t9780441172719\n2\tKindred\t\t\n"},
+		{name: "pretty", format: "pretty", expected: "ID  TITLE    AUTHORS                       ISBN\n1   Dune     Frank Herbert, Brian Herbert  9780441172719\n2   Kindred\n"},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			args := []string{"books", "ls", "--server", server.URL}
 			if test.format != "" {
-				args = append(args, "--format", test.format)
+				args = append(args, "--output", test.format)
 			}
 
 			exitCode, stdout, stderr := runCLI(args)
@@ -80,7 +85,7 @@ func TestBooksListJSONPreservesNullableFields(t *testing.T) {
 	}))
 	defer server.Close()
 
-	exitCode, stdout, stderr := runCLI([]string{"books", "ls", "--server", server.URL, "--format", "json"})
+	exitCode, stdout, stderr := runCLI([]string{"books", "ls", "--server", server.URL, "--output", "json"})
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
 	}
@@ -192,7 +197,7 @@ func TestBooksShowByID(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			args := []string{"books", "show", "--server", server.URL, "12"}
 			if test.format != "" {
-				args = append(args, "--format", test.format)
+				args = append(args, "--output", test.format)
 			}
 
 			exitCode, stdout, stderr := runCLI(args)
@@ -219,7 +224,7 @@ func TestBooksShowJSON(t *testing.T) {
 	}))
 	defer server.Close()
 
-	exitCode, stdout, stderr := runCLI([]string{"books", "show", "12", "--format", "json", "--server", server.URL})
+	exitCode, stdout, stderr := runCLI([]string{"books", "show", "12", "--output", "json", "--server", server.URL})
 	if exitCode != 0 || stderr != "" {
 		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
 	}
@@ -243,7 +248,7 @@ func TestBooksShowOmitsUnsetFields(t *testing.T) {
 	}))
 	defer server.Close()
 
-	exitCode, stdout, stderr := runCLI([]string{"books", "show", "3", "--format", "tsv", "--server", server.URL})
+	exitCode, stdout, stderr := runCLI([]string{"books", "show", "3", "--output", "tsv", "--server", server.URL})
 	if exitCode != 0 || stderr != "" {
 		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
 	}

@@ -56,7 +56,7 @@ func TestReferenceHelpDocumentsExplicitIDsAndAuthorCreation(t *testing.T) {
 	}{
 		{name: "books rm", args: []string{"books", "rm", "--help"}, expected: []string{"write id:N (for example id:12) to always mean an ID."}},
 		{name: "authors show", args: []string{"authors", "show", "--help"}, expected: []string{"authors show id:6", "write id:N"}},
-		{name: "lists add-book", args: []string{"lists", "add-book", "--help"}, expected: []string{"--list string    List name, ID or id:N", "--book string    Book title, ID or id:N"}},
+		{name: "lists add-book", args: []string{"lists", "add-book", "--help"}, expected: []string{"--list string", "List name, ID or id:N", "--book string", "Book title, ID or id:N"}},
 		{name: "books add", args: []string{"books", "add", "--help"}, expected: []string{"--create-authors", "unless --create-authors is given", "write id:N"}},
 	}
 
@@ -86,25 +86,25 @@ func TestParentHelpShowsOnlyImmediateCommands(t *testing.T) {
 		{
 			name:       "books",
 			args:       []string{"books", "--help"},
-			expected:   []string{"bookist books - Manage books", "ls    List books", "add   Add a book", "edit  Edit a book", "rm    Remove a book"},
+			expected:   []string{"bookist books - Manage books", "ls, list  List books", "add       Add a book", "edit      Edit a book", "rm        Remove a book"},
 			unexpected: []string{"Manage authors", "add-book", "--title"},
 		},
 		{
 			name:       "authors",
 			args:       []string{"authors", "--help"},
-			expected:   []string{"bookist authors - Manage authors", "ls    List authors", "add   Add an author", "edit  Edit an author", "rm    Remove an author"},
+			expected:   []string{"bookist authors - Manage authors", "ls, list  List authors", "add       Add an author", "edit      Edit an author", "rm        Remove an author"},
 			unexpected: []string{"Manage books", "add-book", "--name"},
 		},
 		{
 			name:       "lists",
 			args:       []string{"lists", "--help"},
-			expected:   []string{"bookist lists - Manage book lists", "ls        List book lists", "add       Add a book list", "add-book  Add a book to a list", "rm        Remove a book list", "rm-book   Remove a book from a list"},
+			expected:   []string{"bookist lists - Manage book lists", "ls, list  List book lists", "add       Add a book list", "add-book  Add a book to a list", "rm        Remove a book list", "rm-book   Remove a book from a list"},
 			unexpected: []string{"Manage authors", "--description", "--book"},
 		},
 		{
 			name:       "reads",
 			args:       []string{"reads", "--help"},
-			expected:   []string{"bookist reads - Manage book reads", "ls    List reads for a book", "add   Record a read for a book", "edit  Edit a read", "rm    Remove a read"},
+			expected:   []string{"bookist reads - Manage book reads", "ls, list  List reads for a book", "add       Record a read for a book", "edit      Edit a read", "rm        Remove a read"},
 			unexpected: []string{"Manage authors", "--rating", "--book"},
 		},
 	}
@@ -141,25 +141,25 @@ func TestLeafHelpShowsCommandOptionsAndExitsSuccessfully(t *testing.T) {
 	}{
 		{name: "serve", args: []string{"serve", "--help"}, expected: []string{"bookist serve - Start the Bookist server", "--addr string", "--db string", "--data-dir string", "(default: ./data)"}},
 		{name: "migrate", args: []string{"migrate", "--help"}, expected: []string{"bookist migrate - Run database migrations", "--db string"}},
-		{name: "books ls", args: []string{"books", "ls", "--help"}, expected: []string{"bookist books ls - List books", "--format string", "Output format (tsv|pretty|json) (default: pretty)", "--list string", "--query string", "--server string"}},
-		{name: "books show", args: []string{"books", "show", "--help"}, expected: []string{"bookist books show - Show a book", "<title-or-ID> [options]", "--format string", "--server string"}},
+		{name: "books ls", args: []string{"books", "ls", "--help"}, expected: []string{"bookist books ls - List books", "--output, -o string", "Output format (tsv|pretty|json) (default: pretty)", "--list string", "--query string", "--server string"}},
+		{name: "books show", args: []string{"books", "show", "--help"}, expected: []string{"bookist books show - Show a book", "<title-or-ID> [options]", "--output, -o string", "--server string"}},
 		{name: "books add", args: []string{"books", "add", "-h"}, expected: []string{"bookist books add - Add a book", "--author string", "--create-authors", "--title string", "--cover string", "--condition string", "--series-position float"}},
 		{name: "books add long single dash", args: []string{"books", "add", "-help"}, expected: []string{"bookist books add - Add a book", "--author string", "--title string"}},
 		{name: "books rm", args: []string{"books", "rm", "--help"}, expected: []string{"bookist books rm - Remove a book", "<title-or-ID>", "--server string"}},
 		{name: "books edit", args: []string{"books", "edit", "--help"}, expected: []string{"bookist books edit - Edit a book", "<title-or-ID> [options]", "--author string", "--clear string", "--cover string"}},
-		{name: "authors ls", args: []string{"authors", "ls", "--help"}, expected: []string{"bookist authors ls - List authors", "--format string", "Output format (tsv|pretty|json) (default: pretty)", "--query string", "--server string"}},
-		{name: "authors show", args: []string{"authors", "show", "--help"}, expected: []string{"bookist authors show - Show an author", "<name-or-ID> [options]", "--format string", "--server string"}},
+		{name: "authors ls", args: []string{"authors", "ls", "--help"}, expected: []string{"bookist authors ls - List authors", "--output, -o string", "Output format (tsv|pretty|json) (default: pretty)", "--query string", "--server string"}},
+		{name: "authors show", args: []string{"authors", "show", "--help"}, expected: []string{"bookist authors show - Show an author", "<name-or-ID> [options]", "--output, -o string", "--server string"}},
 		{name: "authors add", args: []string{"authors", "add", "--help"}, expected: []string{"bookist authors add - Add an author", "--name string"}},
 		{name: "authors rm", args: []string{"authors", "rm", "--help"}, expected: []string{"bookist authors rm - Remove an author", "<name-or-ID>"}},
 		{name: "authors edit", args: []string{"authors", "edit", "--help"}, expected: []string{"bookist authors edit - Edit an author", "<name-or-ID> [options]", "--name string"}},
-		{name: "lists ls", args: []string{"lists", "ls", "--help"}, expected: []string{"bookist lists ls - List book lists", "--format string", "Output format (tsv|pretty|json) (default: pretty)", "--query string", "--server string"}},
-		{name: "lists show", args: []string{"lists", "show", "--help"}, expected: []string{"bookist lists show - Show a book list", "<name-or-ID> [options]", "--format string", "--server string"}},
+		{name: "lists ls", args: []string{"lists", "ls", "--help"}, expected: []string{"bookist lists ls - List book lists", "--output, -o string", "Output format (tsv|pretty|json) (default: pretty)", "--query string", "--server string"}},
+		{name: "lists show", args: []string{"lists", "show", "--help"}, expected: []string{"bookist lists show - Show a book list", "<name-or-ID> [options]", "--output, -o string", "--server string"}},
 		{name: "lists add-book", args: []string{"lists", "add-book", "--help"}, expected: []string{"bookist lists add-book - Add a book to a list", "--book string", "--list string"}},
 		{name: "lists rm", args: []string{"lists", "rm", "--help"}, expected: []string{"bookist lists rm - Remove a book list", "<name-or-ID>"}},
 		{name: "lists edit", args: []string{"lists", "edit", "--help"}, expected: []string{"bookist lists edit - Edit a book list", "<name-or-ID> [options]", "--clear string", "--description string"}},
 		{name: "lists rm-book", args: []string{"lists", "rm-book", "--help"}, expected: []string{"bookist lists rm-book - Remove a book from a list", "--book string", "--list string"}},
-		{name: "reads ls", args: []string{"reads", "ls", "--help"}, expected: []string{"bookist reads ls - List reads for a book", "--book string", "--format string"}},
-		{name: "reads show", args: []string{"reads", "show", "--help"}, expected: []string{"bookist reads show - Show a read", "<read-ID> [options]", "--format string", "--server string"}},
+		{name: "reads ls", args: []string{"reads", "ls", "--help"}, expected: []string{"bookist reads ls - List reads for a book", "--book string", "--output, -o string"}},
+		{name: "reads show", args: []string{"reads", "show", "--help"}, expected: []string{"bookist reads show - Show a read", "<read-ID> [options]", "--output, -o string", "--server string"}},
 		{name: "reads add", args: []string{"reads", "add", "--help"}, expected: []string{"bookist reads add - Record a read for a book", "--abandoned-at string", "--book string", "--rating float"}},
 		{name: "reads rm", args: []string{"reads", "rm", "--help"}, expected: []string{"bookist reads rm - Remove a read", "<read-ID>"}},
 		{name: "reads edit", args: []string{"reads", "edit", "--help"}, expected: []string{"bookist reads edit - Edit a read", "<read-ID> [options]", "--clear string", "--rating float"}},
@@ -207,7 +207,7 @@ func TestListCommandsRejectUnsupportedFormat(t *testing.T) {
 			}))
 			defer server.Close()
 
-			exitCode, stdout, stderr := runCLI([]string{resource, "ls", "--server", server.URL, "--format", "xml"})
+			exitCode, stdout, stderr := runCLI([]string{resource, "ls", "--server", server.URL, "--output", "xml"})
 			if exitCode != 2 {
 				t.Fatalf("expected exit code 2, got %d", exitCode)
 			}
@@ -236,7 +236,7 @@ func TestShowCommandsRejectUnsupportedFormat(t *testing.T) {
 			}))
 			defer server.Close()
 
-			exitCode, stdout, stderr := runCLI([]string{resource, "show", "1", "--server", server.URL, "--format", "xml"})
+			exitCode, stdout, stderr := runCLI([]string{resource, "show", "1", "--server", server.URL, "--output", "xml"})
 			if exitCode != 2 {
 				t.Fatalf("expected exit code 2, got %d", exitCode)
 			}
