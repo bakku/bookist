@@ -9,7 +9,7 @@ import (
 func (s *Server) handleAPIListAuthors(w http.ResponseWriter, r *http.Request) {
 	authorList, err := s.authors.Search(r.Context(), r.URL.Query().Get("q"))
 	if err != nil {
-		writeError(w, err)
+		s.writeError(w, r, err)
 		return
 	}
 
@@ -24,7 +24,7 @@ func (s *Server) handleAPICreateAuthor(w http.ResponseWriter, r *http.Request) {
 
 	author, err := s.authors.Create(r.Context(), input)
 	if err != nil {
-		writeError(w, err)
+		s.writeError(w, r, err)
 		return
 	}
 
@@ -44,7 +44,7 @@ func (s *Server) handleAPIUpdateAuthor(w http.ResponseWriter, r *http.Request) {
 
 	author, err := s.authors.Update(r.Context(), id, input)
 	if err != nil {
-		writeError(w, err)
+		s.writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, author)
@@ -57,7 +57,7 @@ func (s *Server) handleAPIDeleteAuthor(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.authors.Delete(r.Context(), id); err != nil {
-		writeError(w, err)
+		s.writeError(w, r, err)
 		return
 	}
 

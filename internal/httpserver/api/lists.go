@@ -12,7 +12,7 @@ var errBookIDRequired = apperr.Invalid("book_id_required", "book_id is required"
 func (s *Server) handleAPIListLists(w http.ResponseWriter, r *http.Request) {
 	listList, err := s.lists.Search(r.Context(), r.URL.Query().Get("q"))
 	if err != nil {
-		writeError(w, err)
+		s.writeError(w, r, err)
 		return
 	}
 
@@ -27,7 +27,7 @@ func (s *Server) handleAPICreateList(w http.ResponseWriter, r *http.Request) {
 
 	list, err := s.lists.Create(r.Context(), input)
 	if err != nil {
-		writeError(w, err)
+		s.writeError(w, r, err)
 		return
 	}
 
@@ -47,7 +47,7 @@ func (s *Server) handleAPIUpdateList(w http.ResponseWriter, r *http.Request) {
 
 	list, err := s.lists.Update(r.Context(), id, input)
 	if err != nil {
-		writeError(w, err)
+		s.writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, list)
@@ -60,7 +60,7 @@ func (s *Server) handleAPIDeleteList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.lists.Delete(r.Context(), id); err != nil {
-		writeError(w, err)
+		s.writeError(w, r, err)
 		return
 	}
 
@@ -75,7 +75,7 @@ func (s *Server) handleAPIListBooksInList(w http.ResponseWriter, r *http.Request
 
 	listBooks, err := s.books.SearchByListID(r.Context(), listID, r.URL.Query().Get("q"))
 	if err != nil {
-		writeError(w, err)
+		s.writeError(w, r, err)
 		return
 	}
 
@@ -94,12 +94,12 @@ func (s *Server) handleAPIAddBookToList(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if input.BookID <= 0 {
-		writeError(w, errBookIDRequired)
+		s.writeError(w, r, errBookIDRequired)
 		return
 	}
 
 	if err := s.lists.AddBookToList(r.Context(), listID, input.BookID); err != nil {
-		writeError(w, err)
+		s.writeError(w, r, err)
 		return
 	}
 
@@ -118,7 +118,7 @@ func (s *Server) handleAPIRemoveBookFromList(w http.ResponseWriter, r *http.Requ
 	}
 
 	if err := s.lists.RemoveBookFromList(r.Context(), listID, bookID); err != nil {
-		writeError(w, err)
+		s.writeError(w, r, err)
 		return
 	}
 

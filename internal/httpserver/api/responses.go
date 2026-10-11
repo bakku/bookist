@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log/slog"
 	"mime"
 	"net/http"
 	"strings"
@@ -42,15 +41,27 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 
 // writeError writes err as a structured JSON error. Errors that are not
-// apperr.Errors are logged and reported as a generic 500 so internal details
-// never reach clients.
-func writeError(w http.ResponseWriter, err error) {
+// apperr.Errors are logged with the request details and reported as a generic
+// 500 so internal details never reach clients.
+func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 	appErr, ok := apperr.As(err)
 	if !ok {
-		slog.Error("api request failed", "error", err)
+		attrs := []any{"method", r.Method, "path", r.URL.Path}
+		for _, name := range []string{"id", "book_id"} {
+			if value := r.PathValue(name); value != "" {
+				attrs = append(attrs, name, value)
+			}
+		}
+		attrs = append(attrs, "error", err)
+		s.logger.ErrorContext(r.Context(), "api request failed", attrs...)
 		appErr = errInternal
 	}
 
+	writeAppError(w, appErr)
+}
+
+// writeAppError writes appErr as a structured JSON error.
+func writeAppError(w http.ResponseWriter, appErr *apperr.Error) {
 	writeJSON(w, statusFor(appErr), errorResponse{Error: errorBody{
 		Code:    appErr.Code,
 		Message: appErr.Message,
@@ -84,7 +95,7 @@ func statusFor(err *apperr.Error) int {
 func decodeJSON(w http.ResponseWriter, r *http.Request, value any, maxBytes int64) bool {
 	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || !strings.EqualFold(mediaType, "application/json") {
-		writeError(w, errUnsupportedMediaType)
+		writeAppError(w, errUnsupportedMediaType)
 		return false
 	}
 
@@ -105,9 +116,9 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, value any, maxBytes int6
 func writeDecodeError(w http.ResponseWriter, err error) bool {
 	var tooLarge *http.MaxBytesError
 	if errors.As(err, &tooLarge) {
-		writeError(w, errBodyTooLarge)
+		writeAppError(w, errBodyTooLarge)
 		return false
 	}
-	writeError(w, errInvalidJSON)
+	writeAppError(w, errInvalidJSON)
 	return false
 }

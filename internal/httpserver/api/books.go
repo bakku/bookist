@@ -11,7 +11,7 @@ const maxCreateBookBodySize = 15 << 20
 func (s *Server) handleAPIListBooks(w http.ResponseWriter, r *http.Request) {
 	bookList, err := s.books.Search(r.Context(), r.URL.Query().Get("q"))
 	if err != nil {
-		writeError(w, err)
+		s.writeError(w, r, err)
 		return
 	}
 
@@ -26,7 +26,7 @@ func (s *Server) handleAPICreateBook(w http.ResponseWriter, r *http.Request) {
 
 	book, err := s.books.Create(r.Context(), input)
 	if err != nil {
-		writeError(w, err)
+		s.writeError(w, r, err)
 		return
 	}
 
@@ -46,7 +46,7 @@ func (s *Server) handleAPIUpdateBook(w http.ResponseWriter, r *http.Request) {
 
 	book, err := s.books.Update(r.Context(), id, input)
 	if err != nil {
-		writeError(w, err)
+		s.writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, book)
@@ -59,7 +59,7 @@ func (s *Server) handleAPIDeleteBook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.books.Delete(r.Context(), id); err != nil {
-		writeError(w, err)
+		s.writeError(w, r, err)
 		return
 	}
 

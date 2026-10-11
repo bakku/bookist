@@ -14,7 +14,7 @@ func (s *Server) handleAPIListReads(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.reads.ListByBookID(r.Context(), bookID)
 	if err != nil {
-		writeError(w, err)
+		s.writeError(w, r, err)
 		return
 	}
 
@@ -34,7 +34,7 @@ func (s *Server) handleAPICreateRead(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.reads.Create(r.Context(), bookID, input)
 	if err != nil {
-		writeError(w, err)
+		s.writeError(w, r, err)
 		return
 	}
 
@@ -54,7 +54,7 @@ func (s *Server) handleAPIUpdateRead(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.reads.Update(r.Context(), id, input)
 	if err != nil {
-		writeError(w, err)
+		s.writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -67,7 +67,7 @@ func (s *Server) handleAPIDeleteRead(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.reads.Delete(r.Context(), id); err != nil {
-		writeError(w, err)
+		s.writeError(w, r, err)
 		return
 	}
 

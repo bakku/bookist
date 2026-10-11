@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -15,14 +16,16 @@ type Server struct {
 	authors *authors.Service
 	lists   *lists.Service
 	reads   *reads.Service
+	logger  *slog.Logger
 }
 
-func New(books *books.Service, authors *authors.Service, lists *lists.Service, reads *reads.Service) *Server {
+func New(books *books.Service, authors *authors.Service, lists *lists.Service, reads *reads.Service, logger *slog.Logger) *Server {
 	return &Server{
 		books:   books,
 		authors: authors,
 		lists:   lists,
 		reads:   reads,
+		logger:  logger,
 	}
 }
 
@@ -69,10 +72,10 @@ func handleAPIFallback(mux *http.ServeMux) http.HandlerFunc {
 
 		if len(allowed) > 0 {
 			w.Header().Set("Allow", strings.Join(allowed, ", "))
-			writeError(w, errMethodNotAllowed)
+			writeAppError(w, errMethodNotAllowed)
 			return
 		}
 
-		writeError(w, errNotFound)
+		writeAppError(w, errNotFound)
 	}
 }

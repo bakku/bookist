@@ -87,6 +87,6 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.templates.BooksIndex.ExecuteTemplate(w, "layout", data); err != nil {
-		http.Error(w, "failed to render page", http.StatusInternalServerError)
+		s.serverError(w, r, err, "failed to render page")
 	}
 }
