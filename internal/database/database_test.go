@@ -1,10 +1,13 @@
 package database_test
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -44,6 +47,35 @@ func TestOpenEnablesForeignKeysOnEveryConnection(t *testing.T) {
 		assertPragma(t, ctx, conn, "busy_timeout", "5000")
 		assertPragma(t, ctx, conn, "journal_mode", "wal")
 	}
+}
+
+// ── Migrations ────────────────────────────────────────────────────────────────
+
+func TestMigrateUpLogsToProvidedLogger(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.Open(ctx, filepath.Join(t.TempDir(), "bookist.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+
+	for range 2 {
+		if err := database.MigrateUp(ctx, db, logger); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, expected := range []string{"applied migration", "00001_initial_tables.sql"} {
+		if !strings.Contains(logs.String(), expected) {
+			t.Errorf("expected logs to contain %q, got %q", expected, logs.String())
+		}
+	}
+	if got := strings.Count(logs.String(), "applied migration"); got != 1 {
+		t.Errorf("expected the migration to be logged once, got %d", got)
+	}
+	testsupport.AssertSQLCount(t, db, 1, "SELECT COUNT(*) FROM goose_db_version WHERE version_id = 1")
 }
 
 // ── Concurrent Writes ─────────────────────────────────────────────────────────
