@@ -3,6 +3,7 @@ package cli_test
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
 	"bakku.dev/bookist/internal/cli"
+	"bakku.dev/bookist/internal/client"
 	"bakku.dev/bookist/internal/lists"
 )
 
@@ -622,12 +624,71 @@ func TestBooksAddLoadsCoverFromURL(t *testing.T) {
 	}
 }
 
-func TestBooksAddDoesNotFollowCoverRedirects(t *testing.T) {
-	targetCalled := false
+func TestBooksAddFollowsCoverRedirects(t *testing.T) {
+	image := []byte("\x89PNG\r\n\x1a\ncover")
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		targetCalled = true
-		_, _ = w.Write([]byte("\x89PNG\r\n\x1a\ncover"))
+		_, _ = w.Write(image)
 	}))
+	defer target.Close()
+
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, target.URL, http.StatusFound)
+	}))
+	defer redirect.Close()
+
+	var posted books.CreateBookRequest
+
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&posted)
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(books.Book{ID: 10, Title: posted.Title})
+	}))
+	defer apiServer.Close()
+
+	exitCode, _, stderr := runCLI([]string{"books", "add", "--title", "Dune", "--cover", redirect.URL, "--server", apiServer.URL})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
+	}
+	if posted.Cover == nil || !bytes.Equal(*posted.Cover, image) {
+		t.Fatalf("expected cover bytes %v, got %#v", image, posted.Cover)
+	}
+}
+
+func TestBooksAddRejectsCoverRedirectToUnsupportedScheme(t *testing.T) {
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "ftp://example.com/cover.png", http.StatusFound)
+	}))
+	defer redirect.Close()
+
+	exitCode, _, stderr := runCLI([]string{"books", "add", "--title", "Dune", "--cover", redirect.URL})
+
+	if exitCode == 0 {
+		t.Fatal("expected redirect to unsupported scheme to fail")
+	}
+	if !strings.Contains(stderr, `unsupported redirect URL scheme "ftp"`) {
+		t.Fatalf("expected unsupported scheme error, got %q", stderr)
+	}
+}
+
+func TestBooksAddRejectsCoverRedirectLoop(t *testing.T) {
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, r.URL.Path, http.StatusFound)
+	}))
+	defer redirect.Close()
+
+	exitCode, _, stderr := runCLI([]string{"books", "add", "--title", "Dune", "--cover", redirect.URL})
+
+	if exitCode == 0 {
+		t.Fatal("expected redirect loop to fail")
+	}
+	if !strings.Contains(stderr, "stopped after 10 redirects") {
+		t.Fatalf("expected redirect limit error, got %q", stderr)
+	}
+}
+
+func TestBooksAddRejectsCoverRedirectToErrorStatus(t *testing.T) {
+	target := httptest.NewServer(http.NotFoundHandler())
 	defer target.Close()
 
 	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -638,13 +699,43 @@ func TestBooksAddDoesNotFollowCoverRedirects(t *testing.T) {
 	exitCode, _, stderr := runCLI([]string{"books", "add", "--title", "Dune", "--cover", redirect.URL})
 
 	if exitCode == 0 {
-		t.Fatal("expected redirect to fail")
+		t.Fatal("expected redirect to error status to fail")
 	}
-	if targetCalled {
-		t.Fatal("expected redirect target not to be requested")
+	if !strings.Contains(stderr, "404 Not Found") {
+		t.Fatalf("expected final status error, got %q", stderr)
 	}
-	if !strings.Contains(stderr, "302 Found") {
-		t.Fatalf("expected redirect status error, got %q", stderr)
+}
+
+func TestBooksAddUsesLongerTimeoutForCoverDownloads(t *testing.T) {
+	var deadline time.Time
+	var hasDeadline bool
+
+	cli.SetCoverTransport(t, roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		deadline, hasDeadline = r.Context().Deadline()
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Body:       io.NopCloser(strings.NewReader("\x89PNG\r\n\x1a\ncover")),
+			Request:    r,
+		}, nil
+	}))
+
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(books.Book{ID: 10, Title: "Dune"})
+	}))
+	defer apiServer.Close()
+
+	exitCode, _, stderr := runCLI([]string{"books", "add", "--title", "Dune", "--cover", "http://covers.example/dune.png", "--server", apiServer.URL})
+
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
+	}
+	if !hasDeadline {
+		t.Fatal("expected cover download to have a deadline")
+	}
+	if remaining := time.Until(deadline); remaining <= time.Minute || remaining > client.CoverTimeout {
+		t.Fatalf("expected cover download deadline within %s, got %s", client.CoverTimeout, remaining)
 	}
 }
 

@@ -383,6 +383,10 @@ func runCLI(args []string) (int, string, string) {
 	return exitCode, stdout.String(), stderr.String()
 }
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
 // answerLookup serves the GET requests that resolving a numeric reference
 // makes: an empty exact-name search on collection and the record itself at
 // collection/id. It reports whether it handled the request.
