@@ -1,16 +1,18 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 
+	"bakku.dev/bookist/internal/apperr"
 	"bakku.dev/bookist/internal/lists"
 )
+
+var errBookIDRequired = apperr.Invalid("book_id_required", "book_id is required", "book_id")
 
 func (s *Server) handleAPIListLists(w http.ResponseWriter, r *http.Request) {
 	listList, err := s.lists.Search(r.Context(), r.URL.Query().Get("q"))
 	if err != nil {
-		http.Error(w, "failed to list lists", http.StatusInternalServerError)
+		writeError(w, err)
 		return
 	}
 
@@ -25,7 +27,7 @@ func (s *Server) handleAPICreateList(w http.ResponseWriter, r *http.Request) {
 
 	list, err := s.lists.Create(r.Context(), input)
 	if err != nil {
-		writeCreateListError(w, err)
+		writeError(w, err)
 		return
 	}
 
@@ -33,9 +35,8 @@ func (s *Server) handleAPICreateList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAPIUpdateList(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r.PathValue("id"))
-	if err != nil {
-		http.Error(w, "invalid list ID", http.StatusBadRequest)
+	id, ok := parsePathID(w, r, "id", "list")
+	if !ok {
 		return
 	}
 
@@ -46,26 +47,20 @@ func (s *Server) handleAPIUpdateList(w http.ResponseWriter, r *http.Request) {
 
 	list, err := s.lists.Update(r.Context(), id, input)
 	if err != nil {
-		writeUpdateListError(w, err)
+		writeError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, list)
 }
 
 func (s *Server) handleAPIDeleteList(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r.PathValue("id"))
-	if err != nil {
-		http.Error(w, "invalid list ID", http.StatusBadRequest)
+	id, ok := parsePathID(w, r, "id", "list")
+	if !ok {
 		return
 	}
 
 	if err := s.lists.Delete(r.Context(), id); err != nil {
-		if errors.Is(err, lists.ErrListNotFound) {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-
-		http.Error(w, "failed to delete list", http.StatusInternalServerError)
+		writeError(w, err)
 		return
 	}
 
@@ -73,25 +68,14 @@ func (s *Server) handleAPIDeleteList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAPIListBooksInList(w http.ResponseWriter, r *http.Request) {
-	listID, err := parseID(r.PathValue("id"))
-	if err != nil {
-		http.Error(w, "invalid list ID", http.StatusBadRequest)
-		return
-	}
-
-	_, err = s.lists.GetByID(r.Context(), listID)
-	if err != nil {
-		if errors.Is(err, lists.ErrListNotFound) {
-			http.Error(w, "list not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, "failed to get list", http.StatusInternalServerError)
+	listID, ok := parsePathID(w, r, "id", "list")
+	if !ok {
 		return
 	}
 
 	listBooks, err := s.books.SearchByListID(r.Context(), listID, r.URL.Query().Get("q"))
 	if err != nil {
-		http.Error(w, "failed to list books", http.StatusInternalServerError)
+		writeError(w, err)
 		return
 	}
 
@@ -99,9 +83,8 @@ func (s *Server) handleAPIListBooksInList(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleAPIAddBookToList(w http.ResponseWriter, r *http.Request) {
-	listID, err := parseID(r.PathValue("id"))
-	if err != nil {
-		http.Error(w, "invalid list ID", http.StatusBadRequest)
+	listID, ok := parsePathID(w, r, "id", "list")
+	if !ok {
 		return
 	}
 
@@ -111,13 +94,12 @@ func (s *Server) handleAPIAddBookToList(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if input.BookID <= 0 {
-		http.Error(w, "book_id is required", http.StatusBadRequest)
+		writeError(w, errBookIDRequired)
 		return
 	}
 
-	err = s.lists.AddBookToList(r.Context(), listID, input.BookID)
-	if err != nil {
-		writeAddBookToListError(w, err)
+	if err := s.lists.AddBookToList(r.Context(), listID, input.BookID); err != nil {
+		writeError(w, err)
 		return
 	}
 
@@ -125,79 +107,20 @@ func (s *Server) handleAPIAddBookToList(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleAPIRemoveBookFromList(w http.ResponseWriter, r *http.Request) {
-	listID, err := parseID(r.PathValue("id"))
-	if err != nil {
-		http.Error(w, "invalid list ID", http.StatusBadRequest)
+	listID, ok := parsePathID(w, r, "id", "list")
+	if !ok {
 		return
 	}
 
-	bookID, err := parseID(r.PathValue("bookID"))
-	if err != nil {
-		http.Error(w, "invalid book ID", http.StatusBadRequest)
+	bookID, ok := parsePathID(w, r, "book_id", "book")
+	if !ok {
 		return
 	}
 
 	if err := s.lists.RemoveBookFromList(r.Context(), listID, bookID); err != nil {
-		if errors.Is(err, lists.ErrListNotFound) ||
-			errors.Is(err, lists.ErrBookNotFound) ||
-			errors.Is(err, lists.ErrBookNotInList) {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-
-		http.Error(w, "failed to remove book from list", http.StatusInternalServerError)
+		writeError(w, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func writeCreateListError(w http.ResponseWriter, err error) {
-	if errors.Is(err, lists.ErrNameRequired) {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if errors.Is(err, lists.ErrNameConflict) {
-		http.Error(w, err.Error(), http.StatusConflict)
-		return
-	}
-
-	http.Error(w, "failed to create list", http.StatusInternalServerError)
-}
-
-func writeUpdateListError(w http.ResponseWriter, err error) {
-	if errors.Is(err, lists.ErrListNotFound) {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-	if errors.Is(err, lists.ErrNameConflict) {
-		http.Error(w, err.Error(), http.StatusConflict)
-		return
-	}
-	if errors.Is(err, lists.ErrNameRequired) ||
-		errors.Is(err, lists.ErrDescriptionRequired) ||
-		errors.Is(err, lists.ErrNoFieldsToUpdate) {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	http.Error(w, "failed to update list", http.StatusInternalServerError)
-}
-
-func writeAddBookToListError(w http.ResponseWriter, err error) {
-	if errors.Is(err, lists.ErrListNotFound) {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-
-	if errors.Is(err, lists.ErrBookNotFound) {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if errors.Is(err, lists.ErrBookAlreadyInList) {
-		http.Error(w, err.Error(), http.StatusConflict)
-		return
-	}
-
-	http.Error(w, "failed to add book to list", http.StatusInternalServerError)
 }

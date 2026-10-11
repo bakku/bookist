@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"bakku.dev/bookist/internal/database"
+	"bakku.dev/bookist/internal/domain"
 )
 
 const (
@@ -61,7 +62,7 @@ func (r *SQLiteRepository) ListByBookID(ctx context.Context, bookID int64) ([]Re
 	var exists int
 	if err := r.db.QueryRowContext(ctx, `SELECT 1 FROM books WHERE id = ?`, bookID).Scan(&exists); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrBookNotFound
+			return nil, domain.ErrBookNotFound
 		}
 		return nil, err
 	}
@@ -141,7 +142,7 @@ func translateConstraints(err error) error {
 	}
 
 	if database.IsForeignKeyViolation(err) {
-		return ErrBookNotFound
+		return domain.ErrBookNotFound
 	}
 
 	// Create and update share the same durable read invariants.

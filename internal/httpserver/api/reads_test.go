@@ -68,9 +68,7 @@ func TestReadAPICreateReturns404ForUnknownBook(t *testing.T) {
 	resp := httptest.NewRecorder()
 
 	app.handler.ServeHTTP(resp, req)
-	if resp.Code != http.StatusNotFound {
-		t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, resp.Code, resp.Body.String())
-	}
+	assertAPIError(t, resp, http.StatusNotFound, "book_not_found", "")
 }
 
 func TestReadAPIRejectsInvalidBookID(t *testing.T) {
@@ -80,36 +78,36 @@ func TestReadAPIRejectsInvalidBookID(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, path, nil)
 			resp := httptest.NewRecorder()
 			app.handler.ServeHTTP(resp, req)
-			if resp.Code != http.StatusBadRequest {
-				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
-			}
+			assertAPIError(t, resp, http.StatusBadRequest, "invalid_id", "id")
 		})
 	}
 }
 
 func TestReadAPICreateRejectsInvalidValues(t *testing.T) {
-	tests := []string{
-		`{"started_at":"not-a-date"}`,
-		`{"started_at":"2026-02-02","finished_at":"2026-02-01"}`,
-		`{"abandoned_at":"2026-02-30"}`,
-		`{"started_at":"2026-02-02","abandoned_at":"2026-02-01"}`,
-		`{"finished_at":"2026-02-02","abandoned_at":"2026-02-03"}`,
-		`{"rating":0.5}`,
-		`{"rating":4.2}`,
-		`{"rating":5.5}`,
+	tests := []struct {
+		body  string
+		code  string
+		field string
+	}{
+		{body: `{"started_at":"not-a-date"}`, code: "invalid_started_at", field: "started_at"},
+		{body: `{"started_at":"2026-02-02","finished_at":"2026-02-01"}`, code: "finished_before_started", field: "finished_at"},
+		{body: `{"abandoned_at":"2026-02-30"}`, code: "invalid_abandoned_at", field: "abandoned_at"},
+		{body: `{"started_at":"2026-02-02","abandoned_at":"2026-02-01"}`, code: "abandoned_before_started", field: "abandoned_at"},
+		{body: `{"finished_at":"2026-02-02","abandoned_at":"2026-02-03"}`, code: "conflicting_terminal_dates"},
+		{body: `{"rating":0.5}`, code: "invalid_rating", field: "rating"},
+		{body: `{"rating":4.2}`, code: "invalid_rating", field: "rating"},
+		{body: `{"rating":5.5}`, code: "invalid_rating", field: "rating"},
 	}
-	for _, body := range tests {
-		t.Run(body, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.body, func(t *testing.T) {
 			app := newTestApp(t)
 			bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
-			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/books/%d/reads", bookID), bytes.NewBufferString(body))
+			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/books/%d/reads", bookID), bytes.NewBufferString(test.body))
 			req.Header.Set("Content-Type", "application/json")
 			resp := httptest.NewRecorder()
 
 			app.handler.ServeHTTP(resp, req)
-			if resp.Code != http.StatusBadRequest {
-				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
-			}
+			assertAPIError(t, resp, http.StatusBadRequest, test.code, test.field)
 			var count int
 			if err := app.db.QueryRow(`SELECT COUNT(*) FROM reads`).Scan(&count); err != nil {
 				t.Fatal(err)
@@ -157,22 +155,22 @@ func TestReadAPIUpdateRejectsInvalidRequests(t *testing.T) {
 		path   string
 		body   string
 		status int
+		code   string
+		field  string
 	}{
-		{name: "invalid ID", path: "/api/reads/zero", body: `{"rating":4}`, status: http.StatusBadRequest},
-		{name: "empty", path: "/api/reads/100", body: `{}`, status: http.StatusBadRequest},
-		{name: "unknown field", path: "/api/reads/100", body: `{"book_id":2}`, status: http.StatusBadRequest},
-		{name: "blank optional", path: "/api/reads/100", body: `{"notes":" "}`, status: http.StatusBadRequest},
-		{name: "invalid rating", path: "/api/reads/100", body: `{"rating":4.2}`, status: http.StatusBadRequest},
-		{name: "not found", path: "/api/reads/999999", body: `{"rating":4}`, status: http.StatusNotFound},
+		{name: "invalid ID", path: "/api/reads/zero", body: `{"rating":4}`, status: http.StatusBadRequest, code: "invalid_id", field: "id"},
+		{name: "empty", path: "/api/reads/100", body: `{}`, status: http.StatusBadRequest, code: "no_fields_to_update"},
+		{name: "unknown field", path: "/api/reads/100", body: `{"book_id":2}`, status: http.StatusBadRequest, code: "invalid_json"},
+		{name: "blank optional", path: "/api/reads/100", body: `{"notes":" "}`, status: http.StatusBadRequest, code: "blank_optional_string"},
+		{name: "invalid rating", path: "/api/reads/100", body: `{"rating":4.2}`, status: http.StatusBadRequest, code: "invalid_rating", field: "rating"},
+		{name: "not found", path: "/api/reads/999999", body: `{"rating":4}`, status: http.StatusNotFound, code: "read_not_found"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			app := newTestApp(t)
 			bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
 			testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{ID: 100, BookID: bookID, CreatedAt: "2026-01-01T00:00:00Z"})
 			resp := patchJSON(t, app.handler, test.path, test.body)
-			if resp.Code != test.status {
-				t.Fatalf("expected status %d, got %d: %s", test.status, resp.Code, resp.Body.String())
-			}
+			assertAPIError(t, resp, test.status, test.code, test.field)
 		})
 	}
 }
@@ -195,9 +193,7 @@ func TestReadAPIUpdateReturnsValidationErrorAfterConcurrentEdit(t *testing.T) {
 	}
 	app := newTestAppWithReadRepository(t, db, repository)
 	resp := patchJSON(t, app.handler, "/api/reads/100", `{"started_at":"2026-01-03"}`)
-	if resp.Code != http.StatusBadRequest || resp.Body.String() != "finished_at must not be before started_at\n" {
-		t.Fatalf("expected date validation response, got status %d: %s", resp.Code, resp.Body.String())
-	}
+	assertAPIError(t, resp, http.StatusBadRequest, "finished_before_started", "finished_at")
 
 	var startedAt, finishedAt string
 	if err := db.QueryRow(`SELECT started_at, finished_at FROM reads WHERE id = ?`, readID).Scan(&startedAt, &finishedAt); err != nil {
@@ -309,9 +305,7 @@ func TestReadAPIListReturns404ForUnknownBook(t *testing.T) {
 	resp := httptest.NewRecorder()
 
 	app.handler.ServeHTTP(resp, req)
-	if resp.Code != http.StatusNotFound {
-		t.Fatalf("expected status %d, got %d", http.StatusNotFound, resp.Code)
-	}
+	assertAPIError(t, resp, http.StatusNotFound, "book_not_found", "")
 }
 
 func TestReadAPIListReturnsEmptyArray(t *testing.T) {
@@ -352,9 +346,7 @@ func TestReadAPIDeleteRejectsInvalidID(t *testing.T) {
 
 			app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, "/api/reads/"+id, nil))
 
-			if resp.Code != http.StatusBadRequest {
-				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
-			}
+			assertAPIError(t, resp, http.StatusBadRequest, "invalid_id", "id")
 		})
 	}
 }
@@ -366,7 +358,5 @@ func TestReadAPIDeleteReturns404ForUnknownRead(t *testing.T) {
 
 	app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, "/api/reads/999999", nil))
 
-	if resp.Code != http.StatusNotFound {
-		t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, resp.Code, resp.Body.String())
-	}
+	assertAPIError(t, resp, http.StatusNotFound, "read_not_found", "")
 }

@@ -153,18 +153,20 @@ func TestBookAPICreateRejectsInvalidCovers(t *testing.T) {
 		name   string
 		body   func() []byte
 		status int
+		code   string
+		field  string
 	}{
-		{name: "malformed base64", body: func() []byte { return []byte(`{"title":"Dune","cover":"***"}`) }, status: http.StatusBadRequest},
+		{name: "malformed base64", body: func() []byte { return []byte(`{"title":"Dune","cover":"***"}`) }, status: http.StatusBadRequest, code: "invalid_json"},
 		{name: "unsupported media", body: func() []byte {
 			body, _ := json.Marshal(books.CreateBookRequest{Title: "Dune", Cover: new([]byte("plain text"))})
 			return body
-		}, status: http.StatusUnsupportedMediaType},
+		}, status: http.StatusUnsupportedMediaType, code: "cover_unsupported_media_type", field: "cover"},
 		{name: "too large", body: func() []byte {
 			image := make([]byte, 10<<20+1)
 			copy(image, "\x89PNG\r\n\x1a\n")
 			body, _ := json.Marshal(books.CreateBookRequest{Title: "Dune", Cover: &image})
 			return body
-		}, status: http.StatusRequestEntityTooLarge},
+		}, status: http.StatusRequestEntityTooLarge, code: "cover_too_large", field: "cover"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			app := newTestApp(t)
@@ -174,9 +176,7 @@ func TestBookAPICreateRejectsInvalidCovers(t *testing.T) {
 			resp := httptest.NewRecorder()
 
 			app.handler.ServeHTTP(resp, req)
-			if resp.Code != test.status {
-				t.Fatalf("expected status %d, got %d: %s", test.status, resp.Code, resp.Body.String())
-			}
+			assertAPIError(t, resp, test.status, test.code, test.field)
 
 			testsupport.AssertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM books`)
 		})
@@ -193,9 +193,7 @@ func TestBookAPICreateRejectsFormBody(t *testing.T) {
 
 	app.handler.ServeHTTP(resp, req)
 
-	if resp.Code != http.StatusUnsupportedMediaType {
-		t.Fatalf("expected status %d, got %d", http.StatusUnsupportedMediaType, resp.Code)
-	}
+	assertAPIError(t, resp, http.StatusUnsupportedMediaType, "unsupported_media_type", "")
 
 	testsupport.AssertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM books`)
 }
@@ -210,9 +208,16 @@ func TestBookAPICreateRejectsUnknownAuthor(t *testing.T) {
 
 	app.handler.ServeHTTP(resp, req)
 
-	if resp.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
-	}
+	assertAPIError(t, resp, http.StatusBadRequest, "author_not_found", "author_ids")
+
+	testsupport.AssertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM books`)
+}
+
+func TestBookAPICreateRejectsInvalidFormat(t *testing.T) {
+	app := newTestApp(t)
+
+	resp := postBody(t, app.handler, "/api/books", "application/json", `{"title":"Dune","format":"scroll"}`)
+	assertAPIError(t, resp, http.StatusBadRequest, "invalid_format", "format")
 
 	testsupport.AssertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM books`)
 }
@@ -244,22 +249,22 @@ func TestBookAPIUpdateRejectsInvalidRequests(t *testing.T) {
 		path   string
 		body   string
 		status int
+		code   string
+		field  string
 	}{
-		{name: "invalid ID", path: "/api/books/nope", body: `{"title":"New"}`, status: http.StatusBadRequest},
-		{name: "empty", path: "/api/books/1", body: `{}`, status: http.StatusBadRequest},
-		{name: "unknown field", path: "/api/books/1", body: `{"unknown":true}`, status: http.StatusBadRequest},
-		{name: "second value", path: "/api/books/1", body: `{"title":"New"} {}`, status: http.StatusBadRequest},
-		{name: "blank optional", path: "/api/books/1", body: `{"publisher":" "}`, status: http.StatusBadRequest},
-		{name: "invalid pages", path: "/api/books/1", body: `{"pages":0}`, status: http.StatusBadRequest},
-		{name: "not found", path: "/api/books/999999", body: `{"title":"New"}`, status: http.StatusNotFound},
+		{name: "invalid ID", path: "/api/books/nope", body: `{"title":"New"}`, status: http.StatusBadRequest, code: "invalid_id", field: "id"},
+		{name: "empty", path: "/api/books/1", body: `{}`, status: http.StatusBadRequest, code: "no_fields_to_update"},
+		{name: "unknown field", path: "/api/books/1", body: `{"unknown":true}`, status: http.StatusBadRequest, code: "invalid_json"},
+		{name: "second value", path: "/api/books/1", body: `{"title":"New"} {}`, status: http.StatusBadRequest, code: "invalid_json"},
+		{name: "blank optional", path: "/api/books/1", body: `{"publisher":" "}`, status: http.StatusBadRequest, code: "blank_optional_string"},
+		{name: "invalid pages", path: "/api/books/1", body: `{"pages":0}`, status: http.StatusBadRequest, code: "invalid_pages", field: "pages"},
+		{name: "not found", path: "/api/books/999999", body: `{"title":"New"}`, status: http.StatusNotFound, code: "book_not_found"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			app := newTestApp(t)
 			testsupport.InsertBookRow(t, app.db, "Dune", nil)
 			resp := patchJSON(t, app.handler, test.path, test.body)
-			if resp.Code != test.status {
-				t.Fatalf("expected status %d, got %d: %s", test.status, resp.Code, resp.Body.String())
-			}
+			assertAPIError(t, resp, test.status, test.code, test.field)
 		})
 	}
 }
@@ -269,9 +274,10 @@ func TestBookAPIUpdateRejectsInvalidCover(t *testing.T) {
 		name   string
 		image  []byte
 		status int
+		code   string
 	}{
-		{name: "unsupported", image: []byte("plain text"), status: http.StatusUnsupportedMediaType},
-		{name: "too large", image: append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 10<<20)...), status: http.StatusRequestEntityTooLarge},
+		{name: "unsupported", image: []byte("plain text"), status: http.StatusUnsupportedMediaType, code: "cover_unsupported_media_type"},
+		{name: "too large", image: append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 10<<20)...), status: http.StatusRequestEntityTooLarge, code: "cover_too_large"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			app := newTestApp(t)
@@ -281,9 +287,7 @@ func TestBookAPIUpdateRejectsInvalidCover(t *testing.T) {
 				t.Fatal(err)
 			}
 			resp := patchJSON(t, app.handler, fmt.Sprintf("/api/books/%d", bookID), string(body))
-			if resp.Code != test.status {
-				t.Fatalf("expected status %d, got %d: %s", test.status, resp.Code, resp.Body.String())
-			}
+			assertAPIError(t, resp, test.status, test.code, "cover")
 			testsupport.AssertBookRow(t, app.db, bookID, "Dune", nil)
 		})
 	}
@@ -296,9 +300,7 @@ func TestBookAPIUpdateRequiresJSONContentType(t *testing.T) {
 	req.Header.Set("Content-Type", "text/plain")
 	resp := httptest.NewRecorder()
 	app.handler.ServeHTTP(resp, req)
-	if resp.Code != http.StatusUnsupportedMediaType {
-		t.Fatalf("expected status %d, got %d: %s", http.StatusUnsupportedMediaType, resp.Code, resp.Body.String())
-	}
+	assertAPIError(t, resp, http.StatusUnsupportedMediaType, "unsupported_media_type", "")
 }
 
 // ── List ──────────────────────────────────────────────────────────────────────
@@ -487,9 +489,7 @@ func TestBookAPIDeleteRejectsInvalidID(t *testing.T) {
 			app := newTestApp(t)
 			resp := httptest.NewRecorder()
 			app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, "/api/books/"+id, nil))
-			if resp.Code != http.StatusBadRequest {
-				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
-			}
+			assertAPIError(t, resp, http.StatusBadRequest, "invalid_id", "id")
 		})
 	}
 }
@@ -498,7 +498,5 @@ func TestBookAPIDeleteReturns404ForUnknownBook(t *testing.T) {
 	app := newTestApp(t)
 	resp := httptest.NewRecorder()
 	app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, "/api/books/999999", nil))
-	if resp.Code != http.StatusNotFound {
-		t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, resp.Code, resp.Body.String())
-	}
+	assertAPIError(t, resp, http.StatusNotFound, "book_not_found", "")
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"bakku.dev/bookist/internal/database"
+	"bakku.dev/bookist/internal/domain"
 	"bakku.dev/bookist/internal/optional"
 	"bakku.dev/bookist/internal/reads"
 	"bakku.dev/bookist/internal/testsupport"
@@ -55,7 +56,7 @@ func TestSQLiteRepositoryCreateReturnsBookNotFound(t *testing.T) {
 	repository := reads.NewSQLiteRepository(db)
 
 	_, err := repository.Create(context.Background(), 999999, reads.CreateReadRequest{})
-	if !errors.Is(err, reads.ErrBookNotFound) {
+	if !errors.Is(err, domain.ErrBookNotFound) {
 		t.Fatalf("expected ErrBookNotFound, got %v", err)
 	}
 }
@@ -114,7 +115,7 @@ func TestSQLiteRepositoryCreateLeavesConstraintLookalikeUnexpected(t *testing.T)
 	if !errors.As(err, &sqliteErr) || sqliteErr.Code() != sqlite3.SQLITE_CONSTRAINT_TRIGGER {
 		t.Fatalf("expected unchanged trigger error, got %v", err)
 	}
-	if errors.Is(err, reads.ErrBookNotFound) {
+	if errors.Is(err, domain.ErrBookNotFound) {
 		t.Fatalf("unexpectedly translated %v to ErrBookNotFound", err)
 	}
 }
@@ -197,7 +198,7 @@ func TestSQLiteRepositoryListByBookIDReturnsBookNotFound(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 
 	_, err := reads.NewSQLiteRepository(db).ListByBookID(context.Background(), 999999)
-	if !errors.Is(err, reads.ErrBookNotFound) {
+	if !errors.Is(err, domain.ErrBookNotFound) {
 		t.Fatalf("expected ErrBookNotFound, got %v", err)
 	}
 }

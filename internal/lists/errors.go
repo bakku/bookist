@@ -1,12 +1,10 @@
 package lists
 
-import "errors"
+import "bakku.dev/bookist/internal/apperr"
 
-var ErrNameRequired = errors.New("name is required")
-var ErrDescriptionRequired = errors.New("description must not be blank")
-var ErrNoFieldsToUpdate = errors.New("no fields to update")
-var ErrNameConflict = errors.New("a list with this name already exists")
-var ErrListNotFound = errors.New("list not found")
-var ErrBookNotFound = errors.New("book not found")
-var ErrBookAlreadyInList = errors.New("book is already in this list")
-var ErrBookNotInList = errors.New("book is not in this list")
+var ErrNameRequired = apperr.Invalid("name_required", "name is required", "name")
+var ErrDescriptionRequired = apperr.Invalid("description_required", "description must not be blank", "description")
+var ErrNoFieldsToUpdate = apperr.Invalid("no_fields_to_update", "no fields to update", "")
+var ErrNameConflict = apperr.Conflict("list_name_conflict", "a list with this name already exists", "name")
+var ErrBookAlreadyInList = apperr.Conflict("book_already_in_list", "book is already in this list", "book_id")
+var ErrBookNotInList = apperr.NotFound("book_not_in_list", "book is not in this list")

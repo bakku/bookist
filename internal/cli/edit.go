@@ -119,6 +119,14 @@ func patchEndpoint(endpoint string, changes map[string]any, output any) error {
 		body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxCLIErrorBodySize))
 		if readErr == nil {
 			message := strings.TrimSpace(string(body))
+			var structured struct {
+				Error struct {
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			if json.Unmarshal(body, &structured) == nil && structured.Error.Message != "" {
+				message = structured.Error.Message
+			}
 			if message != "" {
 				return fmt.Errorf("server returned %s: %s", resp.Status, message)
 			}

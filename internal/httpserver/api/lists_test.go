@@ -61,9 +61,7 @@ func TestListAPICreateRejectsBlankName(t *testing.T) {
 	resp := httptest.NewRecorder()
 
 	app.handler.ServeHTTP(resp, req)
-	if resp.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
-	}
+	assertAPIError(t, resp, http.StatusBadRequest, "name_required", "name")
 
 	testsupport.AssertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM lists`)
 }
@@ -78,9 +76,7 @@ func TestListAPICreateReturnsConflictForDuplicateName(t *testing.T) {
 	resp := httptest.NewRecorder()
 
 	app.handler.ServeHTTP(resp, req)
-	if resp.Code != http.StatusConflict {
-		t.Fatalf("expected status %d, got %d: %s", http.StatusConflict, resp.Code, resp.Body.String())
-	}
+	assertAPIError(t, resp, http.StatusConflict, "list_name_conflict", "name")
 }
 
 // ── Update ────────────────────────────────────────────────────────────────────
@@ -116,20 +112,20 @@ func TestListAPIUpdateRejectsInvalidRequests(t *testing.T) {
 		path   string
 		body   string
 		status int
+		code   string
+		field  string
 	}{
-		{name: "invalid ID", path: "/api/lists/0", body: `{"name":"New"}`, status: http.StatusBadRequest},
-		{name: "empty", path: "/api/lists/1", body: `{}`, status: http.StatusBadRequest},
-		{name: "unknown field", path: "/api/lists/1", body: `{"books":[]}`, status: http.StatusBadRequest},
-		{name: "blank description", path: "/api/lists/1", body: `{"description":" "}`, status: http.StatusBadRequest},
-		{name: "not found", path: "/api/lists/999999", body: `{"name":"New"}`, status: http.StatusNotFound},
+		{name: "invalid ID", path: "/api/lists/0", body: `{"name":"New"}`, status: http.StatusBadRequest, code: "invalid_id", field: "id"},
+		{name: "empty", path: "/api/lists/1", body: `{}`, status: http.StatusBadRequest, code: "no_fields_to_update"},
+		{name: "unknown field", path: "/api/lists/1", body: `{"books":[]}`, status: http.StatusBadRequest, code: "invalid_json"},
+		{name: "blank description", path: "/api/lists/1", body: `{"description":" "}`, status: http.StatusBadRequest, code: "description_required", field: "description"},
+		{name: "not found", path: "/api/lists/999999", body: `{"name":"New"}`, status: http.StatusNotFound, code: "list_not_found"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			app := newTestApp(t)
 			testsupport.InsertListRow(t, app.db, "Nightstand")
 			resp := patchJSON(t, app.handler, test.path, test.body)
-			if resp.Code != test.status {
-				t.Fatalf("expected status %d, got %d: %s", test.status, resp.Code, resp.Body.String())
-			}
+			assertAPIError(t, resp, test.status, test.code, test.field)
 		})
 	}
 }
@@ -139,9 +135,7 @@ func TestListAPIUpdateReturnsConflict(t *testing.T) {
 	listID := testsupport.InsertListRow(t, app.db, "Nightstand")
 	testsupport.InsertListRow(t, app.db, "Favorites")
 	resp := patchJSON(t, app.handler, fmt.Sprintf("/api/lists/%d", listID), `{"name":"FAVORITES"}`)
-	if resp.Code != http.StatusConflict {
-		t.Fatalf("expected status %d, got %d: %s", http.StatusConflict, resp.Code, resp.Body.String())
-	}
+	assertAPIError(t, resp, http.StatusConflict, "list_name_conflict", "name")
 	testsupport.AssertListRow(t, app.db, listID, "Nightstand", nil)
 }
 
@@ -234,9 +228,7 @@ func TestListAPIDeleteRejectsInvalidID(t *testing.T) {
 			app := newTestApp(t)
 			resp := httptest.NewRecorder()
 			app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, "/api/lists/"+id, nil))
-			if resp.Code != http.StatusBadRequest {
-				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
-			}
+			assertAPIError(t, resp, http.StatusBadRequest, "invalid_id", "id")
 		})
 	}
 }
@@ -245,9 +237,7 @@ func TestListAPIDeleteReturns404ForUnknownList(t *testing.T) {
 	app := newTestApp(t)
 	resp := httptest.NewRecorder()
 	app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, "/api/lists/999999", nil))
-	if resp.Code != http.StatusNotFound {
-		t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, resp.Code, resp.Body.String())
-	}
+	assertAPIError(t, resp, http.StatusNotFound, "list_not_found", "")
 }
 
 // ── AddBookToList ─────────────────────────────────────────────────────────────
@@ -271,7 +261,7 @@ func TestListAPIAddBookToList(t *testing.T) {
 	testsupport.AssertBookListRow(t, app.db, listID, bookID)
 }
 
-func TestListAPIAddBookToListRejectsUnknownBook(t *testing.T) {
+func TestListAPIAddBookToListReturns404ForUnknownBook(t *testing.T) {
 	app := newTestApp(t)
 
 	listID := testsupport.InsertListRow(t, app.db, "Want to Buy")
@@ -283,9 +273,17 @@ func TestListAPIAddBookToListRejectsUnknownBook(t *testing.T) {
 	resp := httptest.NewRecorder()
 
 	app.handler.ServeHTTP(resp, req)
-	if resp.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
-	}
+	assertAPIError(t, resp, http.StatusNotFound, "book_not_found", "")
+}
+
+func TestListAPIAddBookToListRejectsMissingBookID(t *testing.T) {
+	app := newTestApp(t)
+
+	listID := testsupport.InsertListRow(t, app.db, "Want to Buy")
+
+	resp := postBody(t, app.handler, fmt.Sprintf("/api/lists/%d/books", listID), "application/json", `{}`)
+	assertAPIError(t, resp, http.StatusBadRequest, "book_id_required", "book_id")
+	testsupport.AssertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM book_lists`)
 }
 
 func TestListAPIAddBookToListReturns404ForUnknownList(t *testing.T) {
@@ -300,9 +298,7 @@ func TestListAPIAddBookToListReturns404ForUnknownList(t *testing.T) {
 	resp := httptest.NewRecorder()
 
 	app.handler.ServeHTTP(resp, req)
-	if resp.Code != http.StatusNotFound {
-		t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, resp.Code, resp.Body.String())
-	}
+	assertAPIError(t, resp, http.StatusNotFound, "list_not_found", "")
 }
 
 func TestListAPIAddBookToListReturns409ForDuplicate(t *testing.T) {
@@ -310,26 +306,11 @@ func TestListAPIAddBookToListReturns409ForDuplicate(t *testing.T) {
 
 	listID := testsupport.InsertListRow(t, app.db, "Want to Buy")
 	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
+	testsupport.InsertBookListRow(t, app.db, listID, bookID)
 
-	body := bytes.NewBufferString(fmt.Sprintf(`{"book_id":%d}`, bookID))
-	req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/lists/%d/books", listID), body)
-	req.Header.Set("Content-Type", "application/json")
-	resp := httptest.NewRecorder()
-
-	app.handler.ServeHTTP(resp, req)
-	if resp.Code != http.StatusNoContent {
-		t.Fatalf("expected first request to succeed, got %d", resp.Code)
-	}
-
-	body = bytes.NewBufferString(fmt.Sprintf(`{"book_id":%d}`, bookID))
-	req = httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/lists/%d/books", listID), body)
-	req.Header.Set("Content-Type", "application/json")
-	resp = httptest.NewRecorder()
-
-	app.handler.ServeHTTP(resp, req)
-	if resp.Code != http.StatusConflict {
-		t.Fatalf("expected status %d for duplicate, got %d: %s", http.StatusConflict, resp.Code, resp.Body.String())
-	}
+	resp := postBody(t, app.handler, fmt.Sprintf("/api/lists/%d/books", listID), "application/json", fmt.Sprintf(`{"book_id":%d}`, bookID))
+	assertAPIError(t, resp, http.StatusConflict, "book_already_in_list", "book_id")
+	testsupport.AssertSQLCount(t, app.db, 1, `SELECT COUNT(*) FROM book_lists`)
 }
 
 func TestListAPIAddBookToListRejectsInvalidIDs(t *testing.T) {
@@ -339,9 +320,7 @@ func TestListAPIAddBookToListRejectsInvalidIDs(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(`{"book_id":1}`))
 			resp := httptest.NewRecorder()
 			app.handler.ServeHTTP(resp, req)
-			if resp.Code != http.StatusBadRequest {
-				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
-			}
+			assertAPIError(t, resp, http.StatusBadRequest, "invalid_id", "id")
 		})
 	}
 }
@@ -376,21 +355,22 @@ func TestListAPIRemoveBookFromListIsIsolated(t *testing.T) {
 }
 
 func TestListAPIRemoveBookRejectsInvalidIDs(t *testing.T) {
-	for _, path := range []string{
-		"/api/lists/not-a-number/books/1",
-		"/api/lists/0/books/1",
-		"/api/lists/-1/books/1",
-		"/api/lists/1/books/not-a-number",
-		"/api/lists/1/books/0",
-		"/api/lists/1/books/-1",
+	for _, test := range []struct {
+		path  string
+		field string
+	}{
+		{path: "/api/lists/not-a-number/books/1", field: "id"},
+		{path: "/api/lists/0/books/1", field: "id"},
+		{path: "/api/lists/-1/books/1", field: "id"},
+		{path: "/api/lists/1/books/not-a-number", field: "book_id"},
+		{path: "/api/lists/1/books/0", field: "book_id"},
+		{path: "/api/lists/1/books/-1", field: "book_id"},
 	} {
-		t.Run(path, func(t *testing.T) {
+		t.Run(test.path, func(t *testing.T) {
 			app := newTestApp(t)
 			resp := httptest.NewRecorder()
-			app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, path, nil))
-			if resp.Code != http.StatusBadRequest {
-				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
-			}
+			app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, test.path, nil))
+			assertAPIError(t, resp, http.StatusBadRequest, "invalid_id", test.field)
 		})
 	}
 }
@@ -398,10 +378,12 @@ func TestListAPIRemoveBookRejectsInvalidIDs(t *testing.T) {
 func TestListAPIRemoveBookReturns404ForMissingResourcesOrMembership(t *testing.T) {
 	tests := []struct {
 		name string
+		code string
 		path func(t *testing.T, app testApp) string
 	}{
 		{
 			name: "unknown list",
+			code: "list_not_found",
 			path: func(t *testing.T, app testApp) string {
 				bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
 				return fmt.Sprintf("/api/lists/999999/books/%d", bookID)
@@ -409,6 +391,7 @@ func TestListAPIRemoveBookReturns404ForMissingResourcesOrMembership(t *testing.T
 		},
 		{
 			name: "unknown book",
+			code: "book_not_found",
 			path: func(t *testing.T, app testApp) string {
 				listID := testsupport.InsertListRow(t, app.db, "Favorites")
 				return fmt.Sprintf("/api/lists/%d/books/999999", listID)
@@ -416,6 +399,7 @@ func TestListAPIRemoveBookReturns404ForMissingResourcesOrMembership(t *testing.T
 		},
 		{
 			name: "absent membership",
+			code: "book_not_in_list",
 			path: func(t *testing.T, app testApp) string {
 				listID := testsupport.InsertListRow(t, app.db, "Favorites")
 				bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
@@ -429,9 +413,7 @@ func TestListAPIRemoveBookReturns404ForMissingResourcesOrMembership(t *testing.T
 			app := newTestApp(t)
 			resp := httptest.NewRecorder()
 			app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, tt.path(t, app), nil))
-			if resp.Code != http.StatusNotFound {
-				t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, resp.Code, resp.Body.String())
-			}
+			assertAPIError(t, resp, http.StatusNotFound, tt.code, "")
 		})
 	}
 }
@@ -521,9 +503,7 @@ func TestListAPIListBooksReturns404ForUnknownList(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/lists/%d/books", unknownListID), nil)
 	resp := httptest.NewRecorder()
 	app.handler.ServeHTTP(resp, req)
-	if resp.Code != http.StatusNotFound {
-		t.Fatalf("expected status %d, got %d", http.StatusNotFound, resp.Code)
-	}
+	assertAPIError(t, resp, http.StatusNotFound, "list_not_found", "")
 }
 
 func TestListAPIListBooksReturnsEmptyArray(t *testing.T) {

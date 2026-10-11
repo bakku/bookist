@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"bakku.dev/bookist/internal/domain"
 	"bakku.dev/bookist/internal/lists"
 	"bakku.dev/bookist/internal/optional"
 	"bakku.dev/bookist/internal/testsupport"
@@ -129,7 +130,7 @@ func TestSQLiteRepositoryUpdateMapsErrors(t *testing.T) {
 	_, err = repository.Update(ctx, 999999, lists.UpdateListRequest{
 		Description: optional.Value[string]{Present: true},
 	})
-	if !errors.Is(err, lists.ErrListNotFound) {
+	if !errors.Is(err, domain.ErrListNotFound) {
 		t.Fatalf("expected ErrListNotFound, got %v", err)
 	}
 }
@@ -224,7 +225,7 @@ func TestSQLiteRepositoryGetByIDReturnsErrListNotFound(t *testing.T) {
 	repository := lists.NewSQLiteRepository(db)
 
 	_, err := repository.GetByID(ctx, 999999)
-	if !errors.Is(err, lists.ErrListNotFound) {
+	if !errors.Is(err, domain.ErrListNotFound) {
 		t.Fatalf("expected ErrListNotFound, got %v", err)
 	}
 }
@@ -265,7 +266,7 @@ func TestSQLiteRepositoryDeleteReturnsErrListNotFound(t *testing.T) {
 	repository := lists.NewSQLiteRepository(db)
 
 	err := repository.Delete(context.Background(), 999999)
-	if !errors.Is(err, lists.ErrListNotFound) {
+	if !errors.Is(err, domain.ErrListNotFound) {
 		t.Fatalf("expected ErrListNotFound, got %v", err)
 	}
 }
@@ -315,7 +316,7 @@ func TestSQLiteRepositoryAddBookToListReturnsErrListNotFound(t *testing.T) {
 	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
 
 	err := repository.AddBookToList(ctx, 999999, bookID)
-	if !errors.Is(err, lists.ErrListNotFound) {
+	if !errors.Is(err, domain.ErrListNotFound) {
 		t.Fatalf("expected ErrListNotFound, got %v", err)
 	}
 }
@@ -328,7 +329,7 @@ func TestSQLiteRepositoryAddBookToListReturnsErrBookNotFound(t *testing.T) {
 	listID := testsupport.InsertListRow(t, db, "Want to Buy")
 
 	err := repository.AddBookToList(ctx, listID, 999999)
-	if !errors.Is(err, lists.ErrBookNotFound) {
+	if !errors.Is(err, domain.ErrBookNotFound) {
 		t.Fatalf("expected ErrBookNotFound, got %v", err)
 	}
 }
@@ -432,14 +433,14 @@ func TestSQLiteRepositoryRemoveBookFromListClassifiesMissingRows(t *testing.T) {
 			setup: func(t *testing.T, db *sql.DB) (int64, int64) {
 				return 999998, 999999
 			},
-			wantError: lists.ErrListNotFound,
+			wantError: domain.ErrListNotFound,
 		},
 		{
 			name: "book missing",
 			setup: func(t *testing.T, db *sql.DB) (int64, int64) {
 				return testsupport.InsertListRow(t, db, "Want to Buy"), 999999
 			},
-			wantError: lists.ErrBookNotFound,
+			wantError: domain.ErrBookNotFound,
 		},
 		{
 			name: "membership missing",

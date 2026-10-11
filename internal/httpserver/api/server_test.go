@@ -47,6 +47,32 @@ func postBody(t *testing.T, handler http.Handler, path, contentType, body string
 	return resp
 }
 
+// assertAPIError checks the status, content type and structured error body of
+// a response. An empty field means the error must not name a field.
+func assertAPIError(t *testing.T, resp *httptest.ResponseRecorder, status int, code, field string) {
+	t.Helper()
+
+	if resp.Code != status {
+		t.Fatalf("expected status %d, got %d: %s", status, resp.Code, resp.Body.String())
+	}
+	if contentType := resp.Header().Get("Content-Type"); contentType != "application/json" {
+		t.Fatalf("expected JSON content type, got %q", contentType)
+	}
+	var body struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+			Field   string `json:"field"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("expected structured error, got %s: %v", resp.Body.String(), err)
+	}
+	if body.Error.Code != code || body.Error.Field != field || body.Error.Message == "" {
+		t.Fatalf("expected error code %q field %q with a message, got %s", code, field, resp.Body.String())
+	}
+}
+
 func assertEmptyJSONArray(t *testing.T, handler http.Handler, path string) {
 	t.Helper()
 
@@ -108,19 +134,7 @@ func TestAPIUnknownPathReturnsJSONNotFound(t *testing.T) {
 			resp := httptest.NewRecorder()
 			app.handler.ServeHTTP(resp, req)
 
-			if resp.Code != http.StatusNotFound {
-				t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, resp.Code, resp.Body.String())
-			}
-			if contentType := resp.Header().Get("Content-Type"); contentType != "application/json" {
-				t.Fatalf("expected JSON content type, got %q", contentType)
-			}
-			var body map[string]string
-			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-				t.Fatal(err)
-			}
-			if body["error"] == "" {
-				t.Fatalf("expected an error message, got %v", body)
-			}
+			assertAPIError(t, resp, http.StatusNotFound, "not_found", "")
 		})
 	}
 }
@@ -132,14 +146,9 @@ func TestAPIUnsupportedMethodReturnsJSONMethodNotAllowed(t *testing.T) {
 	resp := httptest.NewRecorder()
 	app.handler.ServeHTTP(resp, req)
 
-	if resp.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("expected status %d, got %d: %s", http.StatusMethodNotAllowed, resp.Code, resp.Body.String())
-	}
+	assertAPIError(t, resp, http.StatusMethodNotAllowed, "method_not_allowed", "")
 	if allow := resp.Header().Get("Allow"); allow != "GET, POST" {
 		t.Fatalf("expected Allow GET, POST, got %q", allow)
-	}
-	if contentType := resp.Header().Get("Content-Type"); contentType != "application/json" {
-		t.Fatalf("expected JSON content type, got %q", contentType)
 	}
 }
 
@@ -176,9 +185,7 @@ func TestPostRejectsNonJSONContentType(t *testing.T) {
 	for _, route := range seedPostRoutes(t, app) {
 		t.Run(route.name, func(t *testing.T) {
 			resp := postBody(t, app.handler, route.path, "text/plain", route.body)
-			if resp.Code != http.StatusUnsupportedMediaType {
-				t.Fatalf("expected status %d, got %d: %s", http.StatusUnsupportedMediaType, resp.Code, resp.Body.String())
-			}
+			assertAPIError(t, resp, http.StatusUnsupportedMediaType, "unsupported_media_type", "")
 			testsupport.AssertSQLCount(t, app.db, route.seeded, route.count)
 		})
 	}
@@ -190,9 +197,7 @@ func TestPostRejectsTrailingData(t *testing.T) {
 	for _, route := range seedPostRoutes(t, app) {
 		t.Run(route.name, func(t *testing.T) {
 			resp := postBody(t, app.handler, route.path, "application/json", route.body+` {"x":1}`)
-			if resp.Code != http.StatusBadRequest {
-				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
-			}
+			assertAPIError(t, resp, http.StatusBadRequest, "invalid_json", "")
 			testsupport.AssertSQLCount(t, app.db, route.seeded, route.count)
 		})
 	}
@@ -209,9 +214,7 @@ func TestPostRejectsOversizedBody(t *testing.T) {
 
 		t.Run(route.name, func(t *testing.T) {
 			resp := postBody(t, app.handler, route.path, "application/json", strings.Repeat(" ", limit+1)+route.body)
-			if resp.Code != http.StatusRequestEntityTooLarge {
-				t.Fatalf("expected status %d, got %d: %s", http.StatusRequestEntityTooLarge, resp.Code, resp.Body.String())
-			}
+			assertAPIError(t, resp, http.StatusRequestEntityTooLarge, "body_too_large", "")
 			testsupport.AssertSQLCount(t, app.db, route.seeded, route.count)
 		})
 	}

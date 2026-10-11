@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"bakku.dev/bookist/internal/books"
+	"bakku.dev/bookist/internal/domain"
 	"bakku.dev/bookist/internal/optional"
 	"bakku.dev/bookist/internal/testsupport"
 )
@@ -187,7 +188,7 @@ func TestSQLiteRepositoryGetByIDReturnsPersistedBook(t *testing.T) {
 func TestSQLiteRepositoryGetByIDReturnsErrBookNotFound(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	_, err := books.NewSQLiteRepository(db).GetByID(context.Background(), 999999)
-	if !errors.Is(err, books.ErrBookNotFound) {
+	if !errors.Is(err, domain.ErrBookNotFound) {
 		t.Fatalf("expected ErrBookNotFound, got %v", err)
 	}
 }
@@ -357,7 +358,7 @@ func TestSQLiteRepositoryDeleteReturnsErrBookNotFoundForUnknownID(t *testing.T) 
 	repository := books.NewSQLiteRepository(db)
 
 	err := repository.Delete(context.Background(), 999999)
-	if !errors.Is(err, books.ErrBookNotFound) {
+	if !errors.Is(err, domain.ErrBookNotFound) {
 		t.Fatalf("expected ErrBookNotFound, got %v", err)
 	}
 }

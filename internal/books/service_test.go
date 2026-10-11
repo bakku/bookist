@@ -13,6 +13,7 @@ import (
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
 	"bakku.dev/bookist/internal/covers"
+	"bakku.dev/bookist/internal/domain"
 	"bakku.dev/bookist/internal/optional"
 	"bakku.dev/bookist/internal/testsupport"
 )
@@ -922,5 +923,14 @@ func TestServiceSearchByListIDTrimsQueryAndHydratesAuthors(t *testing.T) {
 	}
 	if len(matched[0].Authors) != 1 || matched[0].Authors[0].Name != "Frank Herbert" {
 		t.Fatalf("expected Frank Herbert on matched book, got %#v", matched[0].Authors)
+	}
+}
+
+func TestServiceSearchByListIDReturnsNotFoundForUnknownList(t *testing.T) {
+	service, _ := testsupport.NewBookService(t)
+
+	_, err := service.SearchByListID(context.Background(), 999999, "")
+	if !errors.Is(err, domain.ErrListNotFound) {
+		t.Fatalf("expected ErrListNotFound, got %v", err)
 	}
 }
