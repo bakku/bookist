@@ -3,10 +3,15 @@ package database_test
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
 
+	"bakku.dev/bookist/internal/authors"
+	"bakku.dev/bookist/internal/books"
 	"bakku.dev/bookist/internal/database"
+	"bakku.dev/bookist/internal/optional"
 	"bakku.dev/bookist/internal/testsupport"
 )
 
@@ -34,8 +39,55 @@ func TestOpenEnablesForeignKeysOnEveryConnection(t *testing.T) {
 		_ = second.Close()
 	}()
 
-	assertForeignKeysEnabled(t, ctx, first)
-	assertForeignKeysEnabled(t, ctx, second)
+	for _, conn := range []*sql.Conn{first, second} {
+		assertPragma(t, ctx, conn, "foreign_keys", "1")
+		assertPragma(t, ctx, conn, "busy_timeout", "5000")
+		assertPragma(t, ctx, conn, "journal_mode", "wal")
+	}
+}
+
+// ── Concurrent Writes ─────────────────────────────────────────────────────────
+
+func TestConcurrentWritesAllSucceedAndPersist(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	authorRepository := authors.NewSQLiteRepository(db)
+	bookRepository := books.NewSQLiteRepository(db)
+
+	const writers = 40
+	bookIDs := make([]int64, writers)
+	for i := range bookIDs {
+		bookIDs[i] = testsupport.InsertBookRow(t, db, fmt.Sprintf("Book %d", i), nil)
+	}
+
+	errs := make(chan error, 2*writers)
+	var wg sync.WaitGroup
+	for i := range writers {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			_, err := authorRepository.Create(ctx, authors.CreateAuthorRequest{Name: fmt.Sprintf("Author %d", i)})
+			errs <- err
+		}()
+		go func() {
+			defer wg.Done()
+			_, err := bookRepository.Update(ctx, bookIDs[i], books.UpdateBookRequest{
+				Title: optional.Value[string]{Present: true, Value: new(fmt.Sprintf("Updated %d", i))},
+			})
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Errorf("expected concurrent write to succeed: %v", err)
+		}
+	}
+
+	testsupport.AssertSQLCount(t, db, writers, `SELECT COUNT(*) FROM authors`)
+	testsupport.AssertSQLCount(t, db, writers, `SELECT COUNT(*) FROM books WHERE title LIKE 'Updated %'`)
 }
 
 func TestInitialSchemaHasIDsAndTimestampsOnEveryTable(t *testing.T) {
@@ -263,14 +315,14 @@ func openConnection(t *testing.T, ctx context.Context, db *sql.DB) *sql.Conn {
 	return conn
 }
 
-func assertForeignKeysEnabled(t *testing.T, ctx context.Context, conn *sql.Conn) {
+func assertPragma(t *testing.T, ctx context.Context, conn *sql.Conn, name, want string) {
 	t.Helper()
 
-	var enabled int
-	if err := conn.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&enabled); err != nil {
+	var got string
+	if err := conn.QueryRowContext(ctx, "PRAGMA "+name).Scan(&got); err != nil {
 		t.Fatal(err)
 	}
-	if enabled != 1 {
-		t.Fatalf("expected foreign keys enabled, got %d", enabled)
+	if got != want {
+		t.Fatalf("expected PRAGMA %s to be %q, got %q", name, want, got)
 	}
 }
