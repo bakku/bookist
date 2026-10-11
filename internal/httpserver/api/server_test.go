@@ -2,9 +2,12 @@ package api_test
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,6 +26,7 @@ type testApp struct {
 	handler  http.Handler
 	db       *sql.DB
 	coverDir string
+	logs     *bytes.Buffer
 }
 
 func patchJSON(t *testing.T, handler http.Handler, path, body string) *httptest.ResponseRecorder {
@@ -113,13 +117,17 @@ func newTestAppWithReadRepository(t *testing.T, db *sql.DB, readRepo reads.Repos
 
 	readService := reads.NewService(readRepo)
 
+	logs := &bytes.Buffer{}
+	logger := slog.New(slog.NewTextHandler(logs, nil))
+
 	mux := http.NewServeMux()
-	api.New(bookService, authorService, listService, readService).RegisterRoutes(mux)
+	api.New(bookService, authorService, listService, readService, logger).RegisterRoutes(mux)
 
 	return testApp{
 		handler:  mux,
 		db:       db,
 		coverDir: coverDir,
+		logs:     logs,
 	}
 }
 
@@ -217,5 +225,58 @@ func TestPostRejectsOversizedBody(t *testing.T) {
 			assertAPIError(t, resp, http.StatusRequestEntityTooLarge, "body_too_large", "")
 			testsupport.AssertSQLCount(t, app.db, route.seeded, route.count)
 		})
+	}
+}
+
+// ── Internal Errors ───────────────────────────────────────────────────────────
+
+type failingReadRepository struct {
+	reads.Repository
+	err error
+}
+
+func (r *failingReadRepository) ListByBookID(context.Context, int64) ([]reads.Read, error) {
+	return nil, r.err
+}
+
+func TestAPIInternalErrorIsLoggedWithRequestDetails(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	repository := &failingReadRepository{Repository: reads.NewSQLiteRepository(db), err: errors.New("disk on fire")}
+	app := newTestAppWithReadRepository(t, db, repository)
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/books/%d/reads", bookID), nil)
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, req)
+
+	assertAPIError(t, resp, http.StatusInternalServerError, "internal_error", "")
+	if strings.Contains(resp.Body.String(), "disk on fire") {
+		t.Fatalf("expected the error to stay out of the response, got %s", resp.Body.String())
+	}
+
+	logged := app.logs.String()
+	for _, expected := range []string{
+		"level=ERROR",
+		"method=GET",
+		fmt.Sprintf("path=/api/books/%d/reads", bookID),
+		fmt.Sprintf("id=%d", bookID),
+		`error="disk on fire"`,
+	} {
+		if !strings.Contains(logged, expected) {
+			t.Errorf("expected log to contain %q, got %s", expected, logged)
+		}
+	}
+}
+
+func TestAPIClientErrorsAreNotLoggedAsErrors(t *testing.T) {
+	app := newTestApp(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/books/999/reads", nil)
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, req)
+
+	assertAPIError(t, resp, http.StatusNotFound, "book_not_found", "")
+	if logged := app.logs.String(); logged != "" {
+		t.Fatalf("expected no log output, got %s", logged)
 	}
 }

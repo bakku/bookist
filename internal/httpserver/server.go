@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"log/slog"
 	"net/http"
 
 	"bakku.dev/bookist/internal/authors"
@@ -16,17 +17,17 @@ type Server struct {
 	handler http.Handler
 }
 
-func New(bookService *books.Service, authorService *authors.Service, listService *lists.Service, readService *reads.Service, coverStore *covers.Store) (*Server, error) {
-	webServer, err := httpweb.New(bookService, coverStore)
+func New(bookService *books.Service, authorService *authors.Service, listService *lists.Service, readService *reads.Service, coverStore *covers.Store, logger *slog.Logger) (*Server, error) {
+	webServer, err := httpweb.New(bookService, coverStore, logger)
 	if err != nil {
 		return nil, err
 	}
 
 	mux := http.NewServeMux()
-	api.New(bookService, authorService, listService, readService).RegisterRoutes(mux)
+	api.New(bookService, authorService, listService, readService, logger).RegisterRoutes(mux)
 	webServer.RegisterRoutes(mux)
 
-	return &Server{handler: mux}, nil
+	return &Server{handler: logRequests(logger, mux)}, nil
 }
 
 func (s *Server) Handler() http.Handler {

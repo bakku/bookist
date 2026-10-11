@@ -64,7 +64,7 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	readRepo := reads.NewSQLiteRepository(db)
 	readService := reads.NewService(readRepo)
 
-	server, err := httpserver.New(bookService, authorService, listService, readService, coverStore)
+	server, err := httpserver.New(bookService, authorService, listService, readService, coverStore, appLogger)
 
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "create server: %v\n", err)

@@ -2,6 +2,8 @@ package web_test
 
 import (
 	"database/sql"
+	"io"
+	"log/slog"
 	"net/http"
 	"testing"
 
@@ -30,7 +32,7 @@ func newTestApp(t *testing.T) testApp {
 		t.Fatal(err)
 	}
 
-	server, err := web.New(books.NewService(bookRepo, authorRepo, coverStore), coverStore)
+	server, err := web.New(books.NewService(bookRepo, authorRepo, coverStore), coverStore, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err != nil {
 		t.Fatal(err)
 	}
