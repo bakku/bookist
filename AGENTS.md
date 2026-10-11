@@ -40,6 +40,9 @@ Bookist is intended to be a Go application for managing a home library.
 - API errors are JSON: `{"error": {"code", "message", "field"?}}`. Domain sentinels are built with `internal/apperr` (kinds map to 404/400/409 in one place in `api`); errors shared across packages live in `internal/domain`. Unknown errors become a generic 500.
 - CLI resource-management commands should talk to the HTTP JSON API, not directly to SQLite. Direct DB access is acceptable for `serve` and migration setup.
 - Keep the CLI command shape simple for now: `serve`, `migrate`, and resource commands such as `books list` / `books add`.
+- CLI flags may appear before, between or after positional arguments (`parseFlags` reorders them). Commands that take no positional arguments reject stray ones with a usage error (exit 2).
+- CLI book, author and list references are exact titles/names or IDs, resolved in one place (`resolveReference`). `id:N` always means ID N and must exist. A plain positive integer is looked up as both an ID and an exact title/name; matching different records is an ambiguity error naming each candidate and suggesting `id:N`. Reads take plain read IDs.
+- `books add --author` requires existing authors; `--create-authors` opts in to creating missing ones and reports each on stderr. `books edit --author` only accepts existing authors.
 
 ## Testing Notes
 

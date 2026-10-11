@@ -103,7 +103,7 @@ func runBooksEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 	var seriesPosition optionalFloatFlag
 	var pages, publishedYear, publishedMonth, publishedDay optionalIntFlag
 	flags.Var(&title, "title", "Book title")
-	flags.Var(&authorsFlag, "author", "Existing author name or ID; supplied authors replace the complete author list (repeatable)")
+	flags.Var(&authorsFlag, "author", "Existing author name, ID or id:N; supplied authors replace the complete author list (repeatable)")
 	flags.Var(&cover, "cover", "Cover image file path or URL")
 	flags.Var(&isbn, "isbn", "Book ISBN")
 	flags.Var(&language, "language", "Book language")
@@ -131,6 +131,7 @@ func runBooksEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 		details: []string{
 			partialUpdateHelp,
 			"Supplying --author replaces the complete author list with existing authors; omitting it preserves current authors, and --clear authors removes all author relationships.",
+			referenceHelp,
 		},
 		examples: []string{
 			`bookist books edit 12 --title "Dune Messiah"`,
@@ -138,7 +139,7 @@ func runBooksEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 			"bookist books edit 12 --author Alice --author Bob  # complete author list becomes Alice and Bob",
 		},
 	}
-	if ok, exitCode := parseEditFlags(flags, args, stdout, stderr, help); !ok {
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
 	}
 	if flags.NArg() != 1 {
@@ -216,7 +217,7 @@ func runBooksEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 		request.Cover = optional.Set(data)
 	}
 	if len(authorsFlag) > 0 {
-		ids, err := resolveExistingAuthors(ctx, c, authorsFlag)
+		ids, err := resolveAuthors(ctx, c, authorsFlag, false, stderr)
 		if err != nil {
 			_, _ = fmt.Fprintln(stderr, err)
 			return 1
@@ -240,7 +241,7 @@ func runBooksLS(args []string, stdout io.Writer, stderr io.Writer) int {
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
 	formatValue := flags.String("format", string(outputFormatPretty), "Output format (tsv|pretty|json)")
 	query := flags.String("query", "", "Filter books by title")
-	listRef := flags.String("list", "", "Filter books by list name or ID")
+	listRef := flags.String("list", "", "Filter books by list name, ID or id:N")
 
 	help := commandHelp{
 		name:        "bookist books ls",
@@ -249,6 +250,9 @@ func runBooksLS(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
+	}
+	if !rejectArgs(flags, "books ls", stderr, help) {
+		return 2
 	}
 
 	format, err := parseOutputFormat(*formatValue)
@@ -308,12 +312,14 @@ func runBooksShow(args []string, stdout io.Writer, stderr io.Writer) int {
 		name:        "bookist books show",
 		usage:       "bookist books show <title-or-ID> [options]",
 		description: "Show a book",
+		details:     []string{referenceHelp},
 		examples: []string{
 			"bookist books show 12",
+			"bookist books show id:12",
 			`bookist books show Dune --format json`,
 		},
 	}
-	if ok, exitCode := parseEditFlags(flags, args, stdout, stderr, help); !ok {
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
 	}
 
@@ -427,7 +433,8 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	coverSource := flags.String("cover", "", "Cover image file path or URL")
 
 	var authorFlags stringSliceFlag
-	flags.Var(&authorFlags, "author", "Author name or ID (repeatable)")
+	flags.Var(&authorFlags, "author", "Existing author name, ID or id:N (repeatable)")
+	createAuthors := flags.Bool("create-authors", false, "Create --author values that match no existing author, reporting each on stderr")
 
 	var isbn optionalStringFlag
 	var language optionalStringFlag
@@ -471,9 +478,26 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		name:        "bookist books add",
 		usage:       "bookist books add [options]",
 		description: "Add a book",
+		details: []string{
+			"Each --author must be an existing author unless --create-authors is given, which creates missing authors and reports each on stderr.",
+			referenceHelp,
+		},
+		examples: []string{
+			`bookist books add --title Dune --author "Frank Herbert" --create-authors`,
+		},
 	}
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
+	}
+	if !rejectArgs(flags, "books add", stderr, help) {
+		return 2
+	}
+
+	for _, author := range authorFlags {
+		if strings.TrimSpace(author) == "" {
+			_, _ = fmt.Fprintln(stderr, "Error: --author must not be blank")
+			return 2
+		}
 	}
 
 	input := books.CreateBookRequest{
@@ -512,16 +536,8 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
-	if len(authorFlags) > 0 {
-		authorIDs, err := resolveOrCreateAuthors(ctx, c, authorFlags)
-		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "%v\n", err)
-			return 1
-		}
-
-		input.AuthorIDs = authorIDs
-	}
-
+	// The cover is loaded first so that a bad cover cannot leave newly created
+	// authors behind.
 	if *coverSource != "" {
 		cover, err := loadCover(*coverSource)
 		if err != nil {
@@ -530,6 +546,16 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		}
 
 		input.Cover = &cover
+	}
+
+	if len(authorFlags) > 0 {
+		authorIDs, err := resolveAuthors(ctx, c, authorFlags, *createAuthors, stderr)
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "%v\n", err)
+			return 1
+		}
+
+		input.AuthorIDs = authorIDs
 	}
 
 	book, err := c.Books.Create(ctx, input)
@@ -552,6 +578,7 @@ func runBooksRM(args []string, stdout io.Writer, stderr io.Writer) int {
 		name:        "bookist books rm",
 		usage:       "bookist books rm [options] <title-or-ID>",
 		description: "Remove a book",
+		details:     []string{referenceHelp},
 	}
 
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
@@ -590,42 +617,28 @@ func runBooksRM(args []string, stdout io.Writer, stderr io.Writer) int {
 }
 
 func resolveBookID(ctx context.Context, c *client.Client, value string) (int64, error) {
-	value = strings.TrimSpace(value)
+	return resolveReference(ctx, referenceSource{
+		kind: "book",
+		get: func(ctx context.Context, id int64) (record, error) {
+			book, err := c.Books.Get(ctx, id)
+			return record{ID: book.ID, Name: book.Title}, err
+		},
+		find: func(ctx context.Context, title string) ([]record, error) {
+			existing, err := c.Books.List(ctx, title)
+			if err != nil {
+				return nil, err
+			}
 
-	id, isID, err := parseIDReference(value)
-	if err != nil {
-		return 0, err
-	}
+			var matches []record
+			for _, book := range existing {
+				if strings.EqualFold(book.Title, title) {
+					matches = append(matches, record{ID: book.ID, Name: book.Title})
+				}
+			}
 
-	if isID {
-		return id, nil
-	}
-
-	existing, err := c.Books.List(ctx, value)
-	if err != nil {
-		return 0, fmt.Errorf("fetch books: %w", err)
-	}
-
-	byTitle := make(map[string][]int64)
-
-	for _, b := range existing {
-		if strings.EqualFold(b.Title, value) {
-			key := strings.ToLower(b.Title)
-			byTitle[key] = append(byTitle[key], b.ID)
-		}
-	}
-
-	matches := byTitle[strings.ToLower(value)]
-
-	if len(matches) > 1 {
-		return 0, fmt.Errorf("book %q exists multiple times; pass a book ID instead", value)
-	}
-
-	if len(matches) == 1 {
-		return matches[0], nil
-	}
-
-	return 0, fmt.Errorf("book not found: %s", value)
+			return matches, nil
+		},
+	}, value)
 }
 
 func loadCover(source string) ([]byte, error) {

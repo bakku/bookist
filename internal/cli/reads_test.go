@@ -68,6 +68,9 @@ func TestReadsListJSONUsesFullReadRepresentation(t *testing.T) {
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if answerLookup(w, r, "/api/books", bookID, books.Book{ID: bookID, Title: "Dune"}) {
+			return
+		}
 		_ = json.NewEncoder(w).Encode([]reads.Read{{ID: 10, BookID: bookID, CreatedAt: now, UpdatedAt: now}})
 	}))
 
@@ -220,6 +223,9 @@ func TestReadsAddPostsToBookEndpoint(t *testing.T) {
 	var capturedPath string
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if answerLookup(w, r, "/api/books", bookID, books.Book{ID: bookID, Title: "Dune"}) {
+			return
+		}
 		capturedPath = r.URL.Path
 		if err := json.NewDecoder(r.Body).Decode(&captured); err != nil {
 			t.Error(err)

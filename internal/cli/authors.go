@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -71,10 +72,13 @@ func runAuthorsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 		name:        "bookist authors edit",
 		usage:       "bookist authors edit <name-or-ID> [options]",
 		description: "Edit an author",
-		details:     []string{"Omitted fields are unchanged; supplied values replace fields. The required author name cannot be cleared."},
-		examples:    []string{`bookist authors edit 6 --name "Ursula K. Le Guin"`},
+		details: []string{
+			"Omitted fields are unchanged; supplied values replace fields. The required author name cannot be cleared.",
+			referenceHelp,
+		},
+		examples: []string{`bookist authors edit 6 --name "Ursula K. Le Guin"`},
 	}
-	if ok, exitCode := parseEditFlags(flags, args, stdout, stderr, help); !ok {
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
 	}
 	if flags.NArg() != 1 {
@@ -94,13 +98,9 @@ func runAuthorsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 	if c == nil {
 		return 2
 	}
-	authorID, found, err := resolveAuthorID(ctx, c, flags.Arg(0))
+	authorID, err := resolveAuthorID(ctx, c, flags.Arg(0))
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
-		return 1
-	}
-	if !found {
-		_, _ = fmt.Fprintf(stderr, "author not found: %s\n", flags.Arg(0))
 		return 1
 	}
 	updated, err := c.Authors.Update(ctx, authorID, request)
@@ -126,6 +126,9 @@ func runAuthorsLS(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
+	}
+	if !rejectArgs(flags, "authors ls", stderr, help) {
+		return 2
 	}
 
 	format, err := parseOutputFormat(*formatValue)
@@ -168,12 +171,14 @@ func runAuthorsShow(args []string, stdout io.Writer, stderr io.Writer) int {
 		name:        "bookist authors show",
 		usage:       "bookist authors show <name-or-ID> [options]",
 		description: "Show an author",
+		details:     []string{referenceHelp},
 		examples: []string{
 			"bookist authors show 6",
+			"bookist authors show id:6",
 			`bookist authors show "Ursula K. Le Guin" --format json`,
 		},
 	}
-	if ok, exitCode := parseEditFlags(flags, args, stdout, stderr, help); !ok {
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
 	}
 
@@ -196,13 +201,9 @@ func runAuthorsShow(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
-	authorID, found, err := resolveAuthorID(ctx, c, flags.Arg(0))
+	authorID, err := resolveAuthorID(ctx, c, flags.Arg(0))
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
-		return 1
-	}
-	if !found {
-		_, _ = fmt.Fprintf(stderr, "author not found: %s\n", flags.Arg(0))
 		return 1
 	}
 
@@ -240,6 +241,9 @@ func runAuthorsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
 	}
+	if !rejectArgs(flags, "authors add", stderr, help) {
+		return 2
+	}
 
 	c := newClient(*serverURL, stderr)
 	if c == nil {
@@ -265,6 +269,7 @@ func runAuthorsRM(args []string, stdout io.Writer, stderr io.Writer) int {
 		name:        "bookist authors rm",
 		usage:       "bookist authors rm [options] <name-or-ID>",
 		description: "Remove an author",
+		details:     []string{referenceHelp},
 	}
 
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
@@ -286,14 +291,9 @@ func runAuthorsRM(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
-	authorID, found, err := resolveAuthorID(ctx, c, flags.Arg(0))
+	authorID, err := resolveAuthorID(ctx, c, flags.Arg(0))
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "%v\n", err)
-		return 1
-	}
-
-	if !found {
-		_, _ = fmt.Fprintf(stderr, "author not found: %s\n", flags.Arg(0))
 		return 1
 	}
 
@@ -307,50 +307,29 @@ func runAuthorsRM(args []string, stdout io.Writer, stderr io.Writer) int {
 	return 0
 }
 
-func resolveOrCreateAuthors(ctx context.Context, c *client.Client, values []string) ([]int64, error) {
-	if len(values) == 0 {
-		return nil, nil
-	}
-
-	var result []int64
-
-	for _, val := range values {
-		val = strings.TrimSpace(val)
-		if val == "" {
-			continue
-		}
-
-		authorID, found, err := resolveAuthorID(ctx, c, val)
-		if err != nil {
-			return nil, err
-		}
-
-		if found {
-			result = append(result, authorID)
-			continue
-		}
-
-		created, err := c.Authors.Create(ctx, authors.CreateAuthorRequest{Name: val})
-		if err != nil {
-			return nil, fmt.Errorf("create author %q: %v", val, err)
-		}
-
-		result = append(result, created.ID)
-	}
-
-	return result, nil
-}
-
-func resolveExistingAuthors(ctx context.Context, c *client.Client, values []string) ([]int64, error) {
+// resolveAuthors resolves author references to IDs. A reference that matches
+// no author is an error, unless create is set and the reference is not
+// id:N, in which case the author is created and reported on stderr.
+func resolveAuthors(ctx context.Context, c *client.Client, values []string, create bool, stderr io.Writer) ([]int64, error) {
 	result := make([]int64, 0, len(values))
 
 	for _, value := range values {
-		authorID, found, err := resolveAuthorID(ctx, c, value)
+		value = strings.TrimSpace(value)
+
+		authorID, err := resolveAuthorID(ctx, c, value)
+
+		var missing *notFoundError
+		if create && errors.As(err, &missing) && !strings.HasPrefix(value, explicitIDPrefix) {
+			created, createErr := c.Authors.Create(ctx, authors.CreateAuthorRequest{Name: value})
+			if createErr != nil {
+				return nil, fmt.Errorf("create author %q: %v", value, createErr)
+			}
+
+			_, _ = fmt.Fprintf(stderr, "created author %q (id %d)\n", created.Name, created.ID)
+			authorID, err = created.ID, nil
+		}
 		if err != nil {
 			return nil, err
-		}
-		if !found {
-			return nil, fmt.Errorf("author not found: %s", value)
 		}
 
 		result = append(result, authorID)
@@ -359,50 +338,27 @@ func resolveExistingAuthors(ctx context.Context, c *client.Client, values []stri
 	return result, nil
 }
 
-func resolveAuthorID(ctx context.Context, c *client.Client, value string) (int64, bool, error) {
-	value = strings.TrimSpace(value)
+func resolveAuthorID(ctx context.Context, c *client.Client, value string) (int64, error) {
+	return resolveReference(ctx, referenceSource{
+		kind: "author",
+		get: func(ctx context.Context, id int64) (record, error) {
+			author, err := c.Authors.Get(ctx, id)
+			return record{ID: author.ID, Name: author.Name}, err
+		},
+		find: func(ctx context.Context, name string) ([]record, error) {
+			existing, err := c.Authors.List(ctx, name)
+			if err != nil {
+				return nil, err
+			}
 
-	id, isID, err := parseIDReference(value)
-	if err != nil {
-		return 0, false, err
-	}
+			var matches []record
+			for _, author := range existing {
+				if strings.EqualFold(author.Name, name) {
+					matches = append(matches, record{ID: author.ID, Name: author.Name})
+				}
+			}
 
-	if isID {
-		return id, true, nil
-	}
-
-	id, found, err := resolveAuthorName(ctx, c, value)
-	if err != nil {
-		return 0, false, err
-	}
-
-	if !found {
-		return 0, false, nil
-	}
-
-	return id, true, nil
-}
-
-func resolveAuthorName(ctx context.Context, c *client.Client, name string) (int64, bool, error) {
-	existing, err := c.Authors.List(ctx, name)
-	if err != nil {
-		return 0, false, fmt.Errorf("fetch authors: %w", err)
-	}
-
-	var matches []authors.Author
-	for _, author := range existing {
-		if strings.EqualFold(author.Name, name) {
-			matches = append(matches, author)
-		}
-	}
-
-	if len(matches) > 1 {
-		return 0, false, fmt.Errorf("author %q exists multiple times; pass an author ID instead", name)
-	}
-
-	if len(matches) == 1 {
-		return matches[0].ID, true, nil
-	}
-
-	return 0, false, nil
+			return matches, nil
+		},
+	}, value)
 }

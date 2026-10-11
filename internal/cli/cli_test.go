@@ -1,8 +1,10 @@
 package cli_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -40,6 +42,34 @@ func TestRootHelpShowsOnlyTopLevelCommands(t *testing.T) {
 			for _, unexpected := range []string{"bookist books list", "bookist authors add", "--server"} {
 				if strings.Contains(stdout, unexpected) {
 					t.Errorf("expected stdout not to contain %q, got:\n%s", unexpected, stdout)
+				}
+			}
+		})
+	}
+}
+
+func TestReferenceHelpDocumentsExplicitIDsAndAuthorCreation(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected []string
+	}{
+		{name: "books rm", args: []string{"books", "rm", "--help"}, expected: []string{"write id:N (for example id:12) to always mean an ID."}},
+		{name: "authors show", args: []string{"authors", "show", "--help"}, expected: []string{"authors show id:6", "write id:N"}},
+		{name: "lists add-book", args: []string{"lists", "add-book", "--help"}, expected: []string{"--list string    List name, ID or id:N", "--book string    Book title, ID or id:N"}},
+		{name: "books add", args: []string{"books", "add", "--help"}, expected: []string{"--create-authors", "unless --create-authors is given", "write id:N"}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			exitCode, stdout, _ := runCLI(test.args)
+
+			if exitCode != 0 {
+				t.Fatalf("expected exit code 0, got %d", exitCode)
+			}
+			for _, expected := range test.expected {
+				if !strings.Contains(stdout, expected) {
+					t.Errorf("expected stdout to contain %q, got:\n%s", expected, stdout)
 				}
 			}
 		})
@@ -113,7 +143,7 @@ func TestLeafHelpShowsCommandOptionsAndExitsSuccessfully(t *testing.T) {
 		{name: "migrate", args: []string{"migrate", "--help"}, expected: []string{"bookist migrate - Run database migrations", "--db string"}},
 		{name: "books ls", args: []string{"books", "ls", "--help"}, expected: []string{"bookist books ls - List books", "--format string", "Output format (tsv|pretty|json) (default: pretty)", "--list string", "--query string", "--server string"}},
 		{name: "books show", args: []string{"books", "show", "--help"}, expected: []string{"bookist books show - Show a book", "<title-or-ID> [options]", "--format string", "--server string"}},
-		{name: "books add", args: []string{"books", "add", "-h"}, expected: []string{"bookist books add - Add a book", "--author string", "--title string", "--cover string", "--condition string", "--series-position float"}},
+		{name: "books add", args: []string{"books", "add", "-h"}, expected: []string{"bookist books add - Add a book", "--author string", "--create-authors", "--title string", "--cover string", "--condition string", "--series-position float"}},
 		{name: "books add long single dash", args: []string{"books", "add", "-help"}, expected: []string{"bookist books add - Add a book", "--author string", "--title string"}},
 		{name: "books rm", args: []string{"books", "rm", "--help"}, expected: []string{"bookist books rm - Remove a book", "<title-or-ID>", "--server string"}},
 		{name: "books edit", args: []string{"books", "edit", "--help"}, expected: []string{"bookist books edit - Edit a book", "<title-or-ID> [options]", "--author string", "--clear string", "--cover string"}},
@@ -351,4 +381,24 @@ func runCLI(args []string) (int, string, string) {
 	var stdout, stderr strings.Builder
 	exitCode := cli.Run(args, &stdout, &stderr)
 	return exitCode, stdout.String(), stderr.String()
+}
+
+// answerLookup serves the GET requests that resolving a numeric reference
+// makes: an empty exact-name search on collection and the record itself at
+// collection/id. It reports whether it handled the request.
+func answerLookup(w http.ResponseWriter, r *http.Request, collection string, id int64, record any) bool {
+	if r.Method != http.MethodGet {
+		return false
+	}
+
+	switch r.URL.Path {
+	case collection:
+		_ = json.NewEncoder(w).Encode([]any{})
+	case collection + "/" + strconv.FormatInt(id, 10):
+		_ = json.NewEncoder(w).Encode(record)
+	default:
+		return false
+	}
+
+	return true
 }
