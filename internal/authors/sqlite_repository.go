@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"bakku.dev/bookist/internal/database"
 )
 
 type SQLiteRepository struct {
@@ -60,9 +62,9 @@ func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]Author, 
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, name, created_at, updated_at
 		FROM authors
-		WHERE instr(lower(name), lower(?)) > 0
+		WHERE instr(bookist_fold(name), ?) > 0
 		ORDER BY updated_at DESC, id ASC
-	`, query)
+	`, database.Fold(query))
 	if err != nil {
 		return nil, err
 	}

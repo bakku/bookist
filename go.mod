@@ -4,6 +4,7 @@ go 1.26.4
 
 require (
 	github.com/pressly/goose/v3 v3.27.1
+	golang.org/x/text v0.37.0
 	modernc.org/sqlite v1.53.0
 )
 

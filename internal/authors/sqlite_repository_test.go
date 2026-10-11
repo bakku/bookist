@@ -116,6 +116,47 @@ func TestSQLiteRepositorySearchMatchesNamesCaseInsensitively(t *testing.T) {
 	}
 }
 
+func TestSQLiteRepositorySearchMatchesNonASCIIAndIgnoresAccents(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := authors.NewSQLiteRepository(db)
+	id := testsupport.InsertAuthorRow(t, db, "Édouard Louis")
+	testsupport.InsertAuthorRow(t, db, "Octavia Butler")
+
+	for _, query := range []string{"édouard", "ÉDOUARD", "edouard", "EDOUARD LOUIS"} {
+		t.Run(query, func(t *testing.T) {
+			matched, err := repository.Search(ctx, query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(matched) != 1 || matched[0].ID != id {
+				t.Fatalf("expected only author %d, got %#v", id, matched)
+			}
+		})
+	}
+}
+
+func TestSQLiteRepositorySearchTreatsSQLWildcardsLiterally(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := authors.NewSQLiteRepository(db)
+	percentID := testsupport.InsertAuthorRow(t, db, "100% Author")
+	underscoreID := testsupport.InsertAuthorRow(t, db, "Under_score")
+	testsupport.InsertAuthorRow(t, db, "Jane Austen")
+
+	for query, want := range map[string]int64{"%": percentID, "_": underscoreID} {
+		t.Run(query, func(t *testing.T) {
+			matched, err := repository.Search(ctx, query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(matched) != 1 || matched[0].ID != want {
+				t.Fatalf("expected only author %d, got %#v", want, matched)
+			}
+		})
+	}
+}
+
 // ── GetByID ───────────────────────────────────────────────────────────────────
 
 func TestSQLiteRepositoryGetByIDReturnsPersistedAuthor(t *testing.T) {

@@ -91,9 +91,9 @@ func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]List, er
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, name, description, created_at, updated_at
 		FROM lists
-		WHERE instr(lower(name), lower(?)) > 0
+		WHERE instr(bookist_fold(name), ?) > 0
 		ORDER BY updated_at DESC, id ASC
-	`, query)
+	`, database.Fold(query))
 	if err != nil {
 		return nil, err
 	}

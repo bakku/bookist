@@ -18,6 +18,8 @@ const connectionParams = "_pragma=busy_timeout(5000)" +
 	"&_txlock=immediate"
 
 func Open(ctx context.Context, path string) (*sql.DB, error) {
+	registerFoldFunction()
+
 	separator := "?"
 	if strings.Contains(path, "?") {
 		separator = "&"
