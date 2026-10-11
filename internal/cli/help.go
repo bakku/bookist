@@ -54,7 +54,15 @@ func printCommandHelp(w io.Writer, help commandHelp, flags *flag.FlagSet) {
 
 	if flags != nil {
 		flags.VisitAll(func(f *flag.Flag) {
-			option := "--" + f.Name + flagPlaceholder(f)
+			if f.Name == "o" {
+				return
+			}
+
+			option := "--" + f.Name
+			if f.Name == "output" {
+				option += ", -o"
+			}
+			option += flagPlaceholder(f)
 			description := f.Usage
 
 			if showDefault(f.DefValue) {
@@ -68,6 +76,14 @@ func printCommandHelp(w io.Writer, help commandHelp, flags *flag.FlagSet) {
 
 	_ = tw.Flush()
 }
+
+const (
+	mutationOutputHelp = "With --output json, prints the resulting record as JSON instead of text."
+	removedOutputHelp  = `With --output json, prints {"id": N, "removed": true} instead of text.`
+
+	membershipAddOutputHelp    = `With --output json, prints {"list_id": N, "book_id": N, "added": true} instead of text.`
+	membershipRemoveOutputHelp = `With --output json, prints {"list_id": N, "book_id": N, "removed": true} instead of text.`
+)
 
 // parseFlags parses command arguments. Flags may appear before, between and
 // after positional arguments.

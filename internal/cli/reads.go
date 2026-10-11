@@ -30,7 +30,7 @@ func runReads(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	switch args[0] {
-	case "ls":
+	case "ls", "list":
 		return runReadsLS(args[1:], stdout, stderr)
 	case "show":
 		return runReadsShow(args[1:], stdout, stderr)
@@ -56,7 +56,7 @@ func printReadsHelp(w io.Writer) {
 		usage:       "bookist reads [command [command options]]",
 		description: "Manage book reads",
 		commands: []helpCommand{
-			{name: "ls", description: "List reads for a book"},
+			{name: "ls, list", description: "List reads for a book"},
 			{name: "show", description: "Show a read"},
 			{name: "add", description: "Record a read for a book"},
 			{name: "edit", description: "Edit a read"},
@@ -68,7 +68,8 @@ func printReadsHelp(w io.Writer) {
 func runReadsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("reads edit", flag.ContinueOnError)
 
-	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	serverURL := serverFlag(flags)
+	outputValue := outputFlag(flags, outputFormatText, mutationFormatsHelp)
 
 	var startedAt optionalStringFlag
 	var finishedAt optionalStringFlag
@@ -88,7 +89,7 @@ func runReadsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 		name:        "bookist reads edit",
 		usage:       "bookist reads edit <read-ID> [options]",
 		description: "Edit a read",
-		details:     []string{partialUpdateHelp},
+		details:     []string{partialUpdateHelp, mutationOutputHelp},
 		examples: []string{
 			"bookist reads edit 9 --rating 4.5",
 			"bookist reads edit 9 --clear rating --clear notes",
@@ -134,6 +135,12 @@ func runReadsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
+	format, err := parseMutationOutput(*outputValue)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+
 	c := newClient(*serverURL, stderr)
 	if c == nil {
 		return 2
@@ -145,16 +152,21 @@ func runReadsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 
-	_, _ = fmt.Fprintf(stdout, "%d\t%d\n", updated.ID, updated.BookID)
+	text := fmt.Sprintf("%d\t%d", updated.ID, updated.BookID)
+	if err := writeMutationOutput(stdout, format, updated, text); err != nil {
+		_, _ = fmt.Fprintf(stderr, "edit read: write output: %v\n", err)
+		return 1
+	}
+
 	return 0
 }
 
 func runReadsLS(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("reads ls", flag.ContinueOnError)
 
-	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	serverURL := serverFlag(flags)
 	bookRef := flags.String("book", "", "Book title, ID or id:N")
-	formatValue := flags.String("format", string(outputFormatPretty), "Output format (tsv|pretty|json)")
+	outputValue := outputFlag(flags, outputFormatPretty, outputFormatsHelp)
 
 	help := commandHelp{
 		name:        "bookist reads ls",
@@ -170,7 +182,7 @@ func runReadsLS(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
-	format, err := parseOutputFormat(*formatValue)
+	format, err := parseOutputFormat(*outputValue)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
@@ -224,14 +236,14 @@ func runReadsLS(args []string, stdout io.Writer, stderr io.Writer) int {
 func runReadsShow(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("reads show", flag.ContinueOnError)
 
-	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
-	formatValue := flags.String("format", string(outputFormatPretty), "Output format (tsv|pretty|json)")
+	serverURL := serverFlag(flags)
+	outputValue := outputFlag(flags, outputFormatPretty, outputFormatsHelp)
 
 	help := commandHelp{
 		name:        "bookist reads show",
 		usage:       "bookist reads show <read-ID> [options]",
 		description: "Show a read",
-		examples:    []string{"bookist reads show 9", "bookist reads show 9 --format json"},
+		examples:    []string{"bookist reads show 9", "bookist reads show 9 --output json"},
 	}
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
@@ -244,7 +256,7 @@ func runReadsShow(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
-	format, err := parseOutputFormat(*formatValue)
+	format, err := parseOutputFormat(*outputValue)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
@@ -294,7 +306,8 @@ func runReadsShow(args []string, stdout io.Writer, stderr io.Writer) int {
 func runReadsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("reads add", flag.ContinueOnError)
 
-	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	serverURL := serverFlag(flags)
+	outputValue := outputFlag(flags, outputFormatText, mutationFormatsHelp)
 	bookRef := flags.String("book", "", "Book title, ID or id:N")
 
 	var startedAt optionalStringFlag
@@ -313,7 +326,7 @@ func runReadsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		name:        "bookist reads add",
 		usage:       "bookist reads add [options]",
 		description: "Record a read for a book",
-		details:     []string{referenceHelp},
+		details:     []string{referenceHelp, mutationOutputHelp},
 	}
 
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
@@ -325,6 +338,12 @@ func runReadsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	if strings.TrimSpace(*bookRef) == "" {
 		_, _ = fmt.Fprintln(stderr, "--book is required")
+		return 2
+	}
+
+	format, err := parseMutationOutput(*outputValue)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}
 
@@ -354,7 +373,11 @@ func runReadsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 
-	_, _ = fmt.Fprintf(stdout, "%d\t%d\n", created.ID, created.BookID)
+	text := fmt.Sprintf("%d\t%d", created.ID, created.BookID)
+	if err := writeMutationOutput(stdout, format, created, text); err != nil {
+		_, _ = fmt.Fprintf(stderr, "add read: write output: %v\n", err)
+		return 1
+	}
 
 	return 0
 }
@@ -362,12 +385,14 @@ func runReadsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 func runReadsRM(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("reads rm", flag.ContinueOnError)
 
-	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	serverURL := serverFlag(flags)
+	outputValue := outputFlag(flags, outputFormatText, mutationFormatsHelp)
 
 	help := commandHelp{
 		name:        "bookist reads rm",
 		usage:       "bookist reads rm [options] <read-ID>",
 		description: "Remove a read",
+		details:     []string{removedOutputHelp},
 	}
 
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
@@ -394,6 +419,12 @@ func runReadsRM(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
+	format, err := parseMutationOutput(*outputValue)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+
 	c := newClient(*serverURL, stderr)
 	if c == nil {
 		return 2
@@ -404,7 +435,11 @@ func runReadsRM(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 
-	_, _ = fmt.Fprintf(stdout, "removed read %d\n", readID)
+	text := fmt.Sprintf("removed read %d", readID)
+	if err := writeMutationOutput(stdout, format, removedResult{ID: readID, Removed: true}, text); err != nil {
+		_, _ = fmt.Fprintf(stderr, "remove read: write output: %v\n", err)
+		return 1
+	}
 
 	return 0
 }

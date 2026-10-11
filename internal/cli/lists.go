@@ -25,7 +25,7 @@ func runLists(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	switch args[0] {
-	case "ls":
+	case "ls", "list":
 		return runListsLS(args[1:], stdout, stderr)
 
 	case "show":
@@ -63,7 +63,7 @@ func printListsHelp(w io.Writer) {
 		usage:       "bookist lists [command [command options]]",
 		description: "Manage book lists",
 		commands: []helpCommand{
-			{name: "ls", description: "List book lists"},
+			{name: "ls, list", description: "List book lists"},
 			{name: "show", description: "Show a book list"},
 			{name: "add", description: "Add a book list"},
 			{name: "edit", description: "Edit a book list"},
@@ -77,7 +77,8 @@ func printListsHelp(w io.Writer) {
 func runListsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("lists edit", flag.ContinueOnError)
 
-	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	serverURL := serverFlag(flags)
+	outputValue := outputFlag(flags, outputFormatText, mutationFormatsHelp)
 
 	var name optionalStringFlag
 	var description optionalStringFlag
@@ -91,7 +92,7 @@ func runListsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 		name:        "bookist lists edit",
 		usage:       "bookist lists edit <name-or-ID> [options]",
 		description: "Edit a book list",
-		details:     []string{partialUpdateHelp, referenceHelp},
+		details:     []string{partialUpdateHelp, referenceHelp, mutationOutputHelp},
 		examples: []string{
 			`bookist lists edit 5 --name "Best Books"`,
 			"bookist lists edit 5 --clear description",
@@ -122,6 +123,12 @@ func runListsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
+	format, err := parseMutationOutput(*outputValue)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+
 	ctx := context.Background()
 	c := newClient(*serverURL, stderr)
 	if c == nil {
@@ -140,15 +147,20 @@ func runListsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 
-	_, _ = fmt.Fprintf(stdout, "%d\t%s\n", updated.ID, updated.Name)
+	text := fmt.Sprintf("%d\t%s", updated.ID, updated.Name)
+	if err := writeMutationOutput(stdout, format, updated, text); err != nil {
+		_, _ = fmt.Fprintf(stderr, "edit list: write output: %v\n", err)
+		return 1
+	}
+
 	return 0
 }
 
 func runListsLS(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("lists ls", flag.ContinueOnError)
 
-	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
-	formatValue := flags.String("format", string(outputFormatPretty), "Output format (tsv|pretty|json)")
+	serverURL := serverFlag(flags)
+	outputValue := outputFlag(flags, outputFormatPretty, outputFormatsHelp)
 	query := flags.String("query", "", "Filter lists by name")
 
 	help := commandHelp{
@@ -163,7 +175,7 @@ func runListsLS(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
-	format, err := parseOutputFormat(*formatValue)
+	format, err := parseOutputFormat(*outputValue)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
@@ -196,8 +208,8 @@ func runListsLS(args []string, stdout io.Writer, stderr io.Writer) int {
 func runListsShow(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("lists show", flag.ContinueOnError)
 
-	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
-	formatValue := flags.String("format", string(outputFormatPretty), "Output format (tsv|pretty|json)")
+	serverURL := serverFlag(flags)
+	outputValue := outputFlag(flags, outputFormatPretty, outputFormatsHelp)
 
 	help := commandHelp{
 		name:        "bookist lists show",
@@ -207,7 +219,7 @@ func runListsShow(args []string, stdout io.Writer, stderr io.Writer) int {
 		examples: []string{
 			"bookist lists show 5",
 			"bookist lists show id:5",
-			`bookist lists show "Best Books" --format json`,
+			`bookist lists show "Best Books" --output json`,
 		},
 	}
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
@@ -221,7 +233,7 @@ func runListsShow(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
-	format, err := parseOutputFormat(*formatValue)
+	format, err := parseOutputFormat(*outputValue)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
@@ -263,7 +275,8 @@ func runListsShow(args []string, stdout io.Writer, stderr io.Writer) int {
 func runListsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("lists add", flag.ContinueOnError)
 
-	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	serverURL := serverFlag(flags)
+	outputValue := outputFlag(flags, outputFormatText, mutationFormatsHelp)
 	name := flags.String("name", "", "List name")
 	description := flags.String("description", "", "List description")
 
@@ -271,6 +284,7 @@ func runListsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		name:        "bookist lists add",
 		usage:       "bookist lists add [options]",
 		description: "Add a book list",
+		details:     []string{mutationOutputHelp},
 	}
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
@@ -287,6 +301,12 @@ func runListsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		input.Description = description
 	}
 
+	format, err := parseMutationOutput(*outputValue)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+
 	c := newClient(*serverURL, stderr)
 	if c == nil {
 		return 2
@@ -298,14 +318,20 @@ func runListsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 
-	_, _ = fmt.Fprintf(stdout, "%d\t%s\n", created.ID, created.Name)
+	text := fmt.Sprintf("%d\t%s", created.ID, created.Name)
+	if err := writeMutationOutput(stdout, format, created, text); err != nil {
+		_, _ = fmt.Fprintf(stderr, "add list: write output: %v\n", err)
+		return 1
+	}
+
 	return 0
 }
 
 func runListsAddBook(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("lists add-book", flag.ContinueOnError)
 
-	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	serverURL := serverFlag(flags)
+	outputValue := outputFlag(flags, outputFormatText, mutationFormatsHelp)
 	listRef := flags.String("list", "", "List name, ID or id:N")
 	bookRef := flags.String("book", "", "Book title, ID or id:N")
 
@@ -313,7 +339,7 @@ func runListsAddBook(args []string, stdout io.Writer, stderr io.Writer) int {
 		name:        "bookist lists add-book",
 		usage:       "bookist lists add-book [options]",
 		description: "Add a book to a list",
-		details:     []string{referenceHelp},
+		details:     []string{referenceHelp, membershipAddOutputHelp},
 		examples:    []string{`bookist lists add-book --list "Best Books" --book id:12`},
 	}
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
@@ -330,6 +356,12 @@ func runListsAddBook(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	if strings.TrimSpace(*bookRef) == "" {
 		_, _ = fmt.Fprintln(stderr, "--book is required")
+		return 2
+	}
+
+	format, err := parseMutationOutput(*outputValue)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}
 
@@ -356,20 +388,26 @@ func runListsAddBook(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 
-	_, _ = fmt.Fprintf(stdout, "added book %d to list %d\n", bookID, listID)
+	text := fmt.Sprintf("added book %d to list %d", bookID, listID)
+	if err := writeMutationOutput(stdout, format, addedToListResult{ListID: listID, BookID: bookID, Added: true}, text); err != nil {
+		_, _ = fmt.Fprintf(stderr, "add book to list: write output: %v\n", err)
+		return 1
+	}
+
 	return 0
 }
 
 func runListsRM(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("lists rm", flag.ContinueOnError)
 
-	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	serverURL := serverFlag(flags)
+	outputValue := outputFlag(flags, outputFormatText, mutationFormatsHelp)
 
 	help := commandHelp{
 		name:        "bookist lists rm",
 		usage:       "bookist lists rm [options] <name-or-ID>",
 		description: "Remove a book list",
-		details:     []string{referenceHelp},
+		details:     []string{referenceHelp, removedOutputHelp},
 	}
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
@@ -381,6 +419,12 @@ func runListsRM(args []string, stdout io.Writer, stderr io.Writer) int {
 
 		printCommandHelp(stderr, help, flags)
 
+		return 2
+	}
+
+	format, err := parseMutationOutput(*outputValue)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}
 
@@ -401,7 +445,11 @@ func runListsRM(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 
-	_, _ = fmt.Fprintf(stdout, "removed list %d\n", listID)
+	text := fmt.Sprintf("removed list %d", listID)
+	if err := writeMutationOutput(stdout, format, removedResult{ID: listID, Removed: true}, text); err != nil {
+		_, _ = fmt.Fprintf(stderr, "remove list: write output: %v\n", err)
+		return 1
+	}
 
 	return 0
 }
@@ -409,7 +457,8 @@ func runListsRM(args []string, stdout io.Writer, stderr io.Writer) int {
 func runListsRMBook(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("lists rm-book", flag.ContinueOnError)
 
-	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	serverURL := serverFlag(flags)
+	outputValue := outputFlag(flags, outputFormatText, mutationFormatsHelp)
 	listRef := flags.String("list", "", "List name, ID or id:N")
 	bookRef := flags.String("book", "", "Book title, ID or id:N")
 
@@ -417,7 +466,7 @@ func runListsRMBook(args []string, stdout io.Writer, stderr io.Writer) int {
 		name:        "bookist lists rm-book",
 		usage:       "bookist lists rm-book [options]",
 		description: "Remove a book from a list",
-		details:     []string{referenceHelp},
+		details:     []string{referenceHelp, membershipRemoveOutputHelp},
 	}
 
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
@@ -435,6 +484,12 @@ func runListsRMBook(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	if strings.TrimSpace(*bookRef) == "" {
 		_, _ = fmt.Fprintln(stderr, "--book is required")
+		return 2
+	}
+
+	format, err := parseMutationOutput(*outputValue)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}
 
@@ -461,7 +516,11 @@ func runListsRMBook(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 
-	_, _ = fmt.Fprintf(stdout, "removed book %d from list %d\n", bookID, listID)
+	text := fmt.Sprintf("removed book %d from list %d", bookID, listID)
+	if err := writeMutationOutput(stdout, format, removedFromListResult{ListID: listID, BookID: bookID, Removed: true}, text); err != nil {
+		_, _ = fmt.Fprintf(stderr, "remove book from list: write output: %v\n", err)
+		return 1
+	}
 
 	return 0
 }
