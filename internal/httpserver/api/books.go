@@ -18,6 +18,21 @@ func (s *Server) handleAPIListBooks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, bookList)
 }
 
+func (s *Server) handleAPIGetBook(w http.ResponseWriter, r *http.Request) {
+	id, ok := parsePathID(w, r, "id", "book")
+	if !ok {
+		return
+	}
+
+	book, err := s.books.GetByID(r.Context(), id)
+	if err != nil {
+		s.writeError(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, book)
+}
+
 func (s *Server) handleAPICreateBook(w http.ResponseWriter, r *http.Request) {
 	var input books.CreateBookRequest
 	if !decodeJSON(w, r, &input, maxCreateBookBodySize) {

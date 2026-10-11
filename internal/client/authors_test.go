@@ -33,6 +33,30 @@ func TestAuthorsList(t *testing.T) {
 	}
 }
 
+// ── Authors Get ───────────────────────────────────────────────────────────────
+
+func TestAuthorsGetReturnsAuthor(t *testing.T) {
+	c, db := newTestClient(t)
+	testsupport.InsertAuthorRow(t, db, "Octavia Butler")
+	herbertID := testsupport.InsertAuthorRow(t, db, "Frank Herbert")
+
+	got, err := c.Authors.Get(context.Background(), herbertID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != herbertID || got.Name != "Frank Herbert" {
+		t.Fatalf("unexpected author %#v", got)
+	}
+}
+
+func TestAuthorsGetMissingAuthorReturnsNotFound(t *testing.T) {
+	c, _ := newTestClient(t)
+
+	_, err := c.Authors.Get(context.Background(), 999)
+
+	assertClientError(t, err, 404, "author_not_found", "")
+}
+
 // ── Authors Create ────────────────────────────────────────────────────────────
 
 func TestAuthorsCreatePersistsAuthor(t *testing.T) {

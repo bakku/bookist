@@ -763,6 +763,60 @@ func TestServiceDeleteRemovesManagedCover(t *testing.T) {
 	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
 }
 
+// ── GetByID ───────────────────────────────────────────────────────────────────
+
+func TestServiceGetByIDHydratesAuthorsAndCoverURL(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+	repository := books.NewSQLiteRepository(db)
+	coverImageKey := "0123456789abcdef0123456789abcdef.png"
+	created, err := repository.Create(context.Background(), books.CreateBookRequest{Title: "Dune", CoverImageKey: &coverImageKey})
+	if err != nil {
+		t.Fatal(err)
+	}
+	testsupport.InsertBookRow(t, db, "Other", nil)
+	authorID := testsupport.InsertAuthorRow(t, db, "Frank Herbert")
+	testsupport.InsertBookAuthorRow(t, db, created.ID, authorID)
+
+	got, err := service.GetByID(context.Background(), created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != created.ID || got.Title != "Dune" {
+		t.Fatalf("unexpected book: %#v", got)
+	}
+	if len(got.Authors) != 1 || got.Authors[0].ID != authorID {
+		t.Fatalf("expected Frank Herbert on book, got %#v", got.Authors)
+	}
+	if got.CoverURL == nil || *got.CoverURL != "/book-covers/"+coverImageKey {
+		t.Fatalf("expected cover URL, got %#v", got.CoverURL)
+	}
+}
+
+func TestServiceGetByIDReturnsEmptyAuthorsForBookWithoutAuthors(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+	id := testsupport.InsertBookRow(t, db, "Dune", nil)
+
+	got, err := service.GetByID(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Authors == nil || len(got.Authors) != 0 {
+		t.Fatalf("expected empty non-nil authors, got %#v", got.Authors)
+	}
+	if got.CoverURL != nil {
+		t.Fatalf("expected no cover URL, got %#v", got.CoverURL)
+	}
+}
+
+func TestServiceGetByIDReturnsErrBookNotFound(t *testing.T) {
+	service, _ := testsupport.NewBookService(t)
+
+	_, err := service.GetByID(context.Background(), 999999)
+	if !errors.Is(err, domain.ErrBookNotFound) {
+		t.Fatalf("expected ErrBookNotFound, got %v", err)
+	}
+}
+
 // ── List ──────────────────────────────────────────────────────────────────────
 
 func TestServiceListHydratesAuthors(t *testing.T) {

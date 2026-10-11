@@ -55,6 +55,9 @@ func runBooks(args []string, stdout io.Writer, stderr io.Writer) int {
 	case "ls":
 		return runBooksLS(args[1:], stdout, stderr)
 
+	case "show":
+		return runBooksShow(args[1:], stdout, stderr)
+
 	case "add":
 		return runBooksAdd(args[1:], stdout, stderr)
 
@@ -82,6 +85,7 @@ func printBooksHelp(w io.Writer) {
 		description: "Manage books",
 		commands: []helpCommand{
 			{name: "ls", description: "List books"},
+			{name: "show", description: "Show a book"},
 			{name: "add", description: "Add a book"},
 			{name: "edit", description: "Edit a book"},
 			{name: "rm", description: "Remove a book"},
@@ -292,6 +296,127 @@ func runBooksLS(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 
 	return 0
+}
+
+func runBooksShow(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("books show", flag.ContinueOnError)
+
+	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	formatValue := flags.String("format", string(outputFormatPretty), "Output format (tsv|pretty|json)")
+
+	help := commandHelp{
+		name:        "bookist books show",
+		usage:       "bookist books show <title-or-ID> [options]",
+		description: "Show a book",
+		examples: []string{
+			"bookist books show 12",
+			`bookist books show Dune --format json`,
+		},
+	}
+	if ok, exitCode := parseEditFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
+	}
+
+	if flags.NArg() != 1 {
+		_, _ = fmt.Fprintln(stderr, "Error: books show requires exactly one title or ID")
+		_, _ = fmt.Fprintln(stderr)
+		printCommandHelp(stderr, help, flags)
+		return 2
+	}
+
+	format, err := parseOutputFormat(*formatValue)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+
+	ctx := context.Background()
+	c := newClient(*serverURL, stderr)
+	if c == nil {
+		return 2
+	}
+
+	bookID, err := resolveBookID(ctx, c, flags.Arg(0))
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, err)
+		return 1
+	}
+
+	book, err := c.Books.Get(ctx, bookID)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "show book: %v\n", err)
+		return 1
+	}
+
+	authorNames := make([]string, 0, len(book.Authors))
+	for _, author := range book.Authors {
+		authorNames = append(authorNames, author.Name)
+	}
+
+	fields := []showField{
+		{"ID", strconv.FormatInt(book.ID, 10)},
+		{"Title", book.Title},
+		{"ISBN", stringValue(book.ISBN)},
+		{"Authors", strings.Join(authorNames, ", ")},
+		{"Language", stringValue(book.Language)},
+		{"Publisher", stringValue(book.Publisher)},
+		{"Edition", stringValue(book.Edition)},
+		{"Format", bookFormatValue(book.Format)},
+		{"Purchased at", stringValue(book.PurchasedAt)},
+		{"Purchase price", stringValue(book.PurchasePrice)},
+		{"Pages", intValue(book.Pages)},
+		{"Notes", stringValue(book.Notes)},
+		{"Summary", stringValue(book.Summary)},
+		{"Series name", stringValue(book.SeriesName)},
+		{"Series position", floatValue(book.SeriesPosition)},
+		{"Location", stringValue(book.Location)},
+		{"Condition", bookConditionValue(book.Condition)},
+		{"Acquisition source", stringValue(book.AcquisitionSource)},
+		{"Published", publishedValue(book)},
+		{"Cover URL", stringValue(book.CoverURL)},
+		{"Created at", timeValue(book.CreatedAt)},
+		{"Updated at", timeValue(book.UpdatedAt)},
+	}
+	if err := writeShowOutput(stdout, format, book, fields); err != nil {
+		_, _ = fmt.Fprintf(stderr, "show book: write output: %v\n", err)
+		return 1
+	}
+
+	return 0
+}
+
+// publishedValue formats the publication date as far as it is known: YYYY,
+// YYYY-MM or YYYY-MM-DD.
+func publishedValue(book books.Book) string {
+	if book.PublishedYear == nil {
+		return ""
+	}
+
+	published := fmt.Sprintf("%04d", *book.PublishedYear)
+	if book.PublishedMonth == nil {
+		return published
+	}
+
+	published += fmt.Sprintf("-%02d", *book.PublishedMonth)
+	if book.PublishedDay == nil {
+		return published
+	}
+
+	return published + fmt.Sprintf("-%02d", *book.PublishedDay)
+}
+
+func bookFormatValue(value *books.Format) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
+}
+
+func bookConditionValue(value *books.Condition) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
 }
 
 func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {

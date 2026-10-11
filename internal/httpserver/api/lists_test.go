@@ -197,6 +197,54 @@ func TestListAPIListReturnsEmptyArray(t *testing.T) {
 	assertEmptyJSONArray(t, app.handler, "/api/lists")
 }
 
+// ── Get ───────────────────────────────────────────────────────────────────────
+
+func TestListAPIGet(t *testing.T) {
+	app := newTestApp(t)
+	testsupport.InsertListRow(t, app.db, "Other")
+	listID := testsupport.InsertListRowWithDescription(t, app.db, "Want to Buy", "Books to purchase")
+
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/lists/%d", listID), nil))
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, resp.Code, resp.Body.String())
+	}
+
+	var got lists.List
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != listID || got.Name != "Want to Buy" {
+		t.Fatalf("unexpected response: %#v", got)
+	}
+	if got.Description == nil || *got.Description != "Books to purchase" {
+		t.Fatalf("expected description, got %#v", got.Description)
+	}
+	if got.CreatedAt.IsZero() || got.UpdatedAt.IsZero() {
+		t.Fatalf("expected timestamps, got %#v", got)
+	}
+}
+
+func TestListAPIGetRejectsInvalidRequests(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		path   string
+		status int
+		code   string
+		field  string
+	}{
+		{name: "invalid ID", path: "/api/lists/0", status: http.StatusBadRequest, code: "invalid_id", field: "id"},
+		{name: "not found", path: "/api/lists/999999", status: http.StatusNotFound, code: "list_not_found"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			app := newTestApp(t)
+			resp := httptest.NewRecorder()
+			app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, test.path, nil))
+			assertAPIError(t, resp, test.status, test.code, test.field)
+		})
+	}
+}
+
 // ── Delete ────────────────────────────────────────────────────────────────────
 
 func TestListAPIDeleteRemovesOnlyListRelationships(t *testing.T) {

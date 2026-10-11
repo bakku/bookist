@@ -93,6 +93,20 @@ func (s *Service) SearchByListID(ctx context.Context, listID int64, query string
 	return s.withAuthorsAndCover(ctx, books)
 }
 
+func (s *Service) GetByID(ctx context.Context, id int64) (Book, error) {
+	book, err := s.repository.GetByID(ctx, id)
+	if err != nil {
+		return Book{}, err
+	}
+
+	hydrated, err := s.withAuthorsAndCover(ctx, []Book{book})
+	if err != nil {
+		return Book{}, err
+	}
+
+	return hydrated[0], nil
+}
+
 func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, error) {
 	input.Title = strings.TrimSpace(input.Title)
 	if input.Title == "" {

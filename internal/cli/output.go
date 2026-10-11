@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
 )
 
 type outputFormat string
@@ -76,4 +77,55 @@ func floatValue(value *float64) string {
 		return ""
 	}
 	return strconv.FormatFloat(*value, 'f', -1, 64)
+}
+
+func intValue(value *int) string {
+	if value == nil {
+		return ""
+	}
+	return strconv.Itoa(*value)
+}
+
+func timeValue(value time.Time) string {
+	return value.Format(time.RFC3339)
+}
+
+// showField is one labelled value of a single record in show output.
+type showField struct {
+	label string
+	value string
+}
+
+// writeShowOutput writes a single record. TSV and pretty output list one
+// label and value per line, JSON output encodes value.
+func writeShowOutput(w io.Writer, format outputFormat, value any, fields []showField) error {
+	rows := make([][]string, 0, len(fields))
+	for _, field := range fields {
+		rows = append(rows, []string{field.label, field.value})
+	}
+
+	switch format {
+	case outputFormatTSV:
+		return writeRows(w, rows)
+	case outputFormatPretty:
+		var formatted bytes.Buffer
+		tw := tabwriter.NewWriter(&formatted, 0, 4, 2, ' ', 0)
+		if err := writeRows(tw, rows); err != nil {
+			return err
+		}
+		if err := tw.Flush(); err != nil {
+			return err
+		}
+
+		lines := strings.Split(formatted.String(), "\n")
+		for i := range lines {
+			lines[i] = strings.TrimRight(lines[i], " ")
+		}
+		_, err := io.WriteString(w, strings.Join(lines, "\n"))
+		return err
+	case outputFormatJSON:
+		return json.NewEncoder(w).Encode(value)
+	default:
+		return fmt.Errorf("unsupported output format %q", format)
+	}
 }

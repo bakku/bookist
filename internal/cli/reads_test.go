@@ -92,6 +92,126 @@ func TestReadsListRequiresBook(t *testing.T) {
 	}
 }
 
+// ── Reads Show ────────────────────────────────────────────────────────────────
+
+func TestReadsShowByID(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		_ = json.NewEncoder(w).Encode(showTestRead())
+	}))
+	defer server.Close()
+
+	tests := []struct {
+		name     string
+		format   string
+		expected string
+	}{
+		{name: "default pretty", expected: "ID            9\nBook ID       3\nStarted at    2026-03-01\nFinished at   2026-03-10\nAbandoned at\nRating        4.5\nNotes         Great\nCreated at    2026-03-01T00:00:00Z\nUpdated at    2026-03-10T00:00:00Z\n"},
+		{name: "TSV", format: "tsv", expected: "ID\t9\nBook ID\t3\nStarted at\t2026-03-01\nFinished at\t2026-03-10\nAbandoned at\t\nRating\t4.5\nNotes\tGreat\nCreated at\t2026-03-01T00:00:00Z\nUpdated at\t2026-03-10T00:00:00Z\n"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			args := []string{"reads", "show", "9", "--server", server.URL}
+			if test.format != "" {
+				args = append(args, "--format", test.format)
+			}
+
+			exitCode, stdout, stderr := runCLI(args)
+			if exitCode != 0 || stderr != "" {
+				t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
+			}
+			if stdout != test.expected {
+				t.Fatalf("expected stdout %q, got %q", test.expected, stdout)
+			}
+			if gotPath != "/api/reads/9" {
+				t.Fatalf("expected GET /api/reads/9, got %s", gotPath)
+			}
+		})
+	}
+}
+
+func TestReadsShowJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(showTestRead())
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"reads", "show", "9", "--format", "json", "--server", server.URL})
+	if exitCode != 0 || stderr != "" {
+		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
+	}
+
+	var got reads.Read
+	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+		t.Fatalf("expected valid JSON, got %q: %v", stdout, err)
+	}
+	if got.ID != 9 || got.BookID != 3 || got.Rating == nil || *got.Rating != 4.5 || got.AbandonedAt != nil {
+		t.Fatalf("expected complete read JSON, got %#v", got)
+	}
+}
+
+func TestReadsShowReportsUnknownRead(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"code":"read_not_found","message":"read not found"}}`))
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"reads", "show", "--server", server.URL, "999"})
+	if exitCode != 1 || stdout != "" || !strings.Contains(stderr, "show read: server returned 404 Not Found: read not found") {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
+	}
+}
+
+func TestReadsShowRejectsInvalidReadID(t *testing.T) {
+	requestCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+	}))
+	defer server.Close()
+
+	tests := []struct {
+		ref      string
+		expected string
+	}{
+		{ref: "Dune", expected: `invalid read ID "Dune"`},
+		{ref: "0", expected: `invalid ID "0"`},
+	}
+	for _, test := range tests {
+		exitCode, stdout, stderr := runCLI([]string{"reads", "show", "--server", server.URL, test.ref})
+		if exitCode != 2 || stdout != "" || !strings.Contains(stderr, test.expected) {
+			t.Fatalf("unexpected result for %q: exit=%d stdout=%q stderr=%q", test.ref, exitCode, stdout, stderr)
+		}
+	}
+	if requestCount != 0 {
+		t.Fatalf("expected no HTTP requests, got %d", requestCount)
+	}
+}
+
+func TestReadsShowRequiresExactlyOneReadID(t *testing.T) {
+	for _, args := range [][]string{{"reads", "show"}, {"reads", "show", "1", "2"}} {
+		exitCode, stdout, stderr := runCLI(args)
+		if exitCode != 2 || stdout != "" || !strings.Contains(stderr, "reads show requires exactly one read ID") {
+			t.Fatalf("unexpected result for %v: exit=%d stdout=%q stderr=%q", args, exitCode, stdout, stderr)
+		}
+	}
+}
+
+func showTestRead() reads.Read {
+	return reads.Read{
+		ID:         9,
+		BookID:     3,
+		StartedAt:  new("2026-03-01"),
+		FinishedAt: new("2026-03-10"),
+		Rating:     new(4.5),
+		Notes:      new("Great"),
+		CreatedAt:  time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC),
+		UpdatedAt:  time.Date(2026, 3, 10, 0, 0, 0, 0, time.UTC),
+	}
+}
+
 // ── Reads Add ─────────────────────────────────────────────────────────────────
 
 func TestReadsAddPostsToBookEndpoint(t *testing.T) {

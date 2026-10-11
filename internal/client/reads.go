@@ -20,6 +20,13 @@ func (s *ReadsService) List(ctx context.Context, bookID int64) ([]reads.Read, er
 	return listed, err
 }
 
+// Get returns the read with the given ID.
+func (s *ReadsService) Get(ctx context.Context, id int64) (reads.Read, error) {
+	var got reads.Read
+	err := s.client.do(ctx, http.MethodGet, s.client.endpoint("", "api", "reads", strconv.FormatInt(id, 10)), nil, &got, http.StatusOK)
+	return got, err
+}
+
 // Create records a read for a book.
 func (s *ReadsService) Create(ctx context.Context, bookID int64, request reads.CreateReadRequest) (reads.Read, error) {
 	var created reads.Read

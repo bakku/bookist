@@ -47,6 +47,10 @@ func (s *Service) Search(ctx context.Context, query string) ([]Author, error) {
 	return s.repository.Search(ctx, strings.TrimSpace(query))
 }
 
+func (s *Service) GetByID(ctx context.Context, id int64) (Author, error) {
+	return s.repository.GetByID(ctx, id)
+}
+
 func (s *Service) GetByIDs(ctx context.Context, ids []int64) ([]Author, error) {
 	return s.repository.GetByIDs(ctx, ids)
 }

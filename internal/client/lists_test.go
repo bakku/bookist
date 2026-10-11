@@ -33,6 +33,30 @@ func TestListsList(t *testing.T) {
 	}
 }
 
+// ── Lists Get ─────────────────────────────────────────────────────────────────
+
+func TestListsGetReturnsList(t *testing.T) {
+	c, db := newTestClient(t)
+	testsupport.InsertListRow(t, db, "Wishlist")
+	id := testsupport.InsertListRowWithDescription(t, db, "Nightstand", "Reading now")
+
+	got, err := c.Lists.Get(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != id || got.Name != "Nightstand" || got.Description == nil || *got.Description != "Reading now" {
+		t.Fatalf("unexpected list %#v", got)
+	}
+}
+
+func TestListsGetMissingListReturnsNotFound(t *testing.T) {
+	c, _ := newTestClient(t)
+
+	_, err := c.Lists.Get(context.Background(), 999)
+
+	assertClientError(t, err, 404, "list_not_found", "")
+}
+
 // ── Lists Create ──────────────────────────────────────────────────────────────
 
 func TestListsCreatePersistsList(t *testing.T) {

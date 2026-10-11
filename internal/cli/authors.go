@@ -24,6 +24,9 @@ func runAuthors(args []string, stdout io.Writer, stderr io.Writer) int {
 	case "ls":
 		return runAuthorsLS(args[1:], stdout, stderr)
 
+	case "show":
+		return runAuthorsShow(args[1:], stdout, stderr)
+
 	case "add":
 		return runAuthorsAdd(args[1:], stdout, stderr)
 
@@ -51,6 +54,7 @@ func printAuthorsHelp(w io.Writer) {
 		description: "Manage authors",
 		commands: []helpCommand{
 			{name: "ls", description: "List authors"},
+			{name: "show", description: "Show an author"},
 			{name: "add", description: "Add an author"},
 			{name: "edit", description: "Edit an author"},
 			{name: "rm", description: "Remove an author"},
@@ -148,6 +152,74 @@ func runAuthorsLS(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	if err := writeListOutput(stdout, format, listed, []string{"ID", "NAME"}, rows); err != nil {
 		_, _ = fmt.Fprintf(stderr, "ls authors: write output: %v\n", err)
+		return 1
+	}
+
+	return 0
+}
+
+func runAuthorsShow(args []string, stdout io.Writer, stderr io.Writer) int {
+	flags := flag.NewFlagSet("authors show", flag.ContinueOnError)
+
+	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
+	formatValue := flags.String("format", string(outputFormatPretty), "Output format (tsv|pretty|json)")
+
+	help := commandHelp{
+		name:        "bookist authors show",
+		usage:       "bookist authors show <name-or-ID> [options]",
+		description: "Show an author",
+		examples: []string{
+			"bookist authors show 6",
+			`bookist authors show "Ursula K. Le Guin" --format json`,
+		},
+	}
+	if ok, exitCode := parseEditFlags(flags, args, stdout, stderr, help); !ok {
+		return exitCode
+	}
+
+	if flags.NArg() != 1 {
+		_, _ = fmt.Fprintln(stderr, "Error: authors show requires exactly one name or ID")
+		_, _ = fmt.Fprintln(stderr)
+		printCommandHelp(stderr, help, flags)
+		return 2
+	}
+
+	format, err := parseOutputFormat(*formatValue)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
+		return 2
+	}
+
+	ctx := context.Background()
+	c := newClient(*serverURL, stderr)
+	if c == nil {
+		return 2
+	}
+
+	authorID, found, err := resolveAuthorID(ctx, c, flags.Arg(0))
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if !found {
+		_, _ = fmt.Fprintf(stderr, "author not found: %s\n", flags.Arg(0))
+		return 1
+	}
+
+	author, err := c.Authors.Get(ctx, authorID)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "show author: %v\n", err)
+		return 1
+	}
+
+	fields := []showField{
+		{"ID", strconv.FormatInt(author.ID, 10)},
+		{"Name", author.Name},
+		{"Created at", timeValue(author.CreatedAt)},
+		{"Updated at", timeValue(author.UpdatedAt)},
+	}
+	if err := writeShowOutput(stdout, format, author, fields); err != nil {
+		_, _ = fmt.Fprintf(stderr, "show author: write output: %v\n", err)
 		return 1
 	}
 

@@ -116,6 +116,32 @@ func TestSQLiteRepositorySearchMatchesNamesCaseInsensitively(t *testing.T) {
 	}
 }
 
+// ── GetByID ───────────────────────────────────────────────────────────────────
+
+func TestSQLiteRepositoryGetByIDReturnsPersistedAuthor(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := authors.NewSQLiteRepository(db)
+	testsupport.InsertAuthorRow(t, db, "Other")
+	id := testsupport.InsertAuthorRow(t, db, "Jane Austen")
+
+	got, err := repository.GetByID(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != id || got.Name != "Jane Austen" || got.CreatedAt.IsZero() || got.UpdatedAt.IsZero() {
+		t.Fatalf("unexpected author: %#v", got)
+	}
+}
+
+func TestSQLiteRepositoryGetByIDReturnsErrAuthorNotFound(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+
+	_, err := authors.NewSQLiteRepository(db).GetByID(context.Background(), 999999)
+	if !errors.Is(err, authors.ErrAuthorNotFound) {
+		t.Fatalf("expected ErrAuthorNotFound, got %v", err)
+	}
+}
+
 // ── GetByIDs ──────────────────────────────────────────────────────────────────
 
 func TestSQLiteRepositoryGetByIDsEmptyInputReturnsNil(t *testing.T) {

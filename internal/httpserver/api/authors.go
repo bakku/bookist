@@ -16,6 +16,21 @@ func (s *Server) handleAPIListAuthors(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, authorList)
 }
 
+func (s *Server) handleAPIGetAuthor(w http.ResponseWriter, r *http.Request) {
+	id, ok := parsePathID(w, r, "id", "author")
+	if !ok {
+		return
+	}
+
+	author, err := s.authors.GetByID(r.Context(), id)
+	if err != nil {
+		s.writeError(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, author)
+}
+
 func (s *Server) handleAPICreateAuthor(w http.ResponseWriter, r *http.Request) {
 	var input authors.CreateAuthorRequest
 	if !decodeJSON(w, r, &input, maxJSONBodySize) {
