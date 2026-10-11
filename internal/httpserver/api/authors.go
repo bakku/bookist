@@ -1,7 +1,6 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 
 	"bakku.dev/bookist/internal/authors"
@@ -10,7 +9,7 @@ import (
 func (s *Server) handleAPIListAuthors(w http.ResponseWriter, r *http.Request) {
 	authorList, err := s.authors.Search(r.Context(), r.URL.Query().Get("q"))
 	if err != nil {
-		http.Error(w, "failed to list authors", http.StatusInternalServerError)
+		writeError(w, err)
 		return
 	}
 
@@ -25,12 +24,7 @@ func (s *Server) handleAPICreateAuthor(w http.ResponseWriter, r *http.Request) {
 
 	author, err := s.authors.Create(r.Context(), input)
 	if err != nil {
-		if errors.Is(err, authors.ErrNameRequired) {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		http.Error(w, "failed to create author", http.StatusInternalServerError)
+		writeError(w, err)
 		return
 	}
 
@@ -38,9 +32,8 @@ func (s *Server) handleAPICreateAuthor(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAPIUpdateAuthor(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r.PathValue("id"))
-	if err != nil {
-		http.Error(w, "invalid author ID", http.StatusBadRequest)
+	id, ok := parsePathID(w, r, "id", "author")
+	if !ok {
 		return
 	}
 
@@ -51,39 +44,22 @@ func (s *Server) handleAPIUpdateAuthor(w http.ResponseWriter, r *http.Request) {
 
 	author, err := s.authors.Update(r.Context(), id, input)
 	if err != nil {
-		writeUpdateAuthorError(w, err)
+		writeError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, author)
 }
 
 func (s *Server) handleAPIDeleteAuthor(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r.PathValue("id"))
-	if err != nil {
-		http.Error(w, "invalid author ID", http.StatusBadRequest)
+	id, ok := parsePathID(w, r, "id", "author")
+	if !ok {
 		return
 	}
 
 	if err := s.authors.Delete(r.Context(), id); err != nil {
-		if errors.Is(err, authors.ErrAuthorNotFound) {
-			http.Error(w, err.Error(), http.StatusNotFound)
-			return
-		}
-
-		http.Error(w, "failed to delete author", http.StatusInternalServerError)
+		writeError(w, err)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-func writeUpdateAuthorError(w http.ResponseWriter, err error) {
-	if errors.Is(err, authors.ErrAuthorNotFound) {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-	if errors.Is(err, authors.ErrNameRequired) || errors.Is(err, authors.ErrNoFieldsToUpdate) {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	http.Error(w, "failed to update author", http.StatusInternalServerError)
 }

@@ -46,7 +46,7 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/lists/{id}", s.handleAPIDeleteList)
 	mux.HandleFunc("GET /api/lists/{id}/books", s.handleAPIListBooksInList)
 	mux.HandleFunc("POST /api/lists/{id}/books", s.handleAPIAddBookToList)
-	mux.HandleFunc("DELETE /api/lists/{id}/books/{bookID}", s.handleAPIRemoveBookFromList)
+	mux.HandleFunc("DELETE /api/lists/{id}/books/{book_id}", s.handleAPIRemoveBookFromList)
 
 	mux.HandleFunc("PATCH /api/reads/{id}", s.handleAPIUpdateRead)
 	mux.HandleFunc("DELETE /api/reads/{id}", s.handleAPIDeleteRead)
@@ -69,10 +69,10 @@ func handleAPIFallback(mux *http.ServeMux) http.HandlerFunc {
 
 		if len(allowed) > 0 {
 			w.Header().Set("Allow", strings.Join(allowed, ", "))
-			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			writeError(w, errMethodNotAllowed)
 			return
 		}
 
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+		writeError(w, errNotFound)
 	}
 }

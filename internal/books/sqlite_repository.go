@@ -9,6 +9,7 @@ import (
 
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/database"
+	"bakku.dev/bookist/internal/domain"
 )
 
 type SQLiteRepository struct {
@@ -33,7 +34,7 @@ func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (Book, error) 
 		WHERE id = ?
 	`, id))
 	if err == sql.ErrNoRows {
-		return Book{}, ErrBookNotFound
+		return Book{}, domain.ErrBookNotFound
 	}
 	return book, err
 }
@@ -70,6 +71,12 @@ func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]Book, er
 
 func (r *SQLiteRepository) ListByListID(ctx context.Context, listID int64) ([]Book, error) {
 	return r.SearchByListID(ctx, listID, "")
+}
+
+func (r *SQLiteRepository) ListExists(ctx context.Context, listID int64) (bool, error) {
+	var exists bool
+	err := r.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM lists WHERE id = ?)`, listID).Scan(&exists)
+	return exists, err
 }
 
 func (r *SQLiteRepository) SearchByListID(ctx context.Context, listID int64, query string) ([]Book, error) {
@@ -265,7 +272,7 @@ func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateBoo
 	var priorCover sql.NullString
 	if err := tx.QueryRowContext(ctx, `SELECT cover_image_key FROM books WHERE id = ?`, id).Scan(&priorCover); err != nil {
 		if err == sql.ErrNoRows {
-			return UpdateResult{}, ErrBookNotFound
+			return UpdateResult{}, domain.ErrBookNotFound
 		}
 		return UpdateResult{}, err
 	}
@@ -428,7 +435,7 @@ func (r *SQLiteRepository) Delete(ctx context.Context, id int64) error {
 		return err
 	}
 	if rowsAffected == 0 {
-		return ErrBookNotFound
+		return domain.ErrBookNotFound
 	}
 	return nil
 }

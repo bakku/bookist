@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"bakku.dev/bookist/internal/domain"
 	"bakku.dev/bookist/internal/lists"
 	"bakku.dev/bookist/internal/optional"
 	"bakku.dev/bookist/internal/testsupport"
@@ -171,7 +172,7 @@ func TestServiceUpdateReturnsNotFoundBeforeNameConflict(t *testing.T) {
 	_, err := service.Update(context.Background(), 999999, lists.UpdateListRequest{
 		Name: optional.Value[string]{Present: true, Value: &name},
 	})
-	if !errors.Is(err, lists.ErrListNotFound) {
+	if !errors.Is(err, domain.ErrListNotFound) {
 		t.Fatalf("expected ErrListNotFound, got %v", err)
 	}
 }

@@ -1,7 +1,7 @@
 package authors
 
-import "errors"
+import "bakku.dev/bookist/internal/apperr"
 
-var ErrNameRequired = errors.New("name is required")
-var ErrNoFieldsToUpdate = errors.New("no fields to update")
-var ErrAuthorNotFound = errors.New("author not found")
+var ErrNameRequired = apperr.Invalid("name_required", "name is required", "name")
+var ErrNoFieldsToUpdate = apperr.Invalid("no_fields_to_update", "no fields to update", "")
+var ErrAuthorNotFound = apperr.NotFound("author_not_found", "author not found")

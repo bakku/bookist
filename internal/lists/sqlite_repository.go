@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"bakku.dev/bookist/internal/database"
+	"bakku.dev/bookist/internal/domain"
 )
 
 type SQLiteRepository struct {
@@ -65,7 +66,7 @@ func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateLis
 		return List{}, ErrNameConflict
 	}
 	if errors.Is(err, sql.ErrNoRows) {
-		return List{}, ErrListNotFound
+		return List{}, domain.ErrListNotFound
 	}
 	return list, err
 }
@@ -128,7 +129,7 @@ func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (List, error) 
 	list, err := scanList(row)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return List{}, ErrListNotFound
+			return List{}, domain.ErrListNotFound
 		}
 		return List{}, err
 	}
@@ -147,7 +148,7 @@ func (r *SQLiteRepository) Delete(ctx context.Context, id int64) error {
 		return err
 	}
 	if rowsAffected == 0 {
-		return ErrListNotFound
+		return domain.ErrListNotFound
 	}
 
 	return nil
@@ -167,7 +168,7 @@ func (r *SQLiteRepository) AddBookToList(ctx context.Context, listID, bookID int
 			return listErr
 		}
 
-		return ErrBookNotFound
+		return domain.ErrBookNotFound
 	}
 
 	if database.IsUniqueViolation(err) {
@@ -204,7 +205,7 @@ func (r *SQLiteRepository) RemoveBookFromList(ctx context.Context, listID, bookI
 		return err
 	}
 	if !listExists {
-		return ErrListNotFound
+		return domain.ErrListNotFound
 	}
 
 	var bookExists bool
@@ -212,7 +213,7 @@ func (r *SQLiteRepository) RemoveBookFromList(ctx context.Context, listID, bookI
 		return err
 	}
 	if !bookExists {
-		return ErrBookNotFound
+		return domain.ErrBookNotFound
 	}
 
 	return ErrBookNotInList

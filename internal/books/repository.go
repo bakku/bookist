@@ -7,6 +7,7 @@ type Repository interface {
 	Search(ctx context.Context, query string) ([]Book, error)
 	ListByListID(ctx context.Context, listID int64) ([]Book, error)
 	SearchByListID(ctx context.Context, listID int64, query string) ([]Book, error)
+	ListExists(ctx context.Context, listID int64) (bool, error)
 	GetByID(ctx context.Context, id int64) (Book, error)
 	Create(ctx context.Context, input CreateBookRequest) (Book, error)
 	Update(ctx context.Context, id int64, input UpdateBookRequest) (UpdateResult, error)

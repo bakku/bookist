@@ -37,6 +37,7 @@ Bookist is intended to be a Go application for managing a home library.
 - The web UI should be responsive and comfortable to use from a smartphone.
 - The web UI currently renders the My Books page (list and cover views, shelves sidebar, reading stats) from static sample data in `internal/httpserver/web/sample_library.go`. Wire it to the books, reads, and lists backends incrementally, replacing the sample data. Do not add form-based book creation unless explicitly requested.
 - `POST /api/books` should accept JSON only. The API is the automation boundary for CLI and future skill-based workflows.
+- API errors are JSON: `{"error": {"code", "message", "field"?}}`. Domain sentinels are built with `internal/apperr` (kinds map to 404/400/409 in one place in `api`); errors shared across packages live in `internal/domain`. Unknown errors become a generic 500.
 - CLI resource-management commands should talk to the HTTP JSON API, not directly to SQLite. Direct DB access is acceptable for `serve` and migration setup.
 - Keep the CLI command shape simple for now: `serve`, `migrate`, and resource commands such as `books list` / `books add`.
 

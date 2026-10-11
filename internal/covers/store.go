@@ -10,12 +10,14 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+
+	"bakku.dev/bookist/internal/apperr"
 )
 
 const MaxSize = 10 << 20
 
-var ErrTooLarge = errors.New("cover must not exceed 10 MiB")
-var ErrUnsupportedMediaType = errors.New("cover must be a JPEG, PNG, or WebP image")
+var ErrTooLarge = apperr.Invalid("cover_too_large", "cover must not exceed 10 MiB", "cover")
+var ErrUnsupportedMediaType = apperr.Invalid("cover_unsupported_media_type", "cover must be a JPEG, PNG, or WebP image", "cover")
 
 var keyPattern = regexp.MustCompile(`^[0-9a-f]{32}\.(jpg|png|webp)$`)
 

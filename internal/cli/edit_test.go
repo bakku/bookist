@@ -186,3 +186,17 @@ func TestEditReportsServerErrorBody(t *testing.T) {
 		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 }
+
+func TestEditReportsStructuredServerErrorMessage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"code":"invalid_rating","message":"rating must be between 1 and 5 in increments of 0.5","field":"rating"}}`))
+	}))
+	defer server.Close()
+
+	code, stdout, stderr := runCLI([]string{"reads", "edit", "--rating", "4.2", "--server", server.URL, "9"})
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "400 Bad Request: rating must be between 1 and 5 in increments of 0.5") || strings.Contains(stderr, "invalid_rating") {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+}

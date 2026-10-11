@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"bakku.dev/bookist/internal/authors"
+	"bakku.dev/bookist/internal/domain"
 	"bakku.dev/bookist/internal/optional"
 	"bakku.dev/bookist/internal/validation"
 )
@@ -76,6 +77,14 @@ func (s *Service) ListByListID(ctx context.Context, listID int64) ([]Book, error
 }
 
 func (s *Service) SearchByListID(ctx context.Context, listID int64, query string) ([]Book, error) {
+	exists, err := s.repository.ListExists(ctx, listID)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, domain.ErrListNotFound
+	}
+
 	books, err := s.repository.SearchByListID(ctx, listID, strings.TrimSpace(query))
 	if err != nil {
 		return nil, err
