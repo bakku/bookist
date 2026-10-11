@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"bakku.dev/bookist/internal/authors"
+	"bakku.dev/bookist/internal/database"
 )
 
 type SQLiteRepository struct {
@@ -244,6 +245,9 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 			INSERT INTO book_authors (book_id, author_id, created_at, updated_at)
 			VALUES (?, ?, ?, ?)
 		`, book.ID, authorID, createdAt, updatedAt)
+		if database.IsForeignKeyViolation(err) {
+			return Book{}, ErrAuthorNotFound
+		}
 		if err != nil {
 			return Book{}, err
 		}
@@ -365,10 +369,14 @@ func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateBoo
 				if existing[authorID] || inserted[authorID] {
 					continue
 				}
-				if _, err := tx.ExecContext(ctx, `
+				_, err := tx.ExecContext(ctx, `
 					INSERT INTO book_authors (book_id, author_id, created_at, updated_at)
 					VALUES (?, ?, ?, ?)
-				`, id, authorID, updatedAt, updatedAt); err != nil {
+				`, id, authorID, updatedAt, updatedAt)
+				if database.IsForeignKeyViolation(err) {
+					return UpdateResult{}, ErrAuthorNotFound
+				}
+				if err != nil {
 					return UpdateResult{}, err
 				}
 				inserted[authorID] = true

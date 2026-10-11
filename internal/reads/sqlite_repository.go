@@ -8,8 +8,17 @@ import (
 	"strings"
 	"time"
 
-	"modernc.org/sqlite"
-	sqlite3 "modernc.org/sqlite/lib"
+	"bakku.dev/bookist/internal/database"
+)
+
+const (
+	terminalDatesConstraint  = "reads_terminal_dates_exclusive"
+	finishedOrderConstraint  = "reads_finished_not_before_started"
+	abandonedOrderConstraint = "reads_abandoned_not_before_started"
+	startedAtConstraint      = "reads_started_at_valid"
+	finishedAtConstraint     = "reads_finished_at_valid"
+	abandonedAtConstraint    = "reads_abandoned_at_valid"
+	ratingConstraint         = "reads_rating_valid"
 )
 
 type SQLiteRepository struct {
@@ -33,14 +42,7 @@ func (r *SQLiteRepository) Create(ctx context.Context, bookID int64, input Creat
 		nullString(input.AbandonedAt), nullFloat64(input.Rating), nullString(input.Notes), now, now)
 
 	read, err := scanRead(row)
-	if err != nil {
-		if strings.Contains(err.Error(), "FOREIGN KEY constraint failed") {
-			return Read{}, ErrBookNotFound
-		}
-		return Read{}, err
-	}
-
-	return read, nil
+	return read, translateConstraints(err)
 }
 
 func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (Read, error) {
@@ -130,34 +132,33 @@ func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateRea
 	if errors.Is(err, sql.ErrNoRows) {
 		return Read{}, ErrReadNotFound
 	}
-	return read, translateUpdateConstraintError(err)
+	return read, translateConstraints(err)
 }
 
-func translateUpdateConstraintError(err error) error {
+func translateConstraints(err error) error {
 	if err == nil {
 		return nil
 	}
 
-	var sqliteErr *sqlite.Error
-	if !errors.As(err, &sqliteErr) || sqliteErr.Code() != sqlite3.SQLITE_CONSTRAINT_CHECK {
-		return err
+	if database.IsForeignKeyViolation(err) {
+		return ErrBookNotFound
 	}
 
-	message := sqliteErr.Error()
+	// Create and update share the same durable read invariants.
 	switch {
-	case strings.Contains(message, "reads_terminal_dates_exclusive"):
+	case database.IsCheckViolation(err, terminalDatesConstraint):
 		return ErrConflictingTerminalDates
-	case strings.Contains(message, "reads_finished_not_before_started"):
+	case database.IsCheckViolation(err, finishedOrderConstraint):
 		return ErrFinishedBeforeStarted
-	case strings.Contains(message, "reads_abandoned_not_before_started"):
+	case database.IsCheckViolation(err, abandonedOrderConstraint):
 		return ErrAbandonedBeforeStarted
-	case strings.Contains(message, "reads_started_at_valid"):
+	case database.IsCheckViolation(err, startedAtConstraint):
 		return ErrInvalidStartedAt
-	case strings.Contains(message, "reads_finished_at_valid"):
+	case database.IsCheckViolation(err, finishedAtConstraint):
 		return ErrInvalidFinishedAt
-	case strings.Contains(message, "reads_abandoned_at_valid"):
+	case database.IsCheckViolation(err, abandonedAtConstraint):
 		return ErrInvalidAbandonedAt
-	case strings.Contains(message, "reads_rating_valid"):
+	case database.IsCheckViolation(err, ratingConstraint):
 		return ErrInvalidRating
 	default:
 		return err
