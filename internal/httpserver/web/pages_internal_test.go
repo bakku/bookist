@@ -12,10 +12,10 @@ import (
 
 // ── Render Errors ─────────────────────────────────────────────────────────────
 
-func TestIndexLogsTemplateRenderFailure(t *testing.T) {
+func TestIndexReturnsCleanErrorAndLogsTemplateRenderFailure(t *testing.T) {
 	logs := &bytes.Buffer{}
 	server := &Server{
-		templates: TemplateSet{BooksIndex: template.Must(template.New("layout").Parse(`{{.Missing}}`))},
+		templates: TemplateSet{BooksIndex: template.Must(template.New("layout").Parse(`<html>partial page{{.Missing}}`))},
 		logger:    slog.New(slog.NewTextHandler(logs, nil)),
 	}
 
@@ -25,6 +25,10 @@ func TestIndexLogsTemplateRenderFailure(t *testing.T) {
 
 	if resp.Code != http.StatusInternalServerError {
 		t.Fatalf("expected status %d, got %d", http.StatusInternalServerError, resp.Code)
+	}
+
+	if body := resp.Body.String(); body != "failed to render page\n" {
+		t.Errorf("expected only the error message, got %q", body)
 	}
 
 	logged := logs.String()
