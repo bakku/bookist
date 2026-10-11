@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -19,12 +18,8 @@ func (s *Server) handleAPIListLists(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAPICreateList(w http.ResponseWriter, r *http.Request) {
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-
 	var input lists.CreateListRequest
-	if err := decoder.Decode(&input); err != nil {
-		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+	if !decodeJSON(w, r, &input, maxJSONBodySize) {
 		return
 	}
 
@@ -45,7 +40,7 @@ func (s *Server) handleAPIUpdateList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var input lists.UpdateListRequest
-	if !decodePatchJSON(w, r, &input, maxPatchBodySize) {
+	if !decodeJSON(w, r, &input, maxJSONBodySize) {
 		return
 	}
 
@@ -110,12 +105,8 @@ func (s *Server) handleAPIAddBookToList(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-
 	var input lists.AddBookToListRequest
-	if err := decoder.Decode(&input); err != nil {
-		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+	if !decodeJSON(w, r, &input, maxJSONBodySize) {
 		return
 	}
 

@@ -22,6 +22,8 @@ func TestServerComposesAPIAndWebRoutes(t *testing.T) {
 	}{
 		{name: "API", method: http.MethodPatch, path: "/api/books", status: http.StatusMethodNotAllowed},
 		{name: "web", method: http.MethodGet, path: "/static/app.css", status: http.StatusOK},
+		{name: "unknown API path", method: http.MethodGet, path: "/api/nope", status: http.StatusNotFound},
+		{name: "unknown web path", method: http.MethodGet, path: "/does-not-exist", status: http.StatusNotFound},
 	}
 
 	for _, test := range tests {

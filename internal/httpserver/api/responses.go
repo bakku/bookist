@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-const maxPatchBodySize = 1 << 20
+const maxJSONBodySize = 1 << 20
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -17,7 +17,7 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 	_ = json.NewEncoder(w).Encode(value)
 }
 
-func decodePatchJSON(w http.ResponseWriter, r *http.Request, value any, maxBytes int64) bool {
+func decodeJSON(w http.ResponseWriter, r *http.Request, value any, maxBytes int64) bool {
 	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || !strings.EqualFold(mediaType, "application/json") {
 		http.Error(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
@@ -30,15 +30,15 @@ func decodePatchJSON(w http.ResponseWriter, r *http.Request, value any, maxBytes
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(value); err != nil {
-		return writePatchDecodeError(w, err)
+		return writeDecodeError(w, err)
 	}
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		return writePatchDecodeError(w, err)
+		return writeDecodeError(w, err)
 	}
 	return true
 }
 
-func writePatchDecodeError(w http.ResponseWriter, err error) bool {
+func writeDecodeError(w http.ResponseWriter, err error) bool {
 	var tooLarge *http.MaxBytesError
 	if errors.As(err, &tooLarge) {
 		http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)

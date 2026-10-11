@@ -170,6 +170,7 @@ func TestBookAPICreateRejectsInvalidCovers(t *testing.T) {
 			app := newTestApp(t)
 
 			req := httptest.NewRequest(http.MethodPost, "/api/books", bytes.NewReader(test.body()))
+			req.Header.Set("Content-Type", "application/json")
 			resp := httptest.NewRecorder()
 
 			app.handler.ServeHTTP(resp, req)
@@ -192,8 +193,8 @@ func TestBookAPICreateRejectsFormBody(t *testing.T) {
 
 	app.handler.ServeHTTP(resp, req)
 
-	if resp.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, resp.Code)
+	if resp.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("expected status %d, got %d", http.StatusUnsupportedMediaType, resp.Code)
 	}
 
 	testsupport.AssertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM books`)
@@ -442,6 +443,11 @@ func TestBookAPISearchesTitlesCaseInsensitively(t *testing.T) {
 	if len(listed) != 1 || listed[0].Title != "Dune" {
 		t.Fatalf("expected only Dune, got %#v", listed)
 	}
+}
+
+func TestBookAPIListReturnsEmptyArray(t *testing.T) {
+	app := newTestApp(t)
+	assertEmptyJSONArray(t, app.handler, "/api/books")
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────

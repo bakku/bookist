@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
@@ -49,4 +50,29 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("PATCH /api/reads/{id}", s.handleAPIUpdateRead)
 	mux.HandleFunc("DELETE /api/reads/{id}", s.handleAPIDeleteRead)
+
+	mux.HandleFunc("/api/", handleAPIFallback(mux))
+}
+
+// handleAPIFallback answers requests that no API route claims. It returns 405
+// when the path exists for other methods and a JSON 404 otherwise.
+func handleAPIFallback(mux *http.ServeMux) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var allowed []string
+		for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete} {
+			probe := r.Clone(r.Context())
+			probe.Method = method
+			if _, pattern := mux.Handler(probe); pattern != "" && pattern != "/api/" {
+				allowed = append(allowed, method)
+			}
+		}
+
+		if len(allowed) > 0 {
+			w.Header().Set("Allow", strings.Join(allowed, ", "))
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+			return
+		}
+
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+	}
 }

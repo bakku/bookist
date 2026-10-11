@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -22,20 +21,8 @@ func (s *Server) handleAPIListBooks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAPICreateBook(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxCreateBookBodySize)
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-
 	var input books.CreateBookRequest
-	if err := decoder.Decode(&input); err != nil {
-		var tooLarge *http.MaxBytesError
-
-		if errors.As(err, &tooLarge) {
-			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
-			return
-		}
-
-		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+	if !decodeJSON(w, r, &input, maxCreateBookBodySize) {
 		return
 	}
 
@@ -56,7 +43,7 @@ func (s *Server) handleAPIUpdateBook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var input books.UpdateBookRequest
-	if !decodePatchJSON(w, r, &input, maxCreateBookBodySize) {
+	if !decodeJSON(w, r, &input, maxCreateBookBodySize) {
 		return
 	}
 

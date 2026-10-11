@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -36,12 +35,8 @@ func (s *Server) handleAPICreateRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-
 	var input reads.CreateReadRequest
-	if err := decoder.Decode(&input); err != nil {
-		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+	if !decodeJSON(w, r, &input, maxJSONBodySize) {
 		return
 	}
 
@@ -62,7 +57,7 @@ func (s *Server) handleAPIUpdateRead(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var input reads.UpdateReadRequest
-	if !decodePatchJSON(w, r, &input, maxPatchBodySize) {
+	if !decodeJSON(w, r, &input, maxJSONBodySize) {
 		return
 	}
 
