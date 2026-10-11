@@ -8,8 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"modernc.org/sqlite"
-	sqlite3 "modernc.org/sqlite/lib"
+	"bakku.dev/bookist/internal/database"
 )
 
 type SQLiteRepository struct {
@@ -34,7 +33,7 @@ func (r *SQLiteRepository) Create(ctx context.Context, bookID int64, input Creat
 
 	read, err := scanRead(row)
 	if err != nil {
-		if strings.Contains(err.Error(), "FOREIGN KEY constraint failed") {
+		if database.IsForeignKeyViolation(err) {
 			return Read{}, ErrBookNotFound
 		}
 		return Read{}, err
@@ -134,30 +133,20 @@ func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateRea
 }
 
 func translateUpdateConstraintError(err error) error {
-	if err == nil {
-		return nil
-	}
-
-	var sqliteErr *sqlite.Error
-	if !errors.As(err, &sqliteErr) || sqliteErr.Code() != sqlite3.SQLITE_CONSTRAINT_CHECK {
-		return err
-	}
-
-	message := sqliteErr.Error()
 	switch {
-	case strings.Contains(message, "reads_terminal_dates_exclusive"):
+	case database.IsCheckViolation(err, "reads_terminal_dates_exclusive"):
 		return ErrConflictingTerminalDates
-	case strings.Contains(message, "reads_finished_not_before_started"):
+	case database.IsCheckViolation(err, "reads_finished_not_before_started"):
 		return ErrFinishedBeforeStarted
-	case strings.Contains(message, "reads_abandoned_not_before_started"):
+	case database.IsCheckViolation(err, "reads_abandoned_not_before_started"):
 		return ErrAbandonedBeforeStarted
-	case strings.Contains(message, "reads_started_at_valid"):
+	case database.IsCheckViolation(err, "reads_started_at_valid"):
 		return ErrInvalidStartedAt
-	case strings.Contains(message, "reads_finished_at_valid"):
+	case database.IsCheckViolation(err, "reads_finished_at_valid"):
 		return ErrInvalidFinishedAt
-	case strings.Contains(message, "reads_abandoned_at_valid"):
+	case database.IsCheckViolation(err, "reads_abandoned_at_valid"):
 		return ErrInvalidAbandonedAt
-	case strings.Contains(message, "reads_rating_valid"):
+	case database.IsCheckViolation(err, "reads_rating_valid"):
 		return ErrInvalidRating
 	default:
 		return err

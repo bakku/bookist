@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	"bakku.dev/bookist/internal/lists"
 	"bakku.dev/bookist/internal/optional"
@@ -56,6 +57,20 @@ func TestSQLiteRepositoryCreateWithNilDescription(t *testing.T) {
 	if created.Description != nil {
 		t.Fatalf("expected nil description, got %q", *created.Description)
 	}
+}
+
+func TestSQLiteRepositoryCreateReturnsErrNameConflict(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+	testsupport.InsertListRow(t, db, "Nightstand")
+
+	_, err := repository.Create(ctx, lists.CreateListRequest{Name: "NIGHTSTAND"})
+	if !errors.Is(err, lists.ErrNameConflict) {
+		t.Fatalf("expected ErrNameConflict, got %v", err)
+	}
+
+	testsupport.AssertSQLCount(t, db, 1, `SELECT COUNT(*) FROM lists`)
 }
 
 // ── Update ────────────────────────────────────────────────────────────────────
@@ -290,6 +305,27 @@ func TestSQLiteRepositoryAddBookToListReturnsErrBookNotFound(t *testing.T) {
 	if !errors.Is(err, lists.ErrBookNotFound) {
 		t.Fatalf("expected ErrBookNotFound, got %v", err)
 	}
+}
+
+func TestSQLiteRepositoryAddBookToListReturnsListLookupErrorUnchanged(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+
+	listID := testsupport.InsertListRow(t, db, "Want to Buy")
+	if _, err := db.Exec(`UPDATE lists SET created_at = 'not-a-timestamp' WHERE id = ?`, listID); err != nil {
+		t.Fatal(err)
+	}
+
+	err := repository.AddBookToList(ctx, listID, 999999)
+	var parseErr *time.ParseError
+	if !errors.As(err, &parseErr) {
+		t.Fatalf("expected list lookup parse error, got %v", err)
+	}
+	if errors.Is(err, lists.ErrListNotFound) || errors.Is(err, lists.ErrBookNotFound) {
+		t.Fatalf("expected list lookup error to stay unexpected, got %v", err)
+	}
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM book_lists`)
 }
 
 // ── RemoveBookFromList ────────────────────────────────────────────────────────

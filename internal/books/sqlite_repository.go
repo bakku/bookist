@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"bakku.dev/bookist/internal/authors"
+	"bakku.dev/bookist/internal/database"
 )
 
 type SQLiteRepository struct {
@@ -240,11 +241,7 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 	}
 
 	for _, authorID := range input.AuthorIDs {
-		_, err := tx.ExecContext(ctx, `
-			INSERT INTO book_authors (book_id, author_id, created_at, updated_at)
-			VALUES (?, ?, ?, ?)
-		`, book.ID, authorID, createdAt, updatedAt)
-		if err != nil {
+		if err := insertBookAuthor(ctx, tx, book.ID, authorID, createdAt); err != nil {
 			return Book{}, err
 		}
 	}
@@ -365,10 +362,7 @@ func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateBoo
 				if existing[authorID] || inserted[authorID] {
 					continue
 				}
-				if _, err := tx.ExecContext(ctx, `
-					INSERT INTO book_authors (book_id, author_id, created_at, updated_at)
-					VALUES (?, ?, ?, ?)
-				`, id, authorID, updatedAt, updatedAt); err != nil {
+				if err := insertBookAuthor(ctx, tx, id, authorID, updatedAt); err != nil {
 					return UpdateResult{}, err
 				}
 				inserted[authorID] = true
@@ -437,6 +431,19 @@ func (r *SQLiteRepository) Delete(ctx context.Context, id int64) error {
 		return ErrBookNotFound
 	}
 	return nil
+}
+
+// insertBookAuthor links a book to an author, reporting a missing author as
+// ErrAuthorNotFound. Authors deleted after service validation surface here.
+func insertBookAuthor(ctx context.Context, tx *sql.Tx, bookID, authorID int64, timestamp string) error {
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO book_authors (book_id, author_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?)
+	`, bookID, authorID, timestamp, timestamp)
+	if database.IsForeignKeyViolation(err) {
+		return ErrAuthorNotFound
+	}
+	return err
 }
 
 type bookScanner interface {
