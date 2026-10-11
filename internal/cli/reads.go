@@ -1,25 +1,24 @@
 package cli
 
 import (
-	"bytes"
-	"encoding/json"
+	"context"
 	"flag"
 	"fmt"
 	"io"
-	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"bakku.dev/bookist/internal/reads"
 )
 
-var readClearableFields = map[string]string{
-	"started-at":   "started_at",
-	"finished-at":  "finished_at",
-	"abandoned-at": "abandoned_at",
-	"rating":       "rating",
-	"notes":        "notes",
+func readClearTargets(request *reads.UpdateReadRequest) map[string]clearTarget {
+	return map[string]clearTarget{
+		"started-at":   &request.StartedAt,
+		"finished-at":  &request.FinishedAt,
+		"abandoned-at": &request.AbandonedAt,
+		"rating":       &request.Rating,
+		"notes":        &request.Notes,
+	}
 }
 
 func runReads(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -80,7 +79,7 @@ func runReadsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags.Var(&abandonedAt, "abandoned-at", "Date reading abandoned (YYYY-MM-DD)")
 	flags.Var(&rating, "rating", "Rating from 1 to 5 in increments of 0.5")
 	flags.Var(&notes, "notes", "Read notes")
-	flags.Var(&clears, "clear", clearFlagUsage(readClearableFields))
+	flags.Var(&clears, "clear", clearFlagUsage(readClearTargets(&reads.UpdateReadRequest{})))
 
 	help := commandHelp{
 		name:        "bookist reads edit",
@@ -105,29 +104,18 @@ func runReadsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
-	changes := make(map[string]any)
-	for _, field := range []struct {
-		key   string
-		value *string
-	}{
-		{"started_at", startedAt.value},
-		{"finished_at", finishedAt.value},
-		{"abandoned_at", abandonedAt.value},
-		{"notes", notes.value},
-	} {
-		if field.value != nil {
-			changes[field.key] = *field.value
-		}
+	request := reads.UpdateReadRequest{
+		StartedAt:   supplied(startedAt.value),
+		FinishedAt:  supplied(finishedAt.value),
+		AbandonedAt: supplied(abandonedAt.value),
+		Rating:      supplied(rating.value),
+		Notes:       supplied(notes.value),
 	}
-	if rating.value != nil {
-		changes["rating"] = *rating.value
-	}
-
-	if err := validateClears(changes, clears, readClearableFields); err != nil {
+	if err := applyClears(readClearTargets(&request), clears); err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}
-	if len(changes) == 0 {
+	if isEmptyUpdate(request) {
 		_, _ = fmt.Fprintln(stderr, "Error: reads edit requires at least one change")
 		return 2
 	}
@@ -143,14 +131,13 @@ func runReadsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
-	endpoint, err := joinURL(*serverURL, "/api/reads/"+strconv.FormatInt(readID, 10))
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
+	c := newClient(*serverURL, stderr)
+	if c == nil {
 		return 2
 	}
 
-	var updated reads.Read
-	if err := patchEndpoint(endpoint, changes, &updated); err != nil {
+	updated, err := c.Reads.Update(context.Background(), readID, request)
+	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "edit read: %v\n", err)
 		return 1
 	}
@@ -187,13 +174,19 @@ func runReadsLS(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
-	bookID, err := resolveBookID(*serverURL, *bookRef)
+	ctx := context.Background()
+	c := newClient(*serverURL, stderr)
+	if c == nil {
+		return 2
+	}
+
+	bookID, err := resolveBookID(ctx, c, *bookRef)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "%v\n", err)
 		return 1
 	}
 
-	listed, err := fetchReads(*serverURL, bookID)
+	listed, err := c.Reads.List(ctx, bookID)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "list reads: %v\n", err)
 		return 1
@@ -254,7 +247,13 @@ func runReadsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
-	bookID, err := resolveBookID(*serverURL, *bookRef)
+	ctx := context.Background()
+	c := newClient(*serverURL, stderr)
+	if c == nil {
+		return 2
+	}
+
+	bookID, err := resolveBookID(ctx, c, *bookRef)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "%v\n", err)
 		return 1
@@ -268,37 +267,9 @@ func runReadsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		Notes:       notes.value,
 	}
 
-	body, err := json.Marshal(input)
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "encode read: %v\n", err)
-		return 1
-	}
-
-	endpoint, err := joinURL(*serverURL, "/api/books/"+strconv.FormatInt(bookID, 10)+"/reads")
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
-		return 2
-	}
-
-	client := http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Post(endpoint, "application/json", bytes.NewReader(body))
+	created, err := c.Reads.Create(ctx, bookID, input)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "add read: %v\n", err)
-		return 1
-	}
-
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode != http.StatusCreated {
-		_, _ = fmt.Fprintf(stderr, "add read: server returned %s\n", resp.Status)
-		return 1
-	}
-
-	var created reads.Read
-	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
-		_, _ = fmt.Fprintf(stderr, "decode read: %v\n", err)
 		return 1
 	}
 
@@ -342,13 +313,12 @@ func runReadsRM(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
-	endpoint, err := joinURL(*serverURL, "/api/reads/"+strconv.FormatInt(readID, 10))
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
+	c := newClient(*serverURL, stderr)
+	if c == nil {
 		return 2
 	}
 
-	if err := deleteEndpoint(endpoint); err != nil {
+	if err := c.Reads.Delete(context.Background(), readID); err != nil {
 		_, _ = fmt.Fprintf(stderr, "remove read: %v\n", err)
 		return 1
 	}
@@ -356,32 +326,4 @@ func runReadsRM(args []string, stdout io.Writer, stderr io.Writer) int {
 	_, _ = fmt.Fprintf(stdout, "removed read %d\n", readID)
 
 	return 0
-}
-
-func fetchReads(serverURL string, bookID int64) ([]reads.Read, error) {
-	endpoint, err := joinURL(serverURL, "/api/books/"+strconv.FormatInt(bookID, 10)+"/reads")
-	if err != nil {
-		return nil, fmt.Errorf("invalid server URL: %v", err)
-	}
-
-	client := http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("fetch reads: %v", err)
-	}
-
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetch reads: server returned %s", resp.Status)
-	}
-
-	var listed []reads.Read
-	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
-		return nil, fmt.Errorf("decode reads: %v", err)
-	}
-
-	return listed, nil
 }

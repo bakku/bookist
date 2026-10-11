@@ -253,6 +253,62 @@ func TestHelpCommandAcceptsACommandPath(t *testing.T) {
 	}
 }
 
+// ── Server Errors ─────────────────────────────────────────────────────────────
+
+func TestCommandsReportServerErrorMessage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"code":"invalid_format","message":"format must be one of: hardback, paperback, epub","field":"format"}}`))
+	}))
+	defer server.Close()
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "books ls", args: []string{"books", "ls"}},
+		{name: "books ls in list", args: []string{"books", "ls", "--list", "1"}},
+		{name: "books add", args: []string{"books", "add", "--title", "Dune", "--format", "foo"}},
+		{name: "books rm", args: []string{"books", "rm", "1"}},
+		{name: "books rm by title", args: []string{"books", "rm", "Dune"}},
+		{name: "authors ls", args: []string{"authors", "ls"}},
+		{name: "authors add", args: []string{"authors", "add", "--name", "Frank Herbert"}},
+		{name: "authors rm", args: []string{"authors", "rm", "1"}},
+		{name: "authors edit", args: []string{"authors", "edit", "1", "--name", "Frank Herbert"}},
+		{name: "lists ls", args: []string{"lists", "ls"}},
+		{name: "lists add", args: []string{"lists", "add", "--name", "Nightstand"}},
+		{name: "lists rm", args: []string{"lists", "rm", "1"}},
+		{name: "lists add-book", args: []string{"lists", "add-book", "--list", "1", "--book", "2"}},
+		{name: "lists rm-book", args: []string{"lists", "rm-book", "--list", "1", "--book", "2"}},
+		{name: "reads ls", args: []string{"reads", "ls", "--book", "1"}},
+		{name: "reads add", args: []string{"reads", "add", "--book", "1"}},
+		{name: "reads rm", args: []string{"reads", "rm", "1"}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			args := append([]string{test.args[0], test.args[1], "--server", server.URL}, test.args[2:]...)
+			exitCode, stdout, stderr := runCLI(args)
+
+			if exitCode != 1 || stdout != "" {
+				t.Fatalf("expected exit code 1 and empty stdout, got %d and %q; stderr: %s", exitCode, stdout, stderr)
+			}
+			if !strings.Contains(stderr, "server returned 400 Bad Request: format must be one of: hardback, paperback, epub") {
+				t.Fatalf("expected server message in stderr, got %q", stderr)
+			}
+		})
+	}
+}
+
+func TestCommandsRejectInvalidServerURL(t *testing.T) {
+	exitCode, stdout, stderr := runCLI([]string{"books", "ls", "--server", "localhost:8080"})
+
+	if exitCode != 2 || stdout != "" || !strings.Contains(stderr, "invalid server URL") {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
+	}
+}
+
 func runCLI(args []string) (int, string, string) {
 	var stdout, stderr strings.Builder
 	exitCode := cli.Run(args, &stdout, &stderr)

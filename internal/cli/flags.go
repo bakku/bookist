@@ -3,6 +3,8 @@ package cli
 import (
 	"strconv"
 	"strings"
+
+	"bakku.dev/bookist/internal/optional"
 )
 
 type stringSliceFlag []string
@@ -70,4 +72,13 @@ func (f *optionalIntFlag) Set(value string) error {
 	}
 	f.value = &parsed
 	return nil
+}
+
+// supplied turns an optional flag value into an update field: absent when the
+// flag was not given, otherwise set to the flag's value.
+func supplied[T any](value *T) optional.Value[T] {
+	if value == nil {
+		return optional.Value[T]{}
+	}
+	return optional.Set(*value)
 }

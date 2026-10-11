@@ -1,18 +1,13 @@
 package cli
 
 import (
-	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
-	"net/http"
 	"sort"
 	"strings"
-	"time"
 )
-
-const maxCLIErrorBodySize = 4 << 10
 
 const partialUpdateHelp = "Omitted fields are unchanged; supplied values replace fields; --clear FIELD clears nullable fields. Blank strings are rejected rather than cleared."
 
@@ -71,7 +66,13 @@ func isBooleanFlag(flag *flag.Flag) bool {
 	return ok && value.IsBoolFlag()
 }
 
-func clearFlagUsage(clearable map[string]string) string {
+// clearTarget is an optional update field that --clear can reset to null.
+type clearTarget interface {
+	IsZero() bool
+	Clear()
+}
+
+func clearFlagUsage[T any](clearable map[string]T) string {
 	names := make([]string, 0, len(clearable))
 	for name := range clearable {
 		names = append(names, name)
@@ -80,61 +81,26 @@ func clearFlagUsage(clearable map[string]string) string {
 	return "Clear a nullable field (repeatable): " + strings.Join(names, ", ")
 }
 
-func validateClears(changes map[string]any, clears []string, clearable map[string]string) error {
+// applyClears clears the fields named by --clear. A field that was also
+// supplied a value cannot be cleared.
+func applyClears(clearable map[string]clearTarget, clears []string) error {
 	cleared := make(map[string]bool)
 	for _, name := range clears {
-		key, ok := clearable[name]
+		target, ok := clearable[name]
 		if !ok {
 			return fmt.Errorf("field %q cannot be cleared", name)
 		}
-		if _, exists := changes[key]; exists && !cleared[key] {
+		if !target.IsZero() && !cleared[name] {
 			return fmt.Errorf("field %q cannot be set and cleared", name)
 		}
-		changes[key] = nil
-		cleared[key] = true
+		target.Clear()
+		cleared[name] = true
 	}
 	return nil
 }
 
-func patchEndpoint(endpoint string, changes map[string]any, output any) error {
-	body, err := json.Marshal(changes)
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequest(http.MethodPatch, endpoint, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-	if resp.StatusCode != http.StatusOK {
-		body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxCLIErrorBodySize))
-		if readErr == nil {
-			message := strings.TrimSpace(string(body))
-			var structured struct {
-				Error struct {
-					Message string `json:"message"`
-				} `json:"error"`
-			}
-			if json.Unmarshal(body, &structured) == nil && structured.Error.Message != "" {
-				message = structured.Error.Message
-			}
-			if message != "" {
-				return fmt.Errorf("server returned %s: %s", resp.Status, message)
-			}
-		}
-		return fmt.Errorf("server returned %s", resp.Status)
-	}
-	if err := json.NewDecoder(resp.Body).Decode(output); err != nil {
-		return fmt.Errorf("decode response: %v", err)
-	}
-	return nil
+// isEmptyUpdate reports whether an update request would change nothing.
+func isEmptyUpdate(request any) bool {
+	encoded, err := json.Marshal(request)
+	return err == nil && string(encoded) == "{}"
 }

@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"io"
+
+	"bakku.dev/bookist/internal/client"
 )
 
 const (
@@ -53,6 +55,18 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 		printRootHelp(stderr)
 		return 2
 	}
+}
+
+// newClient returns an API client for serverURL. It reports an invalid URL to
+// stderr and returns nil.
+func newClient(serverURL string, stderr io.Writer) *client.Client {
+	c, err := client.New(serverURL)
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
+		return nil
+	}
+
+	return c
 }
 
 func printRootHelp(w io.Writer) {
