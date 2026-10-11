@@ -1,65 +1,15 @@
 package web_test
 
 import (
-	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"bakku.dev/bookist/internal/testsupport"
 )
 
 // ── Index ─────────────────────────────────────────────────────────────────────
 
-func TestIndexListsBooks(t *testing.T) {
-	app := newTestApp(t)
-
-	isbn := "9780807083697"
-
-	testsupport.InsertBookRow(t, app.db, "Kindred", &isbn)
-
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	resp := httptest.NewRecorder()
-
-	app.handler.ServeHTTP(resp, req)
-
-	if resp.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, resp.Code)
-	}
-
-	if !bytes.Contains(resp.Body.Bytes(), []byte("Kindred")) {
-		t.Fatalf("expected index response to contain book title, got %s", resp.Body.String())
-	}
-	if !bytes.Contains(resp.Body.Bytes(), []byte(isbn)) {
-		t.Fatalf("expected index response to contain ISBN, got %s", resp.Body.String())
-	}
-	if !bytes.Contains(resp.Body.Bytes(), []byte("2026-01-02")) {
-		t.Fatalf("expected index response to contain added date, got %s", resp.Body.String())
-	}
-	if !bytes.Contains(resp.Body.Bytes(), []byte(`aria-label="Cover unavailable for Kindred"`)) {
-		t.Fatalf("expected index response to contain a cover placeholder, got %s", resp.Body.String())
-	}
-	if !bytes.Contains(resp.Body.Bytes(), []byte(`class="image is-3by4 has-background-primary-soft"`)) {
-		t.Fatalf("expected index response to contain a theme-aware cover background, got %s", resp.Body.String())
-	}
-	if !bytes.Contains(resp.Body.Bytes(), []byte(`class="is-overlay is-flex is-align-items-center is-justify-content-center has-text-primary-bold"`)) {
-		t.Fatalf("expected index response to position the cover placeholder with Bulma helpers, got %s", resp.Body.String())
-	}
-	if !bytes.Contains(resp.Body.Bytes(), []byte(`data-book-grid class="columns is-multiline"`)) {
-		t.Fatalf("expected index response to render the book grid, got %s", resp.Body.String())
-	}
-	if !bytes.Contains(resp.Body.Bytes(), []byte(`class="column is-half-tablet is-one-third-desktop is-one-quarter-fullhd is-flex"`)) {
-		t.Fatalf("expected index response to render responsive book columns, got %s", resp.Body.String())
-	}
-	if !bytes.Contains(resp.Body.Bytes(), []byte(`1 in library`)) {
-		t.Fatalf("expected index response to describe the singular book count, got %s", resp.Body.String())
-	}
-}
-
-// ── Rendering ─────────────────────────────────────────────────────────────────
-
-func TestIndexRendersBulmaAppShell(t *testing.T) {
+func TestIndexRendersMyBooksPage(t *testing.T) {
 	app := newTestApp(t)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -71,35 +21,56 @@ func TestIndexRendersBulmaAppShell(t *testing.T) {
 
 	body := resp.Body.String()
 	for _, expected := range []string{
-		`href="/static/bulma.min.css"`,
-		`href="/static/app.css"`,
-		`aria-label="Primary"`,
-		`aria-label="Mobile primary"`,
-		`id="mobile-sidebar" popover class="mobile-sidebar has-text-inherit"`,
-		`popovertarget="mobile-sidebar" aria-label="Open navigation"`,
-		`class="navbar has-shadow app-header" role="banner"`,
-		`<strong class="is-size-5 ml-2">Bookist</strong>`,
-		`href="#icon-books"`,
-		`data-desktop-sidebar class="column is-narrow is-hidden-touch app-sidebar"`,
-		`class="columns is-gapless mb-0 app-layout"`,
-		`class="navbar-burger"`,
-		`class="menu"`,
-		`class="notification is-primary is-light"`,
-		`class="tag is-primary is-light is-rounded"`,
-		`class="is-flex is-align-items-center is-gap-1 is-active"`,
-		`aria-current="page"`,
+		`<title>My Books · Bookist</title>`,
+		`<link rel="stylesheet" href="/static/app.css">`,
+		`<a href="/" aria-current="page">My Books</a>`,
+		`<form class="search" role="search" action="/">`,
+		`<h1 class="page-title">My Books</h1>`,
+		`All shelves · 14 books`,
+		`id="view-list" checked`,
+		`<li><a href="#" aria-current="page">All <span class="shelf-count">14</span></a></li>`,
+		`<h2 class="shelf-heading">Reading in 2026</h2>`,
 	} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("expected index response to contain %q", expected)
 		}
 	}
-	if got := strings.Count(body, `<strong class="is-size-5 ml-2">Bookist</strong>`); got != 2 {
-		t.Errorf("expected Bookist branding in the header and mobile sidebar, got %d instances", got)
+	if strings.Contains(body, "bulma") {
+		t.Error("expected index response not to reference Bulma")
 	}
-	if strings.Contains(body, `>Navigation</strong>`) {
-		t.Error("expected the mobile sidebar to use Bookist branding instead of a navigation heading")
+}
+
+func TestIndexRendersSampleBooksInListAndCoverViews(t *testing.T) {
+	app := newTestApp(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, resp.Code)
 	}
-	if strings.Contains(body, `href="/authors"`) || strings.Contains(body, `href="/lists/`) {
-		t.Error("expected navigation to hide destinations without web pages")
+
+	body := resp.Body.String()
+	if got := strings.Count(body, `<li class="book-row">`); got != 14 {
+		t.Errorf("expected 14 list rows, got %d", got)
+	}
+	if got := strings.Count(body, `<li class="cover-card">`); got != 14 {
+		t.Errorf("expected 14 cover cards, got %d", got)
+	}
+	for _, expected := range []string{
+		`<a href="#">Dune</a> <span class="book-series">(Dune #1)</span>`,
+		`by <a href="#">David Thomas</a>, <a href="#">Andrew Hunt</a>`,
+		`On <a href="#">Favourites</a>, <a href="#">To re-read</a>`,
+		`<span class="stars" style="--rating: 4.5" role="img" aria-label="Rated 4.5 out of 5"></span>`,
+		`<span class="status status-reading">Reading</span>`,
+		`<span class="fact-label">Started</span> <time datetime="2026-09-28">Sep 28, 2026</time>`,
+		`<div class="book-added"><time datetime="2024-11-30">Nov 30, 2024</time></div>`,
+		`<img class="cover" src="https://covers.openlibrary.org/b/id/14565843-M.jpg" alt="" loading="lazy">`,
+		`<span class="cover cover-fallback" data-tone="oxblood" aria-hidden="true" lang="de"><span class="cover-title">Faust. Eine Tragödie</span><span class="cover-author">Johann Wolfgang von Goethe</span></span>`,
+		`<p class="cover-card-author">David Thomas, Andrew Hunt</p>`,
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("expected index response to contain %q", expected)
+		}
 	}
 }

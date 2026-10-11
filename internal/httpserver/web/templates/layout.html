@@ -5,76 +5,42 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Layout.PageTitle}}</title>
-  <link rel="stylesheet" href="/static/bulma.min.css">
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
   {{template "icon-sprite" .}}
   <a href="#main-content" class="skip-link">Skip to content</a>
 
-  <header class="navbar has-shadow app-header" role="banner">
-    <div class="container is-fluid">
-      <div class="navbar-brand">
-        <a class="navbar-item brand-link" href="/">
-          <span class="icon has-text-primary" aria-hidden="true">
-            <svg viewBox="0 0 24 24"><use href="#icon-books"></use></svg>
-          </span>
-          <strong class="is-size-5 ml-2">Bookist</strong>
-        </a>
-        <button type="button" class="navbar-burger" popovertarget="mobile-sidebar" aria-label="Open navigation">
-          <span aria-hidden="true"></span>
-          <span aria-hidden="true"></span>
-          <span aria-hidden="true"></span>
-          <span aria-hidden="true"></span>
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a class="brand" href="/">
+        <svg class="icon" aria-hidden="true"><use href="#icon-books"></use></svg>
+        Bookist
+      </a>
+      <nav class="topnav" aria-label="Primary">
+        {{range .Layout.PrimaryNav}}
+        <a href="{{.Href}}"{{if .Active}} aria-current="page"{{end}}>{{.Label}}</a>
+        {{end}}
+      </nav>
+      <form class="search" role="search" action="/">
+        <label class="visually-hidden" for="q">Search the library</label>
+        <input id="q" type="search" name="q" placeholder="Search title, author, ISBN">
+        <button type="submit" aria-label="Search">
+          <svg class="icon" aria-hidden="true"><use href="#icon-search"></use></svg>
         </button>
-      </div>
+      </form>
     </div>
   </header>
 
-  <aside id="mobile-sidebar" popover class="mobile-sidebar has-text-inherit">
-    <div class="is-flex is-align-items-center is-justify-content-space-between p-5 pb-0">
-      <a class="is-flex is-align-items-center brand-link" href="/">
-        <span class="icon has-text-primary" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><use href="#icon-books"></use></svg>
-        </span>
-        <strong class="is-size-5 ml-2">Bookist</strong>
-      </a>
-      <button type="button" class="delete" popovertarget="mobile-sidebar" popovertargetaction="hide" aria-label="Close navigation"></button>
+  <main id="main-content" tabindex="-1" class="page">
+    <div class="container">
+      {{template "page-content" .}}
     </div>
-    <nav aria-label="Mobile primary" class="menu p-5">
-      {{template "sidebar-menu" .Layout}}
-    </nav>
-  </aside>
+  </main>
 
-  <div class="columns is-gapless mb-0 app-layout">
-    <aside data-desktop-sidebar class="column is-narrow is-hidden-touch app-sidebar">
-      <div class="p-5">
-        <nav aria-label="Primary" class="menu">
-          {{template "sidebar-menu" .Layout}}
-        </nav>
-      </div>
-    </aside>
-
-    <main id="main-content" tabindex="-1" class="column">
-      <section class="section">
-        <div class="container is-fluid">
-          {{template "page-content" .}}
-        </div>
-      </section>
-    </main>
-  </div>
+  <footer class="footer">
+    <div class="container">Bookist · Your home library</div>
+  </footer>
 </body>
 </html>
-{{end}}
-
-{{define "sidebar-menu"}}
-<p class="menu-label">Library</p>
-<ul class="menu-list">
-  {{range .LibraryNav}}
-  <li><a class="is-flex is-align-items-center is-gap-1{{if .Active}} is-active{{end}}" href="{{.Href}}" {{if .Active}}aria-current="page"{{end}}>
-    <span class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><use href="#icon-{{.IconID}}"></use></svg></span>
-    <span>{{.Label}}</span>
-  </a></li>
-  {{end}}
-</ul>
 {{end}}
