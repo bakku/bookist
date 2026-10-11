@@ -3,6 +3,7 @@ package testsupport
 import (
 	"context"
 	"database/sql"
+	"log/slog"
 	"path/filepath"
 	"testing"
 
@@ -18,7 +19,7 @@ func OpenMigratedDB(t testing.TB) *sql.DB {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	if err := database.MigrateUp(db); err != nil {
+	if err := database.MigrateUp(context.Background(), db, slog.New(slog.DiscardHandler)); err != nil {
 		t.Fatal(err)
 	}
 

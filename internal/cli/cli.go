@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -12,11 +13,13 @@ import (
 
 const (
 	defaultAddr      = ":8080"
-	defaultDBPath    = "bookist.db"
 	defaultDataDir   = "./data"
 	defaultServerURL = "http://localhost:8080"
 
-	serverEnvVar = "BOOKIST_SERVER"
+	serverEnvVar  = "BOOKIST_SERVER"
+	addrEnvVar    = "BOOKIST_ADDR"
+	dataDirEnvVar = "BOOKIST_DATA_DIR"
+	dbEnvVar      = "BOOKIST_DB"
 )
 
 // lookupEnv reads environment variables for flag defaults. Tests replace it.
@@ -65,15 +68,35 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 }
 
+// envDefault returns the trimmed value of the environment variable name when
+// it is set and non-blank, otherwise fallback.
+func envDefault(name, fallback string) string {
+	if value, ok := lookupEnv(name); ok && strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
+	}
+
+	return fallback
+}
+
 // serverFlag registers --server. Its default is $BOOKIST_SERVER when set and
 // non-blank, otherwise defaultServerURL.
 func serverFlag(flags *flag.FlagSet) *string {
-	defaultURL := defaultServerURL
-	if value, ok := lookupEnv(serverEnvVar); ok && strings.TrimSpace(value) != "" {
-		defaultURL = strings.TrimSpace(value)
-	}
+	return flags.String("server", envDefault(serverEnvVar, defaultServerURL), "Bookist server URL (env: "+serverEnvVar+")")
+}
 
-	return flags.String("server", defaultURL, "Bookist server URL (env: "+serverEnvVar+")")
+// storageFlags registers --data-dir and --db. Their defaults are
+// $BOOKIST_DATA_DIR and $BOOKIST_DB when set and non-blank. An empty database
+// path means <data-dir>/bookist.db.
+func storageFlags(flags *flag.FlagSet) (dataDir, dbPath *string) {
+	dataDir = flags.String("data-dir", envDefault(dataDirEnvVar, defaultDataDir), "Directory for managed application data (env: "+dataDirEnvVar+")")
+	dbPath = flags.String("db", envDefault(dbEnvVar, ""), "SQLite database path, <data-dir>/bookist.db when unset (env: "+dbEnvVar+")")
+
+	return dataDir, dbPath
+}
+
+// newLogger returns the application logger, which writes text to w.
+func newLogger(w io.Writer) *slog.Logger {
+	return slog.New(slog.NewTextHandler(w, nil))
 }
 
 // newClient returns an API client for serverURL. It reports an invalid URL to
