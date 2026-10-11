@@ -132,6 +132,10 @@ func TestAuthorsLSForwardsQuery(t *testing.T) {
 func TestAuthorsShowByID(t *testing.T) {
 	var gotPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/authors" {
+			_ = json.NewEncoder(w).Encode([]authors.Author{})
+			return
+		}
 		gotPath = r.URL.Path
 		_ = json.NewEncoder(w).Encode(showTestAuthor())
 	}))
@@ -168,6 +172,10 @@ func TestAuthorsShowByID(t *testing.T) {
 
 func TestAuthorsShowJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/authors" {
+			_ = json.NewEncoder(w).Encode([]authors.Author{})
+			return
+		}
 		_ = json.NewEncoder(w).Encode(showTestAuthor())
 	}))
 	defer server.Close()
@@ -228,7 +236,7 @@ func TestAuthorsShowReportsUnknownAuthor(t *testing.T) {
 		ref      string
 		expected string
 	}{
-		{name: "unknown ID", ref: "999", expected: "show author: server returned 404 Not Found: author not found"},
+		{name: "unknown ID", ref: "999", expected: "author not found: 999"},
 		{name: "unknown name", ref: "Missing", expected: "author not found: Missing"},
 	}
 	for _, test := range tests {
@@ -264,8 +272,15 @@ func showTestAuthor() authors.Author {
 func TestAuthorsRemoveDeletesByIDAndPrintsResult(t *testing.T) {
 	var method, path string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		method, path = r.Method, r.URL.Path
-		w.WriteHeader(http.StatusNoContent)
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/authors":
+			_ = json.NewEncoder(w).Encode([]authors.Author{})
+		case r.Method == http.MethodGet:
+			_ = json.NewEncoder(w).Encode(authors.Author{ID: 12, Name: "Ada"})
+		default:
+			method, path = r.Method, r.URL.Path
+			w.WriteHeader(http.StatusNoContent)
+		}
 	}))
 	defer server.Close()
 

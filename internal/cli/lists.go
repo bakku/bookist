@@ -91,14 +91,14 @@ func runListsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 		name:        "bookist lists edit",
 		usage:       "bookist lists edit <name-or-ID> [options]",
 		description: "Edit a book list",
-		details:     []string{partialUpdateHelp},
+		details:     []string{partialUpdateHelp, referenceHelp},
 		examples: []string{
 			`bookist lists edit 5 --name "Best Books"`,
 			"bookist lists edit 5 --clear description",
 		},
 	}
 
-	if ok, exitCode := parseEditFlags(flags, args, stdout, stderr, help); !ok {
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
 	}
 
@@ -159,6 +159,9 @@ func runListsLS(args []string, stdout io.Writer, stderr io.Writer) int {
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
 	}
+	if !rejectArgs(flags, "lists ls", stderr, help) {
+		return 2
+	}
 
 	format, err := parseOutputFormat(*formatValue)
 	if err != nil {
@@ -200,12 +203,14 @@ func runListsShow(args []string, stdout io.Writer, stderr io.Writer) int {
 		name:        "bookist lists show",
 		usage:       "bookist lists show <name-or-ID> [options]",
 		description: "Show a book list",
+		details:     []string{referenceHelp},
 		examples: []string{
 			"bookist lists show 5",
+			"bookist lists show id:5",
 			`bookist lists show "Best Books" --format json`,
 		},
 	}
-	if ok, exitCode := parseEditFlags(flags, args, stdout, stderr, help); !ok {
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
 	}
 
@@ -270,6 +275,9 @@ func runListsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
 	}
+	if !rejectArgs(flags, "lists add", stderr, help) {
+		return 2
+	}
 
 	trimmedName := strings.TrimSpace(*name)
 
@@ -298,16 +306,21 @@ func runListsAddBook(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("lists add-book", flag.ContinueOnError)
 
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
-	listRef := flags.String("list", "", "List name or ID")
-	bookRef := flags.String("book", "", "Book title or ID")
+	listRef := flags.String("list", "", "List name, ID or id:N")
+	bookRef := flags.String("book", "", "Book title, ID or id:N")
 
 	help := commandHelp{
 		name:        "bookist lists add-book",
 		usage:       "bookist lists add-book [options]",
 		description: "Add a book to a list",
+		details:     []string{referenceHelp},
+		examples:    []string{`bookist lists add-book --list "Best Books" --book id:12`},
 	}
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
+	}
+	if !rejectArgs(flags, "lists add-book", stderr, help) {
+		return 2
 	}
 
 	if strings.TrimSpace(*listRef) == "" {
@@ -356,6 +369,7 @@ func runListsRM(args []string, stdout io.Writer, stderr io.Writer) int {
 		name:        "bookist lists rm",
 		usage:       "bookist lists rm [options] <name-or-ID>",
 		description: "Remove a book list",
+		details:     []string{referenceHelp},
 	}
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
@@ -396,21 +410,21 @@ func runListsRMBook(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("lists rm-book", flag.ContinueOnError)
 
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
-	listRef := flags.String("list", "", "List name or ID")
-	bookRef := flags.String("book", "", "Book title or ID")
+	listRef := flags.String("list", "", "List name, ID or id:N")
+	bookRef := flags.String("book", "", "Book title, ID or id:N")
 
 	help := commandHelp{
 		name:        "bookist lists rm-book",
 		usage:       "bookist lists rm-book [options]",
 		description: "Remove a book from a list",
+		details:     []string{referenceHelp},
 	}
 
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
 	}
 
-	if flags.NArg() != 0 {
-		_, _ = fmt.Fprintln(stderr, "Error: lists rm-book does not accept positional arguments")
+	if !rejectArgs(flags, "lists rm-book", stderr, help) {
 		return 2
 	}
 
@@ -453,34 +467,26 @@ func runListsRMBook(args []string, stdout io.Writer, stderr io.Writer) int {
 }
 
 func resolveListID(ctx context.Context, c *client.Client, value string) (int64, error) {
-	value = strings.TrimSpace(value)
+	return resolveReference(ctx, referenceSource{
+		kind: "list",
+		get: func(ctx context.Context, id int64) (record, error) {
+			list, err := c.Lists.Get(ctx, id)
+			return record{ID: list.ID, Name: list.Name}, err
+		},
+		find: func(ctx context.Context, name string) ([]record, error) {
+			existing, err := c.Lists.List(ctx, name)
+			if err != nil {
+				return nil, err
+			}
 
-	id, isID, err := parseIDReference(value)
-	if err != nil {
-		return 0, err
-	}
-	if isID {
-		return id, nil
-	}
+			var matches []record
+			for _, list := range existing {
+				if strings.EqualFold(list.Name, name) {
+					matches = append(matches, record{ID: list.ID, Name: list.Name})
+				}
+			}
 
-	existing, err := c.Lists.List(ctx, value)
-	if err != nil {
-		return 0, fmt.Errorf("fetch lists: %w", err)
-	}
-
-	var matches []lists.List
-	for _, l := range existing {
-		if strings.EqualFold(l.Name, value) {
-			matches = append(matches, l)
-		}
-	}
-
-	if len(matches) > 1 {
-		return 0, fmt.Errorf("list %q exists multiple times; pass a list ID instead", value)
-	}
-	if len(matches) == 1 {
-		return matches[0].ID, nil
-	}
-
-	return 0, fmt.Errorf("list not found: %s", value)
+			return matches, nil
+		},
+	}, value)
 }

@@ -23,6 +23,9 @@ func runMigrate(args []string, stdout, stderr io.Writer) int {
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
 	}
+	if !rejectArgs(flags, "migrate", stderr, help) {
+		return 2
+	}
 
 	db, err := openAndMigrate(context.Background(), *dbPath)
 	if err != nil {

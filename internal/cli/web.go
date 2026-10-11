@@ -34,6 +34,9 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
 	}
+	if !rejectArgs(flags, "serve", stderr, help) {
+		return 2
+	}
 
 	coverStore, err := covers.NewStore(filepath.Join(*dataDir, "book-covers"))
 	if err != nil {

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"flag"
 	"strconv"
 	"strings"
 
@@ -72,6 +73,63 @@ func (f *optionalIntFlag) Set(value string) error {
 	}
 	f.value = &parsed
 	return nil
+}
+
+// interspersedArgs reorders args so that flags come before positional
+// arguments, which lets flags follow positionals: flag.FlagSet.Parse stops at
+// the first positional. A flag missing its value is left last so that Parse
+// reports it.
+func interspersedArgs(flags *flag.FlagSet, args []string) []string {
+	options := make([]string, 0, len(args))
+	operands := make([]string, 0, 1)
+	missingValue := false
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			operands = append(operands, args[i+1:]...)
+			break
+		}
+		if arg == "-" || !strings.HasPrefix(arg, "-") {
+			operands = append(operands, arg)
+			continue
+		}
+
+		options = append(options, arg)
+		name, hasValue := flagName(arg)
+		if hasValue || name == "h" || name == "help" {
+			continue
+		}
+		registered := flags.Lookup(name)
+		if registered == nil || isBooleanFlag(registered) {
+			continue
+		}
+		if i+1 < len(args) {
+			i++
+			options = append(options, args[i])
+		} else {
+			missingValue = true
+		}
+	}
+
+	if missingValue {
+		return options
+	}
+	return append(append(options, "--"), operands...)
+}
+
+func flagName(arg string) (string, bool) {
+	name := strings.TrimLeft(arg, "-")
+	name, _, hasValue := strings.Cut(name, "=")
+	return name, hasValue
+}
+
+func isBooleanFlag(flag *flag.Flag) bool {
+	type boolFlag interface {
+		IsBoolFlag() bool
+	}
+	value, ok := flag.Value.(boolFlag)
+	return ok && value.IsBoolFlag()
 }
 
 // supplied turns an optional flag value into an update field: absent when the

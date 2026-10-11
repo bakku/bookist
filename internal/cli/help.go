@@ -69,11 +69,13 @@ func printCommandHelp(w io.Writer, help commandHelp, flags *flag.FlagSet) {
 	_ = tw.Flush()
 }
 
+// parseFlags parses command arguments. Flags may appear before, between and
+// after positional arguments.
 func parseFlags(flags *flag.FlagSet, args []string, stdout, stderr io.Writer, help commandHelp) (bool, int) {
 	flags.SetOutput(stderr)
 	flags.Usage = func() {}
 
-	err := flags.Parse(args)
+	err := flags.Parse(interspersedArgs(flags, args))
 	if errors.Is(err, flag.ErrHelp) {
 		printCommandHelp(stdout, help, flags)
 		return false, 0
@@ -116,4 +118,18 @@ func flagPlaceholder(f *flag.Flag) string {
 
 func showDefault(value string) bool {
 	return value != "" && value != "0" && value != "false"
+}
+
+// rejectArgs reports stray positional arguments for a command that takes none.
+// It returns true when there are none.
+func rejectArgs(flags *flag.FlagSet, command string, stderr io.Writer, help commandHelp) bool {
+	if flags.NArg() == 0 {
+		return true
+	}
+
+	_, _ = fmt.Fprintf(stderr, "Error: %s does not accept positional arguments\n", command)
+	_, _ = fmt.Fprintln(stderr)
+	printCommandHelp(stderr, help, flags)
+
+	return false
 }

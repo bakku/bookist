@@ -96,7 +96,7 @@ func runReadsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 		},
 	}
 
-	if ok, exitCode := parseEditFlags(flags, args, stdout, stderr, help); !ok {
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
 	}
 
@@ -153,17 +153,21 @@ func runReadsLS(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("reads ls", flag.ContinueOnError)
 
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
-	bookRef := flags.String("book", "", "Book title or ID")
+	bookRef := flags.String("book", "", "Book title, ID or id:N")
 	formatValue := flags.String("format", string(outputFormatPretty), "Output format (tsv|pretty|json)")
 
 	help := commandHelp{
 		name:        "bookist reads ls",
 		usage:       "bookist reads ls [options]",
 		description: "List reads for a book",
+		details:     []string{referenceHelp},
 	}
 
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
+	}
+	if !rejectArgs(flags, "reads ls", stderr, help) {
+		return 2
 	}
 
 	format, err := parseOutputFormat(*formatValue)
@@ -229,7 +233,7 @@ func runReadsShow(args []string, stdout io.Writer, stderr io.Writer) int {
 		description: "Show a read",
 		examples:    []string{"bookist reads show 9", "bookist reads show 9 --format json"},
 	}
-	if ok, exitCode := parseEditFlags(flags, args, stdout, stderr, help); !ok {
+	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
 	}
 
@@ -291,7 +295,7 @@ func runReadsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags := flag.NewFlagSet("reads add", flag.ContinueOnError)
 
 	serverURL := flags.String("server", defaultServerURL, "Bookist server URL")
-	bookRef := flags.String("book", "", "Book title or ID")
+	bookRef := flags.String("book", "", "Book title, ID or id:N")
 
 	var startedAt optionalStringFlag
 	var finishedAt optionalStringFlag
@@ -309,10 +313,14 @@ func runReadsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		name:        "bookist reads add",
 		usage:       "bookist reads add [options]",
 		description: "Record a read for a book",
+		details:     []string{referenceHelp},
 	}
 
 	if ok, exitCode := parseFlags(flags, args, stdout, stderr, help); !ok {
 		return exitCode
+	}
+	if !rejectArgs(flags, "reads add", stderr, help) {
+		return 2
 	}
 
 	if strings.TrimSpace(*bookRef) == "" {

@@ -112,6 +112,10 @@ func TestListsLSForwardsQuery(t *testing.T) {
 func TestListsShowByID(t *testing.T) {
 	var gotPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/lists" {
+			_ = json.NewEncoder(w).Encode([]lists.List{})
+			return
+		}
 		gotPath = r.URL.Path
 		_ = json.NewEncoder(w).Encode(showTestList())
 	}))
@@ -148,6 +152,10 @@ func TestListsShowByID(t *testing.T) {
 
 func TestListsShowJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/lists" {
+			_ = json.NewEncoder(w).Encode([]lists.List{})
+			return
+		}
 		_ = json.NewEncoder(w).Encode(showTestList())
 	}))
 	defer server.Close()
@@ -208,7 +216,7 @@ func TestListsShowReportsUnknownList(t *testing.T) {
 		ref      string
 		expected string
 	}{
-		{name: "unknown ID", ref: "999", expected: "show list: server returned 404 Not Found: list not found"},
+		{name: "unknown ID", ref: "999", expected: "list not found: 999"},
 		{name: "unknown name", ref: "Missing", expected: "list not found: Missing"},
 	}
 	for _, test := range tests {
@@ -281,8 +289,7 @@ func TestListsAddBookResolvesListByName(t *testing.T) {
 				{ID: 9, Name: "Want to Buy Later"},
 				{ID: 1, Name: "Want to Buy"},
 			})
-		case r.Method == http.MethodGet && r.URL.Path == "/api/books":
-			_ = json.NewEncoder(w).Encode([]interface{}{})
+		case answerLookup(w, r, "/api/books", 2, books.Book{ID: 2, Title: "Dune"}):
 		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/lists/"):
 			capturedPath = r.URL.Path
 			w.WriteHeader(http.StatusNoContent)
@@ -301,10 +308,12 @@ func TestListsAddBookResolvesListByName(t *testing.T) {
 	}
 }
 
-func TestListsAddBookPassesIntegerIDsThrough(t *testing.T) {
+func TestListsAddBookResolvesIntegerIDs(t *testing.T) {
 	var capturedPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case answerLookup(w, r, "/api/lists", 10, lists.List{ID: 10, Name: "Owned"}):
+		case answerLookup(w, r, "/api/books", 20, books.Book{ID: 20, Title: "Dune"}):
 		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/lists/"):
 			capturedPath = r.URL.Path
 			w.WriteHeader(http.StatusNoContent)
@@ -445,6 +454,9 @@ func TestListsAddBookBookNotFoundExitsNonZero(t *testing.T) {
 func TestListsRemoveDeletesByIDAndPrintsResult(t *testing.T) {
 	var method, path string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if answerLookup(w, r, "/api/lists", 12, lists.List{ID: 12, Name: "Owned"}) {
+			return
+		}
 		method, path = r.Method, r.URL.Path
 		w.WriteHeader(http.StatusNoContent)
 	}))

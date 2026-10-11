@@ -17,6 +17,11 @@ import (
 func TestEditAcceptsTargetBeforeOrAfterOptions(t *testing.T) {
 	var received []map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if answerLookup(w, r, "/api/books", 12, books.Book{ID: 12, Title: "Old"}) ||
+			answerLookup(w, r, "/api/authors", 6, authors.Author{ID: 6, Name: "Old"}) ||
+			answerLookup(w, r, "/api/lists", 5, lists.List{ID: 5, Name: "Old"}) {
+			return
+		}
 		if r.Method != http.MethodPatch {
 			t.Fatalf("expected PATCH, got %s", r.Method)
 		}
@@ -72,6 +77,11 @@ func TestEditParsingSupportsMixedEqualsRepeatableAndDelimiter(t *testing.T) {
 	var bookPatch map[string]any
 	var readPatch map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if answerLookup(w, r, "/api/books", 12, books.Book{ID: 12, Title: "Old"}) ||
+			answerLookup(w, r, "/api/authors", 4, authors.Author{ID: 4, Name: "Frank Herbert"}) ||
+			answerLookup(w, r, "/api/authors", 8, authors.Author{ID: 8, Name: "Brian Herbert"}) {
+			return
+		}
 		switch r.URL.Path {
 		case "/api/books/12":
 			_ = json.NewDecoder(r.Body).Decode(&bookPatch)

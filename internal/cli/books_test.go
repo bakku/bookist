@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -169,6 +170,10 @@ func TestBooksLSResolvesExactListAndForwardsQuery(t *testing.T) {
 func TestBooksShowByID(t *testing.T) {
 	var gotPath string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/books" {
+			_ = json.NewEncoder(w).Encode([]books.Book{})
+			return
+		}
 		gotPath = r.URL.Path
 		_ = json.NewEncoder(w).Encode(showTestBook())
 	}))
@@ -206,6 +211,10 @@ func TestBooksShowByID(t *testing.T) {
 
 func TestBooksShowJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/books" {
+			_ = json.NewEncoder(w).Encode([]books.Book{})
+			return
+		}
 		_ = json.NewEncoder(w).Encode(showTestBook())
 	}))
 	defer server.Close()
@@ -226,6 +235,10 @@ func TestBooksShowJSON(t *testing.T) {
 
 func TestBooksShowOmitsUnsetFields(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/books" {
+			_ = json.NewEncoder(w).Encode([]books.Book{})
+			return
+		}
 		_ = json.NewEncoder(w).Encode(books.Book{ID: 3, Title: "Kindred", Authors: []authors.Author{}, PublishedYear: new(1979)})
 	}))
 	defer server.Close()
@@ -283,7 +296,7 @@ func TestBooksShowReportsUnknownBook(t *testing.T) {
 		ref      string
 		expected string
 	}{
-		{name: "unknown ID", ref: "999", expected: "show book: server returned 404 Not Found: book not found"},
+		{name: "unknown ID", ref: "999", expected: "book not found: 999"},
 		{name: "unknown title", ref: "Missing", expected: "book not found: Missing"},
 	}
 	for _, test := range tests {
@@ -731,7 +744,29 @@ func TestBooksAddWithAmbiguousAuthorNameRequiresID(t *testing.T) {
 	}
 }
 
-func TestBooksAddWithAuthorNameNotFoundCreatesAuthorThenBook(t *testing.T) {
+func TestBooksAddWithUnknownAuthorFailsWithoutCreatingAnything(t *testing.T) {
+	var methods []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		methods = append(methods, r.Method+" "+r.URL.Path)
+		if r.Method == http.MethodGet && r.URL.Path == "/api/authors" {
+			_ = json.NewEncoder(w).Encode([]authors.Author{{ID: 4, Name: "Frank Herbert"}})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer server.Close()
+
+	exitCode, stdout, stderr := runCLI([]string{"books", "add", "--title", "Dune", "--author", "Frank Herbret", "--server", server.URL})
+
+	if exitCode != 1 || stdout != "" || !strings.Contains(stderr, "author not found: Frank Herbret") {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
+	}
+	if len(methods) != 1 || methods[0] != "GET /api/authors" {
+		t.Fatalf("expected only an author lookup, got %#v", methods)
+	}
+}
+
+func TestBooksAddCreateAuthorsCreatesMissingAuthorsAndReportsThem(t *testing.T) {
 	var postedAuthors []authors.CreateAuthorRequest
 	var postedBooks []books.CreateBookRequest
 
@@ -740,7 +775,7 @@ func TestBooksAddWithAuthorNameNotFoundCreatesAuthorThenBook(t *testing.T) {
 		case "/api/authors":
 			switch r.Method {
 			case http.MethodGet:
-				_ = json.NewEncoder(w).Encode([]authors.Author{})
+				_ = json.NewEncoder(w).Encode([]authors.Author{{ID: 4, Name: "Existing Author"}})
 
 			case http.MethodPost:
 				var req authors.CreateAuthorRequest
@@ -760,92 +795,65 @@ func TestBooksAddWithAuthorNameNotFoundCreatesAuthorThenBook(t *testing.T) {
 	}))
 	defer server.Close()
 
-	var stdout, stderr strings.Builder
-	exitCode := cli.Run([]string{"books", "add", "--title", "My Book", "--author", "New Author", "--server", server.URL}, &stdout, &stderr)
+	exitCode, stdout, stderr := runCLI([]string{
+		"books", "add", "--title", "My Book", "--author", "Existing Author", "--author", "New Author",
+		"--create-authors", "--server", server.URL,
+	})
 
 	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr.String())
+		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr)
 	}
 	if len(postedAuthors) != 1 || postedAuthors[0].Name != "New Author" {
-		t.Fatalf("expected POST /api/authors with 'New Author', got %#v", postedAuthors)
+		t.Fatalf("expected one POST /api/authors with 'New Author', got %#v", postedAuthors)
 	}
 	if len(postedBooks) != 1 {
 		t.Fatalf("expected 1 POST /api/books, got %d", len(postedBooks))
 	}
-	if len(postedBooks[0].AuthorIDs) != 1 || postedBooks[0].AuthorIDs[0] != 5 {
-		t.Fatalf("expected author_ids [5], got %#v", postedBooks[0].AuthorIDs)
+	if !reflect.DeepEqual(postedBooks[0].AuthorIDs, []int64{4, 5}) {
+		t.Fatalf("expected author_ids [4 5], got %#v", postedBooks[0].AuthorIDs)
 	}
-	if !strings.Contains(stdout.String(), "10\tMy Book") {
-		t.Fatalf("expected stdout to contain '10\\tMy Book', got %q", stdout.String())
+	if stderr != "created author \"New Author\" (id 5)\n" {
+		t.Fatalf("expected created author report on stderr, got %q", stderr)
+	}
+	if !strings.Contains(stdout, "10\tMy Book") {
+		t.Fatalf("expected stdout to contain '10\\tMy Book', got %q", stdout)
 	}
 }
 
-func TestBooksAddWithIntegerAuthorIDLinksAuthor(t *testing.T) {
-	var postedBooks []books.CreateBookRequest
-
+func TestBooksAddCreateAuthorsNeverCreatesForExplicitID(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/api/books":
-			var req books.CreateBookRequest
-			_ = json.NewDecoder(r.Body).Decode(&req)
-			postedBooks = append(postedBooks, req)
-			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(books.Book{ID: 10, Title: req.Title})
+		if r.Method == http.MethodPost {
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
+		http.NotFound(w, r)
 	}))
 	defer server.Close()
 
-	var stdout, stderr strings.Builder
-	exitCode := cli.Run([]string{"books", "add", "--title", "My Book", "--author", "5", "--server", server.URL}, &stdout, &stderr)
+	exitCode, stdout, stderr := runCLI([]string{"books", "add", "--title", "My Book", "--author", "id:99", "--create-authors", "--server", server.URL})
 
-	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr.String())
-	}
-	if len(postedBooks) != 1 {
-		t.Fatalf("expected 1 POST /api/books, got %d", len(postedBooks))
-	}
-	if len(postedBooks[0].AuthorIDs) != 1 || postedBooks[0].AuthorIDs[0] != 5 {
-		t.Fatalf("expected author_ids [5], got %#v", postedBooks[0].AuthorIDs)
+	if exitCode != 1 || stdout != "" || !strings.Contains(stderr, "author not found: id:99") {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
 	}
 }
 
-func TestBooksAddPassesAuthorIntegerIDThroughWithoutLookup(t *testing.T) {
-	var posted books.CreateBookRequest
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/api/authors":
-			t.Fatal("unexpected author lookup")
+func TestBooksAddRejectsBlankAuthor(t *testing.T) {
+	exitCode, stdout, stderr := runCLI([]string{"books", "add", "--title", "My Book", "--author", " "})
 
-		case "/api/books":
-			_ = json.NewDecoder(r.Body).Decode(&posted)
-			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(books.Book{ID: 10, Title: posted.Title})
-		}
-	}))
-	defer server.Close()
-
-	var stdout, stderr strings.Builder
-	exitCode := cli.Run([]string{"books", "add", "--title", "My Book", "--author", "5", "--server", server.URL}, &stdout, &stderr)
-
-	if exitCode != 0 {
-		t.Fatalf("expected success, got %d: %s", exitCode, stderr.String())
-	}
-	if len(posted.AuthorIDs) != 1 || posted.AuthorIDs[0] != 5 {
-		t.Fatalf("expected integer ID to pass through, got %#v", posted.AuthorIDs)
+	if exitCode != 2 || stdout != "" || !strings.Contains(stderr, "--author must not be blank") {
+		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", exitCode, stdout, stderr)
 	}
 }
 
-func TestBooksAddRejectsInvalidAuthorIntegerIDs(t *testing.T) {
-	for _, id := range []string{"0", "999999999999999999999999"} {
-		t.Run(id, func(t *testing.T) {
-			var stdout, stderr strings.Builder
-			exitCode := cli.Run([]string{"books", "add", "--title", "My Book", "--author", id}, &stdout, &stderr)
+func TestBooksAddRejectsInvalidExplicitAuthorIDs(t *testing.T) {
+	for _, ref := range []string{"id:0", "id:abc", "id:999999999999999999999999"} {
+		t.Run(ref, func(t *testing.T) {
+			exitCode, _, stderr := runCLI([]string{"books", "add", "--title", "My Book", "--author", ref})
 
 			if exitCode == 0 {
 				t.Fatal("expected non-zero exit code")
 			}
-			if !strings.Contains(stderr.String(), `invalid ID "`+id+`"`) {
-				t.Fatalf("unexpected error: %q", stderr.String())
+			if !strings.Contains(stderr, `invalid ID "`+ref+`"`) {
+				t.Fatalf("unexpected error: %q", stderr)
 			}
 		})
 	}
@@ -856,6 +864,9 @@ func TestBooksAddRejectsInvalidAuthorIntegerIDs(t *testing.T) {
 func TestBooksRemoveDeletesByIDAndPrintsResult(t *testing.T) {
 	var method, path string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if answerLookup(w, r, "/api/books", 12, books.Book{ID: 12, Title: "Dune"}) {
+			return
+		}
 		method, path = r.Method, r.URL.Path
 		w.WriteHeader(http.StatusNoContent)
 	}))
@@ -910,15 +921,11 @@ func TestBooksRemoveRejectsAmbiguousTitle(t *testing.T) {
 	}
 }
 
-func TestBooksRemoveRequiresOptionsBeforeReference(t *testing.T) {
-	exitCode, _, stderr := runCLI([]string{"books", "rm", "12", "--server", "http://example.test"})
-	if exitCode != 2 || !strings.Contains(stderr, "requires exactly one") {
-		t.Fatalf("unexpected result: exit=%d stderr=%q", exitCode, stderr)
-	}
-}
-
 func TestBooksRemoveRequiresNoContentResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if answerLookup(w, r, "/api/books", 1, books.Book{ID: 1, Title: "Dune"}) {
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -935,6 +942,11 @@ func TestBooksEditPatchesOnlyChanges(t *testing.T) {
 	var method, path, contentType string
 	var body map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if answerLookup(w, r, "/api/books", 12, books.Book{ID: 12, Title: "Dune"}) ||
+			answerLookup(w, r, "/api/authors", 4, authors.Author{ID: 4, Name: "Frank Herbert"}) ||
+			answerLookup(w, r, "/api/authors", 8, authors.Author{ID: 8, Name: "Brian Herbert"}) {
+			return
+		}
 		method, path, contentType = r.Method, r.URL.Path, r.Header.Get("Content-Type")
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		_ = json.NewEncoder(w).Encode(books.Book{ID: 12, Title: "Dune Messiah"})
@@ -980,13 +992,13 @@ func TestBooksEditClearSendsNullAndResolvesTitle(t *testing.T) {
 }
 
 func TestBooksEditDoesNotCreateMissingAuthors(t *testing.T) {
-	var methods []string
+	var writes []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		methods = append(methods, r.Method)
-		if r.Method == http.MethodGet && r.URL.Path == "/api/authors" {
-			_ = json.NewEncoder(w).Encode([]authors.Author{})
+		if answerLookup(w, r, "/api/books", 12, books.Book{ID: 12, Title: "Dune"}) ||
+			answerLookup(w, r, "/api/authors", 0, nil) {
 			return
 		}
+		writes = append(writes, r.Method+" "+r.URL.Path)
 		http.NotFound(w, r)
 	}))
 	defer server.Close()
@@ -995,7 +1007,7 @@ func TestBooksEditDoesNotCreateMissingAuthors(t *testing.T) {
 	if code != 1 || stdout != "" || !strings.Contains(stderr, "author not found: Missing Author") {
 		t.Fatalf("unexpected result: exit=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
-	if len(methods) != 1 || methods[0] != http.MethodGet {
-		t.Fatalf("expected only an author lookup, got methods %#v", methods)
+	if len(writes) != 0 {
+		t.Fatalf("expected no writes, got %#v", writes)
 	}
 }
