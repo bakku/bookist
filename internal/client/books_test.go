@@ -3,8 +3,10 @@ package client_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"bakku.dev/bookist/internal/books"
+	"bakku.dev/bookist/internal/client"
 	"bakku.dev/bookist/internal/optional"
 	"bakku.dev/bookist/internal/testsupport"
 )
@@ -126,6 +128,30 @@ func TestBooksCreatePersistsBook(t *testing.T) {
 	testsupport.AssertBookAuthors(t, db, created.ID, authorID)
 }
 
+func TestBooksCreateWithCoverUsesLongerTimeout(t *testing.T) {
+	c, _, remaining := newDeadlineClient(t)
+
+	_, err := c.Books.Create(context.Background(), books.CreateBookRequest{
+		Title: "Dune",
+		Cover: new([]byte("\x89PNG\r\n\x1a\ncover")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertDeadline(t, remaining, time.Minute, client.CoverTimeout)
+}
+
+func TestBooksCreateWithoutCoverUsesDefaultTimeout(t *testing.T) {
+	c, _, remaining := newDeadlineClient(t)
+
+	if _, err := c.Books.Create(context.Background(), books.CreateBookRequest{Title: "Dune"}); err != nil {
+		t.Fatal(err)
+	}
+
+	assertDeadline(t, remaining, 0, 10*time.Second)
+}
+
 // ── Books Update ──────────────────────────────────────────────────────────────
 
 func TestBooksUpdateSendsOnlySuppliedFields(t *testing.T) {
@@ -176,6 +202,42 @@ func TestBooksUpdateWithoutFieldsIsRejected(t *testing.T) {
 
 	assertClientError(t, err, 400, "no_fields_to_update", "")
 	testsupport.AssertBookRow(t, db, id, "Dune", nil)
+}
+
+func TestBooksUpdateWithCoverUsesLongerTimeout(t *testing.T) {
+	c, db, remaining := newDeadlineClient(t)
+	id := testsupport.InsertBookRow(t, db, "Dune", nil)
+
+	_, err := c.Books.Update(context.Background(), id, books.UpdateBookRequest{
+		Cover: optional.Set([]byte("\x89PNG\r\n\x1a\ncover")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertDeadline(t, remaining, time.Minute, client.CoverTimeout)
+}
+
+func TestBooksUpdateWithoutCoverUsesDefaultTimeout(t *testing.T) {
+	c, db, remaining := newDeadlineClient(t)
+	id := testsupport.InsertBookRow(t, db, "Dune", nil)
+
+	if _, err := c.Books.Update(context.Background(), id, books.UpdateBookRequest{Title: optional.Set("Dune Messiah")}); err != nil {
+		t.Fatal(err)
+	}
+
+	assertDeadline(t, remaining, 0, 10*time.Second)
+}
+
+func TestBooksUpdateClearingCoverUsesDefaultTimeout(t *testing.T) {
+	c, db, remaining := newDeadlineClient(t)
+	id := testsupport.InsertBookRow(t, db, "Dune", nil)
+
+	if _, err := c.Books.Update(context.Background(), id, books.UpdateBookRequest{Cover: optional.Null[[]byte]()}); err != nil {
+		t.Fatal(err)
+	}
+
+	assertDeadline(t, remaining, 0, 10*time.Second)
 }
 
 // ── Books Delete ──────────────────────────────────────────────────────────────

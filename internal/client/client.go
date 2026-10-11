@@ -16,6 +16,10 @@ import (
 const (
 	defaultTimeout   = 10 * time.Second
 	maxErrorBodySize = 4 << 10
+
+	// CoverTimeout is the time allowed for cover downloads and for requests
+	// that carry cover bytes, which can be much larger than other requests.
+	CoverTimeout = 2 * time.Minute
 )
 
 // Client talks to a Bookist server. Resource operations are grouped by
@@ -33,7 +37,9 @@ type Client struct {
 // Option customizes a Client.
 type Option func(*Client)
 
-// WithHTTPClient replaces the default HTTP client, which has a 10 second timeout.
+// WithHTTPClient replaces the default HTTP client. Requests are limited by a
+// context deadline of 10 seconds, or CoverTimeout for requests that carry a
+// cover, in addition to any Timeout set on httpClient.
 func WithHTTPClient(httpClient *http.Client) Option {
 	return func(c *Client) {
 		c.httpClient = httpClient
@@ -53,7 +59,7 @@ func New(baseURL string, options ...Option) (*Client, error) {
 
 	c := &Client{
 		baseURL:    parsed,
-		httpClient: &http.Client{Timeout: defaultTimeout},
+		httpClient: &http.Client{},
 	}
 	for _, option := range options {
 		option(c)
@@ -98,6 +104,15 @@ func (c *Client) endpoint(query string, segments ...string) string {
 // do sends a request with an optional JSON body and decodes a JSON response
 // into out when out is not nil. Any status other than wantStatus is an *Error.
 func (c *Client) do(ctx context.Context, method, endpoint string, body, out any, wantStatus int) error {
+	return c.doWithTimeout(ctx, defaultTimeout, method, endpoint, body, out, wantStatus)
+}
+
+// doWithTimeout is do with a custom deadline covering the whole exchange,
+// including reading the response body.
+func (c *Client) doWithTimeout(ctx context.Context, timeout time.Duration, method, endpoint string, body, out any, wantStatus int) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	var reader io.Reader
 	if body != nil {
 		encoded, err := json.Marshal(body)

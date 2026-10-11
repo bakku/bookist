@@ -10,7 +10,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
@@ -683,6 +682,26 @@ func resolveBookID(ctx context.Context, c *client.Client, value string) (int64, 
 	}, value)
 }
 
+// coverTransport is the transport used to download covers; nil uses the
+// default transport.
+var coverTransport http.RoundTripper
+
+// maxCoverRedirects is Go's default redirect limit.
+const maxCoverRedirects = 10
+
+// checkCoverRedirect follows redirects up to Go's default limit but only to
+// http and https URLs.
+func checkCoverRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= maxCoverRedirects {
+		return fmt.Errorf("stopped after %d redirects", maxCoverRedirects)
+	}
+	if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
+		return fmt.Errorf("unsupported redirect URL scheme %q", req.URL.Scheme)
+	}
+
+	return nil
+}
+
 func loadCover(source string) ([]byte, error) {
 	parsed, err := url.Parse(source)
 	if err != nil {
@@ -697,15 +716,23 @@ func loadCover(source string) ([]byte, error) {
 			return nil, err
 		}
 	case "http", "https":
-		client := http.Client{
-			Timeout: 10 * time.Second,
-			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
+		// The deadline covers the whole download, including redirects and
+		// reading the body.
+		ctx, cancel := context.WithTimeout(context.Background(), client.CoverTimeout)
+		defer cancel()
+
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, source, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		httpClient := http.Client{
+			Transport:     coverTransport,
+			CheckRedirect: checkCoverRedirect,
 		}
 
 		var response *http.Response
-		response, err = client.Get(source)
+		response, err = httpClient.Do(request)
 		if err != nil {
 			return nil, err
 		}

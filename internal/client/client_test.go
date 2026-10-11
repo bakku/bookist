@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
@@ -58,6 +59,43 @@ func newTestClient(t *testing.T) (*client.Client, *sql.DB) {
 	}
 
 	return c, db
+}
+
+// newDeadlineClient returns a client connected to the real API handler whose
+// remaining function reports the time left on the last request's deadline.
+func newDeadlineClient(t *testing.T) (*client.Client, *sql.DB, func() (time.Duration, bool)) {
+	t.Helper()
+
+	handler, db := newAPIHandler(t)
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+
+	var deadline time.Time
+	var hasDeadline bool
+	httpClient := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		deadline, hasDeadline = r.Context().Deadline()
+		return http.DefaultTransport.RoundTrip(r)
+	})}
+
+	c, err := client.New(server.URL, client.WithHTTPClient(httpClient))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return c, db, func() (time.Duration, bool) { return time.Until(deadline), hasDeadline }
+}
+
+// assertDeadline checks that a request had a deadline in (lower, upper] from now.
+func assertDeadline(t *testing.T, remaining func() (time.Duration, bool), lower, upper time.Duration) {
+	t.Helper()
+
+	left, hasDeadline := remaining()
+	if !hasDeadline {
+		t.Fatal("expected the request to have a deadline")
+	}
+	if left <= lower || left > upper {
+		t.Fatalf("expected deadline in (%s, %s], got %s", lower, upper, left)
+	}
 }
 
 // assertClientError checks that err is a *client.Error with the given details.

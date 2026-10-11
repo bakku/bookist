@@ -29,13 +29,21 @@ func (s *BooksService) Get(ctx context.Context, id int64) (books.Book, error) {
 
 func (s *BooksService) Create(ctx context.Context, request books.CreateBookRequest) (books.Book, error) {
 	var created books.Book
-	err := s.client.do(ctx, http.MethodPost, s.client.endpoint("", "api", "books"), request, &created, http.StatusCreated)
+	timeout := defaultTimeout
+	if request.Cover != nil {
+		timeout = CoverTimeout
+	}
+	err := s.client.doWithTimeout(ctx, timeout, http.MethodPost, s.client.endpoint("", "api", "books"), request, &created, http.StatusCreated)
 	return created, err
 }
 
 func (s *BooksService) Update(ctx context.Context, id int64, request books.UpdateBookRequest) (books.Book, error) {
 	var updated books.Book
-	err := s.client.do(ctx, http.MethodPatch, s.client.endpoint("", "api", "books", strconv.FormatInt(id, 10)), request, &updated, http.StatusOK)
+	timeout := defaultTimeout
+	if request.Cover.Value != nil {
+		timeout = CoverTimeout
+	}
+	err := s.client.doWithTimeout(ctx, timeout, http.MethodPatch, s.client.endpoint("", "api", "books", strconv.FormatInt(id, 10)), request, &updated, http.StatusOK)
 	return updated, err
 }
 
