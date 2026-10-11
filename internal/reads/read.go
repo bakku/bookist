@@ -27,9 +27,9 @@ type CreateReadRequest struct {
 }
 
 type UpdateReadRequest struct {
-	StartedAt   optional.Value[string]  `json:"started_at"`
-	FinishedAt  optional.Value[string]  `json:"finished_at"`
-	AbandonedAt optional.Value[string]  `json:"abandoned_at"`
-	Rating      optional.Value[float64] `json:"rating"`
-	Notes       optional.Value[string]  `json:"notes"`
+	StartedAt   optional.Value[string]  `json:"started_at,omitzero"`
+	FinishedAt  optional.Value[string]  `json:"finished_at,omitzero"`
+	AbandonedAt optional.Value[string]  `json:"abandoned_at,omitzero"`
+	Rating      optional.Value[float64] `json:"rating,omitzero"`
+	Notes       optional.Value[string]  `json:"notes,omitzero"`
 }

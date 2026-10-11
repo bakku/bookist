@@ -20,8 +20,8 @@ type CreateListRequest struct {
 }
 
 type UpdateListRequest struct {
-	Name        optional.Value[string] `json:"name"`
-	Description optional.Value[string] `json:"description"`
+	Name        optional.Value[string] `json:"name,omitzero"`
+	Description optional.Value[string] `json:"description,omitzero"`
 }
 
 type AddBookToListRequest struct {

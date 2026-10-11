@@ -78,27 +78,27 @@ type CreateBookRequest struct {
 }
 
 type UpdateBookRequest struct {
-	Title             optional.Value[string]    `json:"title"`
-	ISBN              optional.Value[string]    `json:"isbn"`
-	AuthorIDs         optional.Value[[]int64]   `json:"author_ids"`
-	Language          optional.Value[string]    `json:"language"`
-	Publisher         optional.Value[string]    `json:"publisher"`
-	Edition           optional.Value[string]    `json:"edition"`
-	Format            optional.Value[Format]    `json:"format"`
-	PurchasedAt       optional.Value[string]    `json:"purchased_at"`
-	PurchasePrice     optional.Value[string]    `json:"purchase_price"`
-	Pages             optional.Value[int]       `json:"pages"`
-	Notes             optional.Value[string]    `json:"notes"`
-	Summary           optional.Value[string]    `json:"summary"`
-	SeriesName        optional.Value[string]    `json:"series_name"`
-	SeriesPosition    optional.Value[float64]   `json:"series_position"`
-	Location          optional.Value[string]    `json:"location"`
-	Condition         optional.Value[Condition] `json:"condition"`
-	AcquisitionSource optional.Value[string]    `json:"acquisition_source"`
-	PublishedYear     optional.Value[int]       `json:"published_year"`
-	PublishedMonth    optional.Value[int]       `json:"published_month"`
-	PublishedDay      optional.Value[int]       `json:"published_day"`
-	Cover             optional.Value[[]byte]    `json:"cover"`
+	Title             optional.Value[string]    `json:"title,omitzero"`
+	ISBN              optional.Value[string]    `json:"isbn,omitzero"`
+	AuthorIDs         optional.Value[[]int64]   `json:"author_ids,omitzero"`
+	Language          optional.Value[string]    `json:"language,omitzero"`
+	Publisher         optional.Value[string]    `json:"publisher,omitzero"`
+	Edition           optional.Value[string]    `json:"edition,omitzero"`
+	Format            optional.Value[Format]    `json:"format,omitzero"`
+	PurchasedAt       optional.Value[string]    `json:"purchased_at,omitzero"`
+	PurchasePrice     optional.Value[string]    `json:"purchase_price,omitzero"`
+	Pages             optional.Value[int]       `json:"pages,omitzero"`
+	Notes             optional.Value[string]    `json:"notes,omitzero"`
+	Summary           optional.Value[string]    `json:"summary,omitzero"`
+	SeriesName        optional.Value[string]    `json:"series_name,omitzero"`
+	SeriesPosition    optional.Value[float64]   `json:"series_position,omitzero"`
+	Location          optional.Value[string]    `json:"location,omitzero"`
+	Condition         optional.Value[Condition] `json:"condition,omitzero"`
+	AcquisitionSource optional.Value[string]    `json:"acquisition_source,omitzero"`
+	PublishedYear     optional.Value[int]       `json:"published_year,omitzero"`
+	PublishedMonth    optional.Value[int]       `json:"published_month,omitzero"`
+	PublishedDay      optional.Value[int]       `json:"published_day,omitzero"`
+	Cover             optional.Value[[]byte]    `json:"cover,omitzero"`
 	CoverImageKey     optional.Value[string]    `json:"-"`
 }
 

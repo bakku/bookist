@@ -18,5 +18,5 @@ type CreateAuthorRequest struct {
 }
 
 type UpdateAuthorRequest struct {
-	Name optional.Value[string] `json:"name"`
+	Name optional.Value[string] `json:"name,omitzero"`
 }

@@ -1,8 +1,7 @@
 package cli
 
 import (
-	"bytes"
-	"encoding/json"
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -14,15 +13,34 @@ import (
 	"time"
 
 	"bakku.dev/bookist/internal/books"
+	"bakku.dev/bookist/internal/client"
 	"bakku.dev/bookist/internal/covers"
+	"bakku.dev/bookist/internal/optional"
 )
 
-var bookClearableFields = map[string]string{
-	"isbn": "isbn", "authors": "author_ids", "language": "language", "publisher": "publisher", "edition": "edition",
-	"format": "format", "purchased-at": "purchased_at", "purchase-price": "purchase_price", "pages": "pages",
-	"notes": "notes", "summary": "summary", "series-name": "series_name", "series-position": "series_position",
-	"location": "location", "condition": "condition", "acquisition-source": "acquisition_source",
-	"published-year": "published_year", "published-month": "published_month", "published-day": "published_day", "cover": "cover",
+func bookClearTargets(request *books.UpdateBookRequest) map[string]clearTarget {
+	return map[string]clearTarget{
+		"isbn":               &request.ISBN,
+		"authors":            &request.AuthorIDs,
+		"language":           &request.Language,
+		"publisher":          &request.Publisher,
+		"edition":            &request.Edition,
+		"format":             &request.Format,
+		"purchased-at":       &request.PurchasedAt,
+		"purchase-price":     &request.PurchasePrice,
+		"pages":              &request.Pages,
+		"notes":              &request.Notes,
+		"summary":            &request.Summary,
+		"series-name":        &request.SeriesName,
+		"series-position":    &request.SeriesPosition,
+		"location":           &request.Location,
+		"condition":          &request.Condition,
+		"acquisition-source": &request.AcquisitionSource,
+		"published-year":     &request.PublishedYear,
+		"published-month":    &request.PublishedMonth,
+		"published-day":      &request.PublishedDay,
+		"cover":              &request.Cover,
+	}
 }
 
 func runBooks(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -101,7 +119,7 @@ func runBooksEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 	flags.Var(&publishedYear, "published-year", "Publication year")
 	flags.Var(&publishedMonth, "published-month", "Publication month (1-12)")
 	flags.Var(&publishedDay, "published-day", "Publication day (1-31)")
-	flags.Var(&clears, "clear", clearFlagUsage(bookClearableFields))
+	flags.Var(&clears, "clear", clearFlagUsage(bookClearTargets(&books.UpdateBookRequest{})))
 	help := commandHelp{
 		name:        "bookist books edit",
 		usage:       "bookist books edit <title-or-ID> [options]",
@@ -126,45 +144,44 @@ func runBooksEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
-	changes := make(map[string]any)
-	stringFields := []struct {
-		key   string
-		value *string
-	}{
-		{"title", title.value}, {"isbn", isbn.value}, {"language", language.value}, {"publisher", publisher.value},
-		{"edition", edition.value}, {"format", format.value}, {"purchased_at", purchasedAt.value},
-		{"purchase_price", purchasePrice.value}, {"notes", notes.value}, {"summary", summary.value},
-		{"series_name", seriesName.value}, {"location", location.value}, {"condition", condition.value},
-		{"acquisition_source", acquisitionSource.value},
+	request := books.UpdateBookRequest{
+		Title:             supplied(title.value),
+		ISBN:              supplied(isbn.value),
+		Language:          supplied(language.value),
+		Publisher:         supplied(publisher.value),
+		Edition:           supplied(edition.value),
+		PurchasedAt:       supplied(purchasedAt.value),
+		PurchasePrice:     supplied(purchasePrice.value),
+		Pages:             supplied(pages.value),
+		Notes:             supplied(notes.value),
+		Summary:           supplied(summary.value),
+		SeriesName:        supplied(seriesName.value),
+		SeriesPosition:    supplied(seriesPosition.value),
+		Location:          supplied(location.value),
+		AcquisitionSource: supplied(acquisitionSource.value),
+		PublishedYear:     supplied(publishedYear.value),
+		PublishedMonth:    supplied(publishedMonth.value),
+		PublishedDay:      supplied(publishedDay.value),
 	}
-	for _, field := range stringFields {
-		if field.value != nil {
-			changes[field.key] = *field.value
-		}
+	if format.value != nil {
+		request.Format = optional.Set(books.Format(*format.value))
 	}
-	if seriesPosition.value != nil {
-		changes["series_position"] = *seriesPosition.value
+	if condition.value != nil {
+		request.Condition = optional.Set(books.Condition(*condition.value))
 	}
-	intFields := []struct {
-		key   string
-		value *int
-	}{{"pages", pages.value}, {"published_year", publishedYear.value}, {"published_month", publishedMonth.value}, {"published_day", publishedDay.value}}
-	for _, field := range intFields {
-		if field.value != nil {
-			changes[field.key] = *field.value
-		}
-	}
+	// Authors and the cover are resolved after validation; until then a placeholder
+	// marks them as supplied so that --clear conflicts and empty edits are detected.
 	if len(authorsFlag) > 0 {
-		changes["author_ids"] = struct{}{}
+		request.AuthorIDs = optional.Set([]int64{})
 	}
 	if cover.value != nil {
-		changes["cover"] = struct{}{}
+		request.Cover = optional.Set([]byte{})
 	}
-	if err := validateClears(changes, clears, bookClearableFields); err != nil {
+	if err := applyClears(bookClearTargets(&request), clears); err != nil {
 		_, _ = fmt.Fprintf(stderr, "Error: %v\n", err)
 		return 2
 	}
-	if len(changes) == 0 {
+	if isEmptyUpdate(request) {
 		_, _ = fmt.Fprintln(stderr, "Error: books edit requires at least one change")
 		return 2
 	}
@@ -174,7 +191,14 @@ func runBooksEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 			return 2
 		}
 	}
-	bookID, err := resolveBookID(*serverURL, flags.Arg(0))
+
+	ctx := context.Background()
+	c := newClient(*serverURL, stderr)
+	if c == nil {
+		return 2
+	}
+
+	bookID, err := resolveBookID(ctx, c, flags.Arg(0))
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
 		return 1
@@ -185,23 +209,19 @@ func runBooksEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 			_, _ = fmt.Fprintf(stderr, "load cover: %v\n", err)
 			return 1
 		}
-		changes["cover"] = data
+		request.Cover = optional.Set(data)
 	}
 	if len(authorsFlag) > 0 {
-		ids, err := resolveExistingAuthors(*serverURL, authorsFlag)
+		ids, err := resolveExistingAuthors(ctx, c, authorsFlag)
 		if err != nil {
 			_, _ = fmt.Fprintln(stderr, err)
 			return 1
 		}
-		changes["author_ids"] = ids
+		request.AuthorIDs = optional.Set(ids)
 	}
-	endpoint, err := joinURL(*serverURL, "/api/books/"+strconv.FormatInt(bookID, 10))
+
+	updated, err := c.Books.Update(ctx, bookID, request)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
-		return 2
-	}
-	var updated books.Book
-	if err := patchEndpoint(endpoint, changes, &updated); err != nil {
 		_, _ = fmt.Fprintf(stderr, "edit book: %v\n", err)
 		return 1
 	}
@@ -233,16 +253,22 @@ func runBooksLS(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
+	ctx := context.Background()
+	c := newClient(*serverURL, stderr)
+	if c == nil {
+		return 2
+	}
+
 	var listedBooks []books.Book
 
 	if strings.TrimSpace(*listRef) == "" {
-		listedBooks, err = fetchBooks(*serverURL, *query)
+		listedBooks, err = c.Books.List(ctx, *query)
 	} else {
 		var listID int64
 
-		listID, err = resolveListID(*serverURL, *listRef)
+		listID, err = resolveListID(ctx, c, *listRef)
 		if err == nil {
-			listedBooks, err = fetchBooksByListID(*serverURL, listID, *query)
+			listedBooks, err = c.Lists.ListBooks(ctx, listID, *query)
 		}
 	}
 	if err != nil {
@@ -355,8 +381,14 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		input.Condition = &c
 	}
 
+	ctx := context.Background()
+	c := newClient(*serverURL, stderr)
+	if c == nil {
+		return 2
+	}
+
 	if len(authorFlags) > 0 {
-		authorIDs, err := resolveOrCreateAuthors(*serverURL, authorFlags)
+		authorIDs, err := resolveOrCreateAuthors(ctx, c, authorFlags)
 		if err != nil {
 			_, _ = fmt.Fprintf(stderr, "%v\n", err)
 			return 1
@@ -375,38 +407,9 @@ func runBooksAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		input.Cover = &cover
 	}
 
-	body, err := json.Marshal(input)
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "encode book: %v\n", err)
-		return 1
-	}
-
-	endpoint, err := joinURL(*serverURL, "/api/books")
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
-		return 2
-	}
-
-	client := http.Client{Timeout: 10 * time.Second}
-
-	resp, err := client.Post(endpoint, "application/json", bytes.NewReader(body))
+	book, err := c.Books.Create(ctx, input)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "add book: %v\n", err)
-		return 1
-	}
-
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode != http.StatusCreated {
-		_, _ = fmt.Fprintf(stderr, "add book: server returned %s\n", resp.Status)
-		return 1
-	}
-
-	var book books.Book
-	if err := json.NewDecoder(resp.Body).Decode(&book); err != nil {
-		_, _ = fmt.Fprintf(stderr, "decode book: %v\n", err)
 		return 1
 	}
 
@@ -439,19 +442,19 @@ func runBooksRM(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
-	bookID, err := resolveBookID(*serverURL, flags.Arg(0))
+	ctx := context.Background()
+	c := newClient(*serverURL, stderr)
+	if c == nil {
+		return 2
+	}
+
+	bookID, err := resolveBookID(ctx, c, flags.Arg(0))
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "%v\n", err)
 		return 1
 	}
 
-	endpoint, err := joinURL(*serverURL, "/api/books/"+strconv.FormatInt(bookID, 10))
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
-		return 2
-	}
-
-	if err := deleteEndpoint(endpoint); err != nil {
+	if err := c.Books.Delete(ctx, bookID); err != nil {
 		_, _ = fmt.Fprintf(stderr, "remove book: %v\n", err)
 		return 1
 	}
@@ -461,7 +464,7 @@ func runBooksRM(args []string, stdout io.Writer, stderr io.Writer) int {
 	return 0
 }
 
-func resolveBookID(serverURL, value string) (int64, error) {
+func resolveBookID(ctx context.Context, c *client.Client, value string) (int64, error) {
 	value = strings.TrimSpace(value)
 
 	id, isID, err := parseIDReference(value)
@@ -473,9 +476,9 @@ func resolveBookID(serverURL, value string) (int64, error) {
 		return id, nil
 	}
 
-	existing, err := fetchBooks(serverURL, value)
+	existing, err := c.Books.List(ctx, value)
 	if err != nil {
-		return 0, fmt.Errorf("fetch books: %v", err)
+		return 0, fmt.Errorf("fetch books: %w", err)
 	}
 
 	byTitle := make(map[string][]int64)
@@ -498,49 +501,6 @@ func resolveBookID(serverURL, value string) (int64, error) {
 	}
 
 	return 0, fmt.Errorf("book not found: %s", value)
-}
-
-func fetchBooks(serverURL, query string) ([]books.Book, error) {
-	endpoint, err := joinURLWithQuery(serverURL, "/api/books", query)
-	if err != nil {
-		return nil, fmt.Errorf("invalid server URL: %v", err)
-	}
-
-	return fetchBooksFromEndpoint(endpoint)
-}
-
-func fetchBooksByListID(serverURL string, listID int64, query string) ([]books.Book, error) {
-	path := "/api/lists/" + strconv.FormatInt(listID, 10) + "/books"
-	endpoint, err := joinURLWithQuery(serverURL, path, query)
-	if err != nil {
-		return nil, fmt.Errorf("invalid server URL: %v", err)
-	}
-
-	return fetchBooksFromEndpoint(endpoint)
-}
-
-func fetchBooksFromEndpoint(endpoint string) ([]books.Book, error) {
-	client := http.Client{Timeout: 10 * time.Second}
-
-	resp, err := client.Get(endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("fetch books: %v", err)
-	}
-
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetch books: server returned %s", resp.Status)
-	}
-
-	var listed []books.Book
-	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
-		return nil, fmt.Errorf("decode books: %v", err)
-	}
-
-	return listed, nil
 }
 
 func loadCover(source string) ([]byte, error) {

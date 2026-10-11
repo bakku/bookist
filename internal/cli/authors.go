@@ -1,17 +1,15 @@
 package cli
 
 import (
-	"bytes"
-	"encoding/json"
+	"context"
 	"flag"
 	"fmt"
 	"io"
-	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"bakku.dev/bookist/internal/authors"
+	"bakku.dev/bookist/internal/client"
 )
 
 func runAuthors(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -81,15 +79,18 @@ func runAuthorsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 		printCommandHelp(stderr, help, flags)
 		return 2
 	}
-	changes := make(map[string]any)
-	if name.value != nil {
-		changes["name"] = *name.value
-	}
-	if len(changes) == 0 {
+	request := authors.UpdateAuthorRequest{Name: supplied(name.value)}
+	if isEmptyUpdate(request) {
 		_, _ = fmt.Fprintln(stderr, "Error: authors edit requires at least one change")
 		return 2
 	}
-	authorID, found, err := resolveAuthorID(*serverURL, flags.Arg(0))
+
+	ctx := context.Background()
+	c := newClient(*serverURL, stderr)
+	if c == nil {
+		return 2
+	}
+	authorID, found, err := resolveAuthorID(ctx, c, flags.Arg(0))
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
 		return 1
@@ -98,13 +99,8 @@ func runAuthorsEdit(args []string, stdout io.Writer, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "author not found: %s\n", flags.Arg(0))
 		return 1
 	}
-	endpoint, err := joinURL(*serverURL, "/api/authors/"+strconv.FormatInt(authorID, 10))
+	updated, err := c.Authors.Update(ctx, authorID, request)
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
-		return 2
-	}
-	var updated authors.Author
-	if err := patchEndpoint(endpoint, changes, &updated); err != nil {
 		_, _ = fmt.Fprintf(stderr, "edit author: %v\n", err)
 		return 1
 	}
@@ -134,7 +130,12 @@ func runAuthorsLS(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
-	listed, err := fetchAuthors(*serverURL, *query)
+	c := newClient(*serverURL, stderr)
+	if c == nil {
+		return 2
+	}
+
+	listed, err := c.Authors.List(context.Background(), *query)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "ls authors: %v\n", err)
 		return 1
@@ -168,7 +169,12 @@ func runAuthorsAdd(args []string, stdout io.Writer, stderr io.Writer) int {
 		return exitCode
 	}
 
-	author, err := createAuthor(*serverURL, *name)
+	c := newClient(*serverURL, stderr)
+	if c == nil {
+		return 2
+	}
+
+	author, err := c.Authors.Create(context.Background(), authors.CreateAuthorRequest{Name: *name})
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "add author: %v\n", err)
 		return 1
@@ -202,7 +208,13 @@ func runAuthorsRM(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 
-	authorID, found, err := resolveAuthorID(*serverURL, flags.Arg(0))
+	ctx := context.Background()
+	c := newClient(*serverURL, stderr)
+	if c == nil {
+		return 2
+	}
+
+	authorID, found, err := resolveAuthorID(ctx, c, flags.Arg(0))
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "%v\n", err)
 		return 1
@@ -213,13 +225,7 @@ func runAuthorsRM(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 
-	endpoint, err := joinURL(*serverURL, "/api/authors/"+strconv.FormatInt(authorID, 10))
-	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "invalid server URL: %v\n", err)
-		return 2
-	}
-
-	if err := deleteEndpoint(endpoint); err != nil {
+	if err := c.Authors.Delete(ctx, authorID); err != nil {
 		_, _ = fmt.Fprintf(stderr, "remove author: %v\n", err)
 		return 1
 	}
@@ -229,36 +235,7 @@ func runAuthorsRM(args []string, stdout io.Writer, stderr io.Writer) int {
 	return 0
 }
 
-func fetchAuthors(serverURL, query string) ([]authors.Author, error) {
-	endpoint, err := joinURLWithQuery(serverURL, "/api/authors", query)
-	if err != nil {
-		return nil, fmt.Errorf("invalid server URL: %v", err)
-	}
-
-	client := http.Client{Timeout: 10 * time.Second}
-
-	resp, err := client.Get(endpoint)
-	if err != nil {
-		return nil, fmt.Errorf("fetch authors: %v", err)
-	}
-
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fetch authors: server returned %s", resp.Status)
-	}
-
-	var listed []authors.Author
-	if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
-		return nil, fmt.Errorf("decode authors: %v", err)
-	}
-
-	return listed, nil
-}
-
-func resolveOrCreateAuthors(serverURL string, values []string) ([]int64, error) {
+func resolveOrCreateAuthors(ctx context.Context, c *client.Client, values []string) ([]int64, error) {
 	if len(values) == 0 {
 		return nil, nil
 	}
@@ -271,7 +248,7 @@ func resolveOrCreateAuthors(serverURL string, values []string) ([]int64, error) 
 			continue
 		}
 
-		authorID, found, err := resolveAuthorID(serverURL, val)
+		authorID, found, err := resolveAuthorID(ctx, c, val)
 		if err != nil {
 			return nil, err
 		}
@@ -281,7 +258,7 @@ func resolveOrCreateAuthors(serverURL string, values []string) ([]int64, error) 
 			continue
 		}
 
-		created, err := createAuthor(serverURL, val)
+		created, err := c.Authors.Create(ctx, authors.CreateAuthorRequest{Name: val})
 		if err != nil {
 			return nil, fmt.Errorf("create author %q: %v", val, err)
 		}
@@ -292,11 +269,11 @@ func resolveOrCreateAuthors(serverURL string, values []string) ([]int64, error) 
 	return result, nil
 }
 
-func resolveExistingAuthors(serverURL string, values []string) ([]int64, error) {
+func resolveExistingAuthors(ctx context.Context, c *client.Client, values []string) ([]int64, error) {
 	result := make([]int64, 0, len(values))
 
 	for _, value := range values {
-		authorID, found, err := resolveAuthorID(serverURL, value)
+		authorID, found, err := resolveAuthorID(ctx, c, value)
 		if err != nil {
 			return nil, err
 		}
@@ -310,7 +287,7 @@ func resolveExistingAuthors(serverURL string, values []string) ([]int64, error) 
 	return result, nil
 }
 
-func resolveAuthorID(serverURL, value string) (int64, bool, error) {
+func resolveAuthorID(ctx context.Context, c *client.Client, value string) (int64, bool, error) {
 	value = strings.TrimSpace(value)
 
 	id, isID, err := parseIDReference(value)
@@ -322,7 +299,7 @@ func resolveAuthorID(serverURL, value string) (int64, bool, error) {
 		return id, true, nil
 	}
 
-	id, found, err := resolveAuthorName(serverURL, value)
+	id, found, err := resolveAuthorName(ctx, c, value)
 	if err != nil {
 		return 0, false, err
 	}
@@ -334,10 +311,10 @@ func resolveAuthorID(serverURL, value string) (int64, bool, error) {
 	return id, true, nil
 }
 
-func resolveAuthorName(serverURL, name string) (int64, bool, error) {
-	existing, err := fetchAuthors(serverURL, name)
+func resolveAuthorName(ctx context.Context, c *client.Client, name string) (int64, bool, error) {
+	existing, err := c.Authors.List(ctx, name)
 	if err != nil {
-		return 0, false, fmt.Errorf("fetch authors: %v", err)
+		return 0, false, fmt.Errorf("fetch authors: %w", err)
 	}
 
 	var matches []authors.Author
@@ -356,37 +333,4 @@ func resolveAuthorName(serverURL, name string) (int64, bool, error) {
 	}
 
 	return 0, false, nil
-}
-
-func createAuthor(serverURL, name string) (authors.Author, error) {
-	input := authors.CreateAuthorRequest{Name: name}
-	body, err := json.Marshal(input)
-	if err != nil {
-		return authors.Author{}, err
-	}
-
-	endpoint, err := joinURL(serverURL, "/api/authors")
-	if err != nil {
-		return authors.Author{}, fmt.Errorf("invalid server URL: %v", err)
-	}
-
-	client := http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Post(endpoint, "application/json", bytes.NewReader(body))
-	if err != nil {
-		return authors.Author{}, err
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if resp.StatusCode != http.StatusCreated {
-		return authors.Author{}, fmt.Errorf("server returned %s", resp.Status)
-	}
-
-	var author authors.Author
-	if err := json.NewDecoder(resp.Body).Decode(&author); err != nil {
-		return authors.Author{}, err
-	}
-
-	return author, nil
 }
