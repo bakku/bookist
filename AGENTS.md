@@ -58,3 +58,4 @@ Bookist is intended to be a Go application for managing a home library.
 
 - Preserve this direction for future sessions unless the user explicitly changes it.
 - Make small, incremental changes and verify them with Go tests when code is added.
+- Do not add AI attribution to commits or pull requests: no `Co-Authored-By` trailers for AI assistants and no "Generated with" lines in commit messages or PR descriptions.
