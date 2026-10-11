@@ -141,6 +141,11 @@ func TestAuthorAPIList(t *testing.T) {
 	}
 }
 
+func TestAuthorAPIListReturnsEmptyArray(t *testing.T) {
+	app := newTestApp(t)
+	assertEmptyJSONArray(t, app.handler, "/api/authors")
+}
+
 // ── Delete ────────────────────────────────────────────────────────────────────
 
 func TestAuthorAPIDeleteRemovesOnlyAuthorRelationships(t *testing.T) {

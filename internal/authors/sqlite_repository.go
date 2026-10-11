@@ -71,7 +71,7 @@ func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]Author, 
 		_ = rows.Close()
 	}()
 
-	var authors []Author
+	authors := make([]Author, 0)
 	for rows.Next() {
 		author, err := scanAuthor(rows)
 		if err != nil {

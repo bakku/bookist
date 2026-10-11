@@ -74,6 +74,7 @@ func TestListAPICreateReturnsConflictForDuplicateName(t *testing.T) {
 	testsupport.InsertListRow(t, app.db, "Nightstand")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/lists", bytes.NewBufferString(`{"name":"NIGHTSTAND"}`))
+	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
 
 	app.handler.ServeHTTP(resp, req)
@@ -195,6 +196,11 @@ func TestListAPISearchesNamesCaseInsensitively(t *testing.T) {
 	if len(listed) != 1 || listed[0].Name != "Nightstand" {
 		t.Fatalf("expected only Nightstand, got %#v", listed)
 	}
+}
+
+func TestListAPIListReturnsEmptyArray(t *testing.T) {
+	app := newTestApp(t)
+	assertEmptyJSONArray(t, app.handler, "/api/lists")
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────
@@ -518,4 +524,11 @@ func TestListAPIListBooksReturns404ForUnknownList(t *testing.T) {
 	if resp.Code != http.StatusNotFound {
 		t.Fatalf("expected status %d, got %d", http.StatusNotFound, resp.Code)
 	}
+}
+
+func TestListAPIListBooksReturnsEmptyArray(t *testing.T) {
+	app := newTestApp(t)
+	listID := testsupport.InsertListRow(t, app.db, "Want to Buy")
+
+	assertEmptyJSONArray(t, app.handler, fmt.Sprintf("/api/lists/%d/books", listID))
 }

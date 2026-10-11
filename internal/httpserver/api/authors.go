@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -19,12 +18,8 @@ func (s *Server) handleAPIListAuthors(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAPICreateAuthor(w http.ResponseWriter, r *http.Request) {
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-
 	var input authors.CreateAuthorRequest
-	if err := decoder.Decode(&input); err != nil {
-		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+	if !decodeJSON(w, r, &input, maxJSONBodySize) {
 		return
 	}
 
@@ -50,7 +45,7 @@ func (s *Server) handleAPIUpdateAuthor(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var input authors.UpdateAuthorRequest
-	if !decodePatchJSON(w, r, &input, maxPatchBodySize) {
+	if !decodeJSON(w, r, &input, maxJSONBodySize) {
 		return
 	}
 

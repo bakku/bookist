@@ -53,7 +53,7 @@ func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]Book, er
 	}
 	defer rows.Close()
 
-	var books []Book
+	books := make([]Book, 0)
 	for rows.Next() {
 		book, err := scanBook(rows)
 		if err != nil {

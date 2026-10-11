@@ -64,6 +64,7 @@ func TestReadAPICreate(t *testing.T) {
 func TestReadAPICreateReturns404ForUnknownBook(t *testing.T) {
 	app := newTestApp(t)
 	req := httptest.NewRequest(http.MethodPost, "/api/books/999999/reads", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
 
 	app.handler.ServeHTTP(resp, req)
@@ -102,6 +103,7 @@ func TestReadAPICreateRejectsInvalidValues(t *testing.T) {
 			app := newTestApp(t)
 			bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
 			req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/api/books/%d/reads", bookID), bytes.NewBufferString(body))
+			req.Header.Set("Content-Type", "application/json")
 			resp := httptest.NewRecorder()
 
 			app.handler.ServeHTTP(resp, req)
@@ -310,6 +312,13 @@ func TestReadAPIListReturns404ForUnknownBook(t *testing.T) {
 	if resp.Code != http.StatusNotFound {
 		t.Fatalf("expected status %d, got %d", http.StatusNotFound, resp.Code)
 	}
+}
+
+func TestReadAPIListReturnsEmptyArray(t *testing.T) {
+	app := newTestApp(t)
+	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
+
+	assertEmptyJSONArray(t, app.handler, fmt.Sprintf("/api/books/%d/reads", bookID))
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────

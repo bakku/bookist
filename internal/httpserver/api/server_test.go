@@ -3,8 +3,11 @@ package api_test
 import (
 	"bytes"
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"bakku.dev/bookist/internal/authors"
@@ -31,6 +34,31 @@ func patchJSON(t *testing.T, handler http.Handler, path, body string) *httptest.
 	handler.ServeHTTP(resp, req)
 
 	return resp
+}
+
+func postBody(t *testing.T, handler http.Handler, path, contentType, body string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", contentType)
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+
+	return resp
+}
+
+func assertEmptyJSONArray(t *testing.T, handler http.Handler, path string) {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, resp.Code, resp.Body.String())
+	}
+	if body := strings.TrimSpace(resp.Body.String()); body != "[]" {
+		t.Fatalf("expected empty JSON array, got %s", body)
+	}
 }
 
 func newTestApp(t *testing.T) testApp {
@@ -66,5 +94,125 @@ func newTestAppWithReadRepository(t *testing.T, db *sql.DB, readRepo reads.Repos
 		handler:  mux,
 		db:       db,
 		coverDir: coverDir,
+	}
+}
+
+// ── Unknown Routes ────────────────────────────────────────────────────────────
+
+func TestAPIUnknownPathReturnsJSONNotFound(t *testing.T) {
+	app := newTestApp(t)
+
+	for _, path := range []string{"/api/nope", "/api/books/", "/api/books/1/nope"} {
+		t.Run(path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			resp := httptest.NewRecorder()
+			app.handler.ServeHTTP(resp, req)
+
+			if resp.Code != http.StatusNotFound {
+				t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, resp.Code, resp.Body.String())
+			}
+			if contentType := resp.Header().Get("Content-Type"); contentType != "application/json" {
+				t.Fatalf("expected JSON content type, got %q", contentType)
+			}
+			var body map[string]string
+			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body["error"] == "" {
+				t.Fatalf("expected an error message, got %v", body)
+			}
+		})
+	}
+}
+
+func TestAPIUnsupportedMethodReturnsJSONMethodNotAllowed(t *testing.T) {
+	app := newTestApp(t)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/books", nil)
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusMethodNotAllowed, resp.Code, resp.Body.String())
+	}
+	if allow := resp.Header().Get("Allow"); allow != "GET, POST" {
+		t.Fatalf("expected Allow GET, POST, got %q", allow)
+	}
+	if contentType := resp.Header().Get("Content-Type"); contentType != "application/json" {
+		t.Fatalf("expected JSON content type, got %q", contentType)
+	}
+}
+
+// ── POST Bodies ───────────────────────────────────────────────────────────────
+
+type postRoute struct {
+	name   string
+	path   string
+	body   string
+	count  string
+	seeded int
+}
+
+// seedPostRoutes seeds the rows the POST routes need and returns each route
+// with a valid body and the row count that must remain after a rejected request.
+func seedPostRoutes(t *testing.T, app testApp) []postRoute {
+	t.Helper()
+
+	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
+	listID := testsupport.InsertListRow(t, app.db, "Want to Buy")
+
+	return []postRoute{
+		{name: "books", path: "/api/books", body: `{"title":"Emma"}`, count: `SELECT COUNT(*) FROM books`, seeded: 1},
+		{name: "authors", path: "/api/authors", body: `{"name":"Jane Austen"}`, count: `SELECT COUNT(*) FROM authors`},
+		{name: "lists", path: "/api/lists", body: `{"name":"Nightstand"}`, count: `SELECT COUNT(*) FROM lists`, seeded: 1},
+		{name: "list books", path: fmt.Sprintf("/api/lists/%d/books", listID), body: fmt.Sprintf(`{"book_id":%d}`, bookID), count: `SELECT COUNT(*) FROM book_lists`},
+		{name: "reads", path: fmt.Sprintf("/api/books/%d/reads", bookID), body: `{}`, count: `SELECT COUNT(*) FROM reads`},
+	}
+}
+
+func TestPostRejectsNonJSONContentType(t *testing.T) {
+	app := newTestApp(t)
+
+	for _, route := range seedPostRoutes(t, app) {
+		t.Run(route.name, func(t *testing.T) {
+			resp := postBody(t, app.handler, route.path, "text/plain", route.body)
+			if resp.Code != http.StatusUnsupportedMediaType {
+				t.Fatalf("expected status %d, got %d: %s", http.StatusUnsupportedMediaType, resp.Code, resp.Body.String())
+			}
+			testsupport.AssertSQLCount(t, app.db, route.seeded, route.count)
+		})
+	}
+}
+
+func TestPostRejectsTrailingData(t *testing.T) {
+	app := newTestApp(t)
+
+	for _, route := range seedPostRoutes(t, app) {
+		t.Run(route.name, func(t *testing.T) {
+			resp := postBody(t, app.handler, route.path, "application/json", route.body+` {"x":1}`)
+			if resp.Code != http.StatusBadRequest {
+				t.Fatalf("expected status %d, got %d: %s", http.StatusBadRequest, resp.Code, resp.Body.String())
+			}
+			testsupport.AssertSQLCount(t, app.db, route.seeded, route.count)
+		})
+	}
+}
+
+func TestPostRejectsOversizedBody(t *testing.T) {
+	app := newTestApp(t)
+
+	for _, route := range seedPostRoutes(t, app) {
+		limit := 1 << 20
+		if route.name == "books" {
+			limit = 15 << 20
+		}
+
+		t.Run(route.name, func(t *testing.T) {
+			resp := postBody(t, app.handler, route.path, "application/json", strings.Repeat(" ", limit+1)+route.body)
+			if resp.Code != http.StatusRequestEntityTooLarge {
+				t.Fatalf("expected status %d, got %d: %s", http.StatusRequestEntityTooLarge, resp.Code, resp.Body.String())
+			}
+			testsupport.AssertSQLCount(t, app.db, route.seeded, route.count)
+		})
 	}
 }

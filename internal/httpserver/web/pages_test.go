@@ -74,3 +74,16 @@ func TestIndexRendersSampleBooksInListAndCoverViews(t *testing.T) {
 		}
 	}
 }
+
+// ── Unknown Paths ─────────────────────────────────────────────────────────────
+
+func TestUnknownPathReturnsNotFound(t *testing.T) {
+	app := newTestApp(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/does-not-exist", nil)
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d", http.StatusNotFound, resp.Code)
+	}
+}
