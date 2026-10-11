@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestStaticStylesheetsAreServed(t *testing.T) {
+func TestStaticAssetsAreServed(t *testing.T) {
 	app := newTestApp(t)
 
 	tests := []struct {
@@ -17,8 +17,12 @@ func TestStaticStylesheetsAreServed(t *testing.T) {
 		contentType string
 		contains    []byte
 	}{
-		{path: "/static/bulma.min.css", contentType: "text/css", contains: []byte("bulma.io v1.0.4")},
-		{path: "/static/app.css", contentType: "text/css", contains: []byte(".column.app-sidebar")},
+		{path: "/static/app.css", contentType: "text/css", contains: []byte(".book-row")},
+		{path: "/static/fonts/merriweather-latin-400-normal.woff2", contentType: "font/woff2", contains: []byte("wOF2")},
+		{path: "/static/fonts/merriweather-latin-400-italic.woff2", contentType: "font/woff2", contains: []byte("wOF2")},
+		{path: "/static/fonts/merriweather-latin-700-normal.woff2", contentType: "font/woff2", contains: []byte("wOF2")},
+		{path: "/static/fonts/lato-latin-400-normal.woff2", contentType: "font/woff2", contains: []byte("wOF2")},
+		{path: "/static/fonts/lato-latin-700-normal.woff2", contentType: "font/woff2", contains: []byte("wOF2")},
 	}
 
 	for _, tt := range tests {
@@ -38,7 +42,7 @@ func TestStaticStylesheetsAreServed(t *testing.T) {
 				t.Fatal(err)
 			}
 			if !bytes.Contains(body, tt.contains) {
-				t.Errorf("expected stylesheet to contain %q", tt.contains)
+				t.Errorf("expected asset to contain %q", tt.contains)
 			}
 		})
 	}

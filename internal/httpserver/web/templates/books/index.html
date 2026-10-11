@@ -1,56 +1,115 @@
 {{define "page-content"}}
-<section aria-labelledby="books-heading">
-  <div class="level is-mobile mb-5">
-    <div class="level-left">
-      <h1 id="books-heading" class="title is-4 mb-0">Books</h1>
-    </div>
-    <div class="level-right">
-      <span class="tag is-primary is-light is-rounded">{{len .Books}} in library</span>
+<div class="page-head">
+  <div>
+    <h1 class="page-title">My Books</h1>
+    <p class="page-subtitle">All shelves · {{len .Books}} books</p>
+  </div>
+  <div class="page-tools">
+    <label for="sort">Sort</label>
+    <select id="sort" class="select">
+      <option>Date added</option>
+      <option>Title</option>
+      <option>Author</option>
+      <option>Date read</option>
+      <option>Rating</option>
+    </select>
+    <div class="segmented" role="radiogroup" aria-label="View">
+      <input class="visually-hidden" type="radio" name="view" id="view-list" checked>
+      <label for="view-list" title="List">
+        <svg class="icon" aria-hidden="true"><use href="#icon-list"></use></svg>
+        <span class="visually-hidden">List</span>
+      </label>
+      <input class="visually-hidden" type="radio" name="view" id="view-covers">
+      <label for="view-covers" title="Covers">
+        <svg class="icon" aria-hidden="true"><use href="#icon-grid"></use></svg>
+        <span class="visually-hidden">Covers</span>
+      </label>
     </div>
   </div>
+</div>
 
-  {{if .Books}}
-  <div data-book-grid class="columns is-multiline">
-    {{range .Books}}
-    {{$book := .}}
-    <div class="column is-half-tablet is-one-third-desktop is-one-quarter-fullhd is-flex">
-      <article class="card is-flex-grow-1">
-        <div class="card-image">
-          <figure class="image is-3by4 has-background-primary-soft">
-            {{with .CoverURL}}
-            <img class="book-cover" src="{{.}}" alt="Cover of {{$book.Title}}" loading="lazy">
-            {{else}}
-            <span role="img" aria-label="Cover unavailable for {{$book.Title}}" class="is-overlay is-flex is-align-items-center is-justify-content-center has-text-primary-bold">
-              <span class="icon is-large" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><use href="#icon-book"></use></svg>
-              </span>
-            </span>
-            {{end}}
-          </figure>
-        </div>
-        <div class="card-content">
-          <h2 class="title is-6 mb-2">{{.Title}}</h2>
-          <p class="has-text-grey is-size-7 mb-3">Book #{{.ID}}</p>
-          <dl class="is-size-7">
-            <div class="level is-mobile mb-1">
-              <dt class="level-left has-text-grey">ISBN</dt>
-              <dd class="level-right book-value">{{with .ISBN}}{{.}}{{else}}Not set{{end}}</dd>
-            </div>
-            <div class="level is-mobile mb-0">
-              <dt class="level-left has-text-grey">Added</dt>
-              <dd class="level-right"><time datetime="{{.CreatedAt.Format "2006-01-02"}}">{{.CreatedAt.Format "2006-01-02"}}</time></dd>
-            </div>
-          </dl>
-        </div>
-      </article>
+<div class="library">
+  <aside class="shelves" aria-label="Shelves">
+    <section class="shelf-section">
+      <h2 class="shelf-heading">Bookshelves</h2>
+      {{template "shelf-list" .Shelves}}
+    </section>
+    <section class="shelf-section">
+      <h2 class="shelf-heading">Lists</h2>
+      {{template "shelf-list" .Lists}}
+    </section>
+    <section class="stat-box">
+      <h2 class="shelf-heading">Reading in {{.Stats.Year}}</h2>
+      <p class="stat-number">{{.Stats.BooksFinished}}</p>
+      <p class="stat-label">books finished</p>
+      <p class="stat-number">{{.Stats.PagesRead}}</p>
+      <p class="stat-label">pages read</p>
+    </section>
+  </aside>
+
+  <section class="books" aria-label="Books">
+    <div class="book-list-view">
+      <div class="book-list-head" aria-hidden="true">
+        <span></span>
+        <span>Title</span>
+        <span>Rating</span>
+        <span>Status</span>
+        <span>Read</span>
+        <span class="book-added">Added</span>
+      </div>
+      <ol class="book-list">
+        {{range .Books}}
+        {{$book := .}}
+        <li class="book-row">
+          <a class="book-cover" href="#" tabindex="-1" aria-hidden="true">{{template "book-cover" .}}</a>
+          <div class="book-main">
+            <h2 class="book-title"{{with .Lang}} lang="{{.}}"{{end}}><a href="#">{{.Title}}</a>{{with .Series}} <span class="book-series">({{.}})</span>{{end}}</h2>
+            <p class="book-author">by {{range $i, $author := .Authors}}{{if $i}}, {{end}}<a href="#">{{$author}}</a>{{end}}</p>
+            <p class="book-meta">{{.Meta}}</p>
+            {{with .Lists}}<p class="book-lists">On {{range $i, $list := .}}{{if $i}}, {{end}}<a href="#">{{$list}}</a>{{end}}</p>{{end}}
+          </div>
+          <div class="book-facts">
+            <div class="book-rating">{{if .Rating}}{{template "stars" .Rating}}{{else}}<span class="fact-none">—</span>{{end}}</div>
+            <div class="book-status">{{template "status" .Status}}</div>
+            <div class="book-read">{{with .ReadAt}}{{with $book.ReadNote}}<span class="fact-label">{{.}}</span> {{end}}{{template "date" .}}{{else}}<span class="fact-none">—</span>{{end}}</div>
+            <div class="book-added">{{template "date" .AddedAt}}</div>
+          </div>
+        </li>
+        {{end}}
+      </ol>
     </div>
-    {{end}}
-  </div>
-  {{else}}
-  <div class="notification is-primary is-light">
-    <p class="has-text-weight-semibold">Your library is empty.</p>
-    <p>Add a book with the JSON API or CLI to see it here.</p>
-  </div>
-  {{end}}
-</section>
+
+    <ol class="cover-grid">
+      {{range .Books}}
+      <li class="cover-card">
+        <a class="cover-card-link" href="#">{{template "book-cover" .}}<span class="cover-card-title"{{with .Lang}} lang="{{.}}"{{end}}>{{.Title}}</span></a>
+        <p class="cover-card-author">{{range $i, $author := .Authors}}{{if $i}}, {{end}}{{$author}}{{end}}</p>
+        <p class="cover-card-fact">{{if .Rating}}{{template "stars" .Rating}}{{else}}{{template "status" .Status}}{{end}}</p>
+      </li>
+      {{end}}
+    </ol>
+  </section>
+</div>
 {{end}}
+
+{{define "shelf-list"}}
+<ul class="shelf-list">
+  {{range .}}
+  <li><a href="{{.Href}}"{{if .Active}} aria-current="page"{{end}}>{{.Label}} <span class="shelf-count">{{.Count}}</span></a></li>
+  {{end}}
+</ul>
+{{end}}
+
+{{define "book-cover"}}
+{{- if .CoverURL -}}
+<img class="cover" src="{{.CoverURL}}" alt="" loading="lazy">
+{{- else -}}
+<span class="cover cover-fallback" data-tone="{{.CoverTone}}" aria-hidden="true"{{with .Lang}} lang="{{.}}"{{end}}><span class="cover-title">{{.Title}}</span>{{with .Authors}}<span class="cover-author">{{index . 0}}</span>{{end}}</span>
+{{- end -}}
+{{end}}
+
+{{define "stars"}}<span class="stars" style="--rating: {{.}}" role="img" aria-label="Rated {{.}} out of 5"></span>{{end}}
+
+{{define "status"}}<span class="status status-{{.}}">{{.Label}}</span>{{end}}
+
+{{define "date"}}<time datetime="{{.Format "2006-01-02"}}">{{.Format "Jan 2, 2006"}}</time>{{end}}

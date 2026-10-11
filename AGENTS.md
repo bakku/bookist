@@ -14,7 +14,7 @@ Bookist is intended to be a Go application for managing a home library.
 - Use Go for the application.
 - Embed static assets in the binary.
 - Keep the web interface server-rendered with native `html/template` templates.
-- Use the vendored Bulma CSS framework for styling, with a small Bookist stylesheet for application-specific layout and presentation.
+- Use a hand-written, framework-free Bookist stylesheet with a warm, Goodreads-inspired look: cream and dark-brown palette, Merriweather for headings and book titles, Lato for body text.
 - Keep web styling build-free, without a frontend toolchain or runtime.
 - Implement reusable UI patterns with straightforward native Go template definitions rather than a frontend component framework.
 - Prefer simple, testable server and CLI boundaries.
@@ -26,7 +26,7 @@ Bookist is intended to be a Go application for managing a home library.
 - Do not add a web framework yet. Consider `chi` only if route groups, middleware, nested resources, auth, or larger API structure make the standard mux awkward.
 - Use SQLite for persistence with the pure-Go `modernc.org/sqlite` driver.
 - Use `github.com/pressly/goose/v3` for embedded SQL migrations. Serving runs migrations automatically at startup.
-- Keep Bulma and the Bookist stylesheet as embedded static assets. Production requires only the compiled Go binary.
+- Keep the Bookist stylesheet and the Merriweather/Lato WOFF2 fonts as embedded static assets. Production requires only the compiled Go binary.
 - Every table, including relationship tables, uses an SQLite-generated `INTEGER PRIMARY KEY` represented as `int64` in Go, plus `created_at` and `updated_at` timestamps. ISBN remains nullable in Go and SQLite.
 - Collections default to `updated_at DESC, id ASC`; relationship-backed collections use the relationship row's timestamps and ID.
 - Enforce durable invariants in both services and SQLite constraints.
@@ -35,7 +35,7 @@ Bookist is intended to be a Go application for managing a home library.
 ## API, Web, And CLI Direction
 
 - The web UI should be responsive and comfortable to use from a smartphone.
-- The web UI currently lists books only. Do not add form-based book creation unless explicitly requested.
+- The web UI currently renders the My Books page (list and cover views, shelves sidebar, reading stats) from static sample data in `internal/httpserver/web/sample_library.go`. Wire it to the books, reads, and lists backends incrementally, replacing the sample data. Do not add form-based book creation unless explicitly requested.
 - `POST /api/books` should accept JSON only. The API is the automation boundary for CLI and future skill-based workflows.
 - CLI resource-management commands should talk to the HTTP JSON API, not directly to SQLite. Direct DB access is acceptable for `serve` and migration setup.
 - Keep the CLI command shape simple for now: `serve`, `migrate`, and resource commands such as `books list` / `books add`.
