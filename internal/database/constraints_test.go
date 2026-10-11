@@ -14,9 +14,9 @@ import (
 
 const ratingConstraint = "reads_rating_valid"
 
-// ── Constraint Classification ──────────────────────────────────────────────────
+// ── Constraint Classification ─────────────────────────────────────────────────
 
-func TestConstraintCodes(t *testing.T) {
+func TestConstraintHelpersClassifySQLiteErrorCodes(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
 	testsupport.InsertListRow(t, db, "Favorites")
@@ -42,6 +42,10 @@ func TestConstraintCodes(t *testing.T) {
 			name: "named check", check: true,
 			query: `INSERT INTO reads (book_id, rating, created_at, updated_at) VALUES (?, 4.2, '', '')`,
 			args:  []any{bookID},
+		},
+		{
+			name:  "unnamed check",
+			query: `INSERT INTO books (title, pages, created_at, updated_at) VALUES ('Dune', 0, '', '')`,
 		},
 		{
 			name:  "not null",
@@ -74,7 +78,8 @@ func TestConstraintCodes(t *testing.T) {
 				if got := database.IsCheckViolation(candidate, ratingConstraint); got != test.check {
 					t.Fatalf("check: got %t, want %t (%v)", got, test.check, candidate)
 				}
-				for _, name := range []string{"", strings.TrimSuffix(ratingConstraint, "_valid"), ratingConstraint + "_other"} {
+				// Unnamed checks report their expression, which starts with "pages" here.
+				for _, name := range []string{"", strings.TrimSuffix(ratingConstraint, "_valid"), ratingConstraint + "_other", "pages"} {
 					if database.IsCheckViolation(candidate, name) {
 						t.Fatalf("unexpected check match for %q: %v", name, candidate)
 					}
@@ -84,7 +89,7 @@ func TestConstraintCodes(t *testing.T) {
 	}
 }
 
-func TestConstraintTextIgnored(t *testing.T) {
+func TestConstraintHelpersIgnoreErrorTextWithoutSQLiteCode(t *testing.T) {
 	for _, err := range []error{
 		nil,
 		errors.New("UNIQUE constraint failed"),
