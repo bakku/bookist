@@ -381,19 +381,21 @@ func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateBoo
 	return result, nil
 }
 
-func (r *SQLiteRepository) Delete(ctx context.Context, id int64) error {
-	result, err := r.db.ExecContext(ctx, `DELETE FROM books WHERE id = ?`, id)
+// Delete removes the book and returns the cover image key it had, if any, so
+// the caller can clean up the file from the same statement that deleted the row.
+func (r *SQLiteRepository) Delete(ctx context.Context, id int64) (*string, error) {
+	var coverImageKey sql.NullString
+	err := r.db.QueryRowContext(ctx, `DELETE FROM books WHERE id = ? RETURNING cover_image_key`, id).Scan(&coverImageKey)
+	if err == sql.ErrNoRows {
+		return nil, domain.ErrBookNotFound
+	}
 	if err != nil {
-		return err
+		return nil, err
 	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return err
+	if !coverImageKey.Valid {
+		return nil, nil
 	}
-	if rowsAffected == 0 {
-		return domain.ErrBookNotFound
-	}
-	return nil
+	return &coverImageKey.String, nil
 }
 
 // insertBookAuthor reports a missing author, including one deleted after

@@ -11,7 +11,7 @@ type Repository interface {
 	GetByID(ctx context.Context, id int64) (Book, error)
 	Create(ctx context.Context, input CreateBookRequest) (Book, error)
 	Update(ctx context.Context, id int64, input UpdateBookRequest) (UpdateResult, error)
-	Delete(ctx context.Context, id int64) error
+	Delete(ctx context.Context, id int64) (*string, error)
 }
 
 type UpdateResult struct {

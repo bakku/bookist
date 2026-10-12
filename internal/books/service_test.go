@@ -779,6 +779,38 @@ func TestServiceDeleteRemovesManagedCover(t *testing.T) {
 	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books`)
 }
 
+func TestServiceDeleteSucceedsWhenCoverCleanupFails(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	key := "00000000000000000000000000000000.png"
+	if _, err := db.Exec(`UPDATE books SET cover_image_key = ? WHERE id = ?`, key, bookID); err != nil {
+		t.Fatal(err)
+	}
+
+	var logOutput bytes.Buffer
+	coverStore := &cleanupFailingCoverStore{}
+	service := books.NewServiceWithLogger(
+		books.NewSQLiteRepository(db),
+		authors.NewSQLiteRepository(db),
+		coverStore,
+		slog.New(slog.NewTextHandler(&logOutput, nil)),
+	)
+	if err := service.Delete(context.Background(), bookID); err != nil {
+		t.Fatalf("expected committed delete to succeed despite cleanup failure: %v", err)
+	}
+
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books WHERE id = ?`, bookID)
+	if len(coverStore.deletedKeys) != 1 || coverStore.deletedKeys[0] != key {
+		t.Fatalf("expected cover cleanup for %q, got %#v", key, coverStore.deletedKeys)
+	}
+	logged := logOutput.String()
+	for _, expected := range []string{"failed to delete book cover", "book_id=", key, "cleanup failed"} {
+		if !strings.Contains(logged, expected) {
+			t.Errorf("expected warning to contain %q, got %q", expected, logged)
+		}
+	}
+}
+
 // ── GetByID ───────────────────────────────────────────────────────────────────
 
 func TestServiceGetByIDHydratesAuthorsAndCoverURL(t *testing.T) {

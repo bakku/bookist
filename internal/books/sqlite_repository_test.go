@@ -522,10 +522,49 @@ func TestSQLiteRepositoryDeleteReturnsErrBookNotFoundForUnknownID(t *testing.T) 
 	db := testsupport.OpenMigratedDB(t)
 	repository := books.NewSQLiteRepository(db)
 
-	err := repository.Delete(context.Background(), 999999)
+	coverImageKey, err := repository.Delete(context.Background(), 999999)
 	if !errors.Is(err, domain.ErrBookNotFound) {
 		t.Fatalf("expected ErrBookNotFound, got %v", err)
 	}
+	if coverImageKey != nil {
+		t.Fatalf("expected no cover key, got %q", *coverImageKey)
+	}
+}
+
+func TestSQLiteRepositoryDeleteReturnsDeletedCoverImageKey(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	siblingID := testsupport.InsertBookRow(t, db, "Emma", nil)
+	key := "00000000000000000000000000000000.png"
+	if _, err := db.Exec(`UPDATE books SET cover_image_key = ? WHERE id = ?`, key, bookID); err != nil {
+		t.Fatal(err)
+	}
+
+	coverImageKey, err := repository.Delete(context.Background(), bookID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if coverImageKey == nil || *coverImageKey != key {
+		t.Fatalf("expected cover key %q, got %#v", key, coverImageKey)
+	}
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books WHERE id = ?`, bookID)
+	testsupport.AssertSQLCount(t, db, 1, `SELECT COUNT(*) FROM books WHERE id = ?`, siblingID)
+}
+
+func TestSQLiteRepositoryDeleteReturnsNilCoverImageKeyWithoutCover(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+
+	coverImageKey, err := repository.Delete(context.Background(), bookID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if coverImageKey != nil {
+		t.Fatalf("expected nil cover key, got %q", *coverImageKey)
+	}
+	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM books WHERE id = ?`, bookID)
 }
 
 func TestSQLiteRepositoryDeleteCascadesBookRelationships(t *testing.T) {
@@ -538,7 +577,7 @@ func TestSQLiteRepositoryDeleteCascadesBookRelationships(t *testing.T) {
 	testsupport.InsertBookListRow(t, db, listID, bookID)
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{ID: 1, BookID: bookID, CreatedAt: "2026-01-01T00:00:00Z"})
 
-	if err := repository.Delete(context.Background(), bookID); err != nil {
+	if _, err := repository.Delete(context.Background(), bookID); err != nil {
 		t.Fatal(err)
 	}
 
