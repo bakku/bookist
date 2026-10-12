@@ -456,18 +456,20 @@ func (s *Service) validateAuthorIDs(ctx context.Context, authorIDs []int64) ([]i
 }
 
 func (s *Service) Delete(ctx context.Context, id int64) error {
-	book, err := s.repository.GetByID(ctx, id)
+	coverKey, err := s.repository.Delete(ctx, id)
 	if err != nil {
 		return err
 	}
 
-	if err := s.repository.Delete(ctx, id); err != nil {
-		return err
-	}
-
-	if book.CoverImageKey != nil {
-		if err := s.coverStore.Delete(*book.CoverImageKey); err != nil {
-			return fmt.Errorf("delete cover: %w", err)
+	if coverKey != nil {
+		// The book row is already gone, so cover cleanup is best effort.
+		// Reporting an error here would incorrectly tell clients that the delete failed.
+		if cleanupErr := s.coverStore.Delete(*coverKey); cleanupErr != nil {
+			s.logger.WarnContext(ctx, "failed to delete book cover",
+				"book_id", id,
+				"cover_key", *coverKey,
+				"error", cleanupErr,
+			)
 		}
 	}
 
