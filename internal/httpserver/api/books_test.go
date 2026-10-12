@@ -700,7 +700,7 @@ func TestBookAPIDeleteCascadesRelationshipsAndReads(t *testing.T) {
 
 	testsupport.InsertBookAuthorRow(t, app.db, bookID, authorID)
 	testsupport.InsertBookListRow(t, app.db, listID, bookID)
-	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{ID: 100, BookID: bookID, CreatedAt: "2026-01-01T00:00:00Z"})
+	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{ID: 100, BookID: bookID, CreatedAt: "2026-01-01T00:00:00.000Z"})
 
 	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/books/%d", bookID), nil)
 	resp := httptest.NewRecorder()

@@ -4,9 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"strings"
-	"time"
 
 	"bakku.dev/bookist/internal/database"
 	"bakku.dev/bookist/internal/domain"
@@ -22,6 +20,8 @@ const (
 	ratingConstraint         = "reads_rating_valid"
 )
 
+const readColumns = `id, book_id, started_at, finished_at, abandoned_at, rating, notes, created_at, updated_at`
+
 type SQLiteRepository struct {
 	db *sql.DB
 }
@@ -31,16 +31,15 @@ func NewSQLiteRepository(db *sql.DB) *SQLiteRepository {
 }
 
 func (r *SQLiteRepository) Create(ctx context.Context, bookID int64, input CreateReadRequest) (Read, error) {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := database.Now()
 
 	row := r.db.QueryRowContext(ctx, `
 		INSERT INTO reads (
 			book_id, started_at, finished_at, abandoned_at, rating, notes, created_at, updated_at
 		)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		RETURNING id, book_id, started_at, finished_at, abandoned_at, rating, notes, created_at, updated_at
-	`, bookID, nullString(input.StartedAt), nullString(input.FinishedAt),
-		nullString(input.AbandonedAt), nullFloat64(input.Rating), nullString(input.Notes), now, now)
+		RETURNING `+readColumns+`
+	`, bookID, input.StartedAt, input.FinishedAt, input.AbandonedAt, input.Rating, input.Notes, now, now)
 
 	read, err := scanRead(row)
 	return read, translateConstraints(err)
@@ -48,7 +47,7 @@ func (r *SQLiteRepository) Create(ctx context.Context, bookID int64, input Creat
 
 func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (Read, error) {
 	read, err := scanRead(r.db.QueryRowContext(ctx, `
-		SELECT id, book_id, started_at, finished_at, abandoned_at, rating, notes, created_at, updated_at
+		SELECT `+readColumns+`
 		FROM reads
 		WHERE id = ?
 	`, id))
@@ -68,7 +67,7 @@ func (r *SQLiteRepository) ListByBookID(ctx context.Context, bookID int64) ([]Re
 	}
 
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, book_id, started_at, finished_at, abandoned_at, rating, notes, created_at, updated_at
+		SELECT `+readColumns+`
 		FROM reads
 		WHERE book_id = ?
 		ORDER BY updated_at DESC, id ASC
@@ -101,34 +100,34 @@ func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateRea
 	args := make([]any, 0, 7)
 	if input.StartedAt.Present {
 		set = append(set, "started_at = ?")
-		args = append(args, nullString(input.StartedAt.Value))
+		args = append(args, input.StartedAt.Value)
 	}
 	if input.FinishedAt.Present {
 		set = append(set, "finished_at = ?")
-		args = append(args, nullString(input.FinishedAt.Value))
+		args = append(args, input.FinishedAt.Value)
 	}
 	if input.AbandonedAt.Present {
 		set = append(set, "abandoned_at = ?")
-		args = append(args, nullString(input.AbandonedAt.Value))
+		args = append(args, input.AbandonedAt.Value)
 	}
 	if input.Rating.Present {
 		set = append(set, "rating = ?")
-		args = append(args, nullFloat64(input.Rating.Value))
+		args = append(args, input.Rating.Value)
 	}
 	if input.Notes.Present {
 		set = append(set, "notes = ?")
-		args = append(args, nullString(input.Notes.Value))
+		args = append(args, input.Notes.Value)
 	}
 	if len(set) == 0 {
 		return Read{}, ErrNoFieldsToUpdate
 	}
 
 	set = append(set, "updated_at = ?")
-	args = append(args, time.Now().UTC().Format(time.RFC3339), id)
+	args = append(args, database.Now(), id)
 	read, err := scanRead(r.db.QueryRowContext(ctx, `
 		UPDATE reads SET `+strings.Join(set, ", ")+`
 		WHERE id = ?
-		RETURNING id, book_id, started_at, finished_at, abandoned_at, rating, notes, created_at, updated_at
+		RETURNING `+readColumns+`
 	`, args...))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Read{}, ErrReadNotFound
@@ -189,57 +188,11 @@ type readScanner interface {
 
 func scanRead(scanner readScanner) (Read, error) {
 	var result Read
-	var startedAt sql.NullString
-	var finishedAt sql.NullString
-	var abandonedAt sql.NullString
-	var rating sql.NullFloat64
-	var notes sql.NullString
-	var createdAt string
-	var updatedAt string
-
-	if err := scanner.Scan(&result.ID, &result.BookID, &startedAt, &finishedAt, &abandonedAt, &rating, &notes, &createdAt, &updatedAt); err != nil {
+	err := scanner.Scan(&result.ID, &result.BookID, &result.StartedAt, &result.FinishedAt, &result.AbandonedAt,
+		&result.Rating, &result.Notes, database.Time(&result.CreatedAt), database.Time(&result.UpdatedAt))
+	if err != nil {
 		return Read{}, err
 	}
 
-	if startedAt.Valid {
-		result.StartedAt = &startedAt.String
-	}
-	if finishedAt.Valid {
-		result.FinishedAt = &finishedAt.String
-	}
-	if abandonedAt.Valid {
-		result.AbandonedAt = &abandonedAt.String
-	}
-	if rating.Valid {
-		result.Rating = &rating.Float64
-	}
-	if notes.Valid {
-		result.Notes = &notes.String
-	}
-
-	var err error
-	result.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
-	if err != nil {
-		return Read{}, fmt.Errorf("parse created_at: %w", err)
-	}
-	result.UpdatedAt, err = time.Parse(time.RFC3339, updatedAt)
-	if err != nil {
-		return Read{}, fmt.Errorf("parse updated_at: %w", err)
-	}
-
 	return result, nil
-}
-
-func nullString(value *string) sql.NullString {
-	if value == nil {
-		return sql.NullString{}
-	}
-	return sql.NullString{String: *value, Valid: true}
-}
-
-func nullFloat64(value *float64) sql.NullFloat64 {
-	if value == nil {
-		return sql.NullFloat64{}
-	}
-	return sql.NullFloat64{Float64: *value, Valid: true}
 }

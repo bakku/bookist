@@ -103,7 +103,7 @@ func TestConcurrentWritesAllSucceedAndPersist(t *testing.T) {
 		}()
 		go func() {
 			defer wg.Done()
-			_, err := bookRepository.Update(ctx, bookIDs[i], books.UpdateBookRequest{
+			_, err := bookRepository.Update(ctx, bookIDs[i], books.UpdateParams{
 				Title: optional.Value[string]{Present: true, Value: new(fmt.Sprintf("Updated %d", i))},
 			})
 			errs <- err

@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"testing"
-	"time"
 )
 
 type ReadRow struct {
@@ -66,11 +65,7 @@ func AssertReadRow(t testing.TB, db *sql.DB, id int64, want ReadRowAssertion) {
 	assertNullFloat(t, "rating", rating, want.Rating)
 	assertNullString(t, "notes", notes, want.Notes)
 
-	if _, err := time.Parse(time.RFC3339, createdAt); err != nil {
-		t.Fatalf("expected RFC3339 created_at, got %q", createdAt)
-	}
+	assertTimestamp(t, "created_at", createdAt)
 
-	if _, err := time.Parse(time.RFC3339, updatedAt); err != nil {
-		t.Fatalf("expected RFC3339 updated_at, got %q", updatedAt)
-	}
+	assertTimestamp(t, "updated_at", updatedAt)
 }

@@ -125,7 +125,7 @@ func TestReadAPIUpdateAndClear(t *testing.T) {
 	app := newTestApp(t)
 	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
 	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{
-		ID: 100, BookID: bookID, Rating: new(3.0), Notes: new("Old notes"), CreatedAt: "2026-01-01T00:00:00Z",
+		ID: 100, BookID: bookID, Rating: new(3.0), Notes: new("Old notes"), CreatedAt: "2026-01-01T00:00:00.000Z",
 	})
 
 	resp := patchJSON(t, app.handler, "/api/reads/100", `{"rating":4.5,"notes":null}`)
@@ -167,7 +167,7 @@ func TestReadAPIUpdateRejectsInvalidRequests(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			app := newTestApp(t)
 			bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
-			testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{ID: 100, BookID: bookID, CreatedAt: "2026-01-01T00:00:00Z"})
+			testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{ID: 100, BookID: bookID, CreatedAt: "2026-01-01T00:00:00.000Z"})
 			resp := patchJSON(t, app.handler, test.path, test.body)
 			assertAPIError(t, resp, test.status, test.code, test.field)
 		})
@@ -179,7 +179,7 @@ func TestReadAPIUpdateReturnsValidationErrorAfterConcurrentEdit(t *testing.T) {
 	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
 	readID := int64(100)
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
-		ID: readID, BookID: bookID, StartedAt: new("2026-01-01"), CreatedAt: "2026-01-01T00:00:00Z",
+		ID: readID, BookID: bookID, StartedAt: new("2026-01-01"), CreatedAt: "2026-01-01T00:00:00.000Z",
 	})
 
 	repository := &afterGetReadRepository{
@@ -229,12 +229,12 @@ func TestReadAPIList(t *testing.T) {
 
 	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{
 		ID: olderID, BookID: bookID, StartedAt: new("2025-01-01"), FinishedAt: new("2025-01-03"),
-		Rating: new(4.0), Notes: new("Good"), CreatedAt: "2026-01-01T00:00:00Z",
+		Rating: new(4.0), Notes: new("Good"), CreatedAt: "2026-01-01T00:00:00.000Z",
 	})
 
 	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{
 		ID: newerID, BookID: bookID, StartedAt: new("2026-01-01"), AbandonedAt: new("2026-01-03"),
-		Rating: new(4.5), Notes: new("Excellent"), CreatedAt: "2026-01-02T00:00:00Z",
+		Rating: new(4.5), Notes: new("Excellent"), CreatedAt: "2026-01-02T00:00:00.000Z",
 	})
 
 	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/books/%d/reads", bookID), nil)
@@ -319,10 +319,10 @@ func TestReadAPIListReturnsEmptyArray(t *testing.T) {
 func TestReadAPIGet(t *testing.T) {
 	app := newTestApp(t)
 	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
-	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{ID: 100, BookID: bookID, CreatedAt: "2026-01-01T00:00:00Z"})
+	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{ID: 100, BookID: bookID, CreatedAt: "2026-01-01T00:00:00.000Z"})
 	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{
 		ID: 101, BookID: bookID, StartedAt: new("2025-01-01"), FinishedAt: new("2025-01-03"),
-		Rating: new(4.5), Notes: new("Excellent"), CreatedAt: "2026-01-02T00:00:00Z",
+		Rating: new(4.5), Notes: new("Excellent"), CreatedAt: "2026-01-02T00:00:00.000Z",
 	})
 
 	resp := httptest.NewRecorder()
@@ -376,8 +376,8 @@ func TestReadAPIDeleteLeavesBookAndOtherReads(t *testing.T) {
 
 	bookID := testsupport.InsertBookRow(t, app.db, "Dune", nil)
 
-	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{ID: 100, BookID: bookID, CreatedAt: "2026-01-01T00:00:00Z"})
-	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{ID: 101, BookID: bookID, CreatedAt: "2026-01-02T00:00:00Z"})
+	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{ID: 100, BookID: bookID, CreatedAt: "2026-01-01T00:00:00.000Z"})
+	testsupport.InsertReadRow(t, app.db, testsupport.ReadRow{ID: 101, BookID: bookID, CreatedAt: "2026-01-02T00:00:00.000Z"})
 
 	resp := httptest.NewRecorder()
 	app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodDelete, "/api/reads/100", nil))

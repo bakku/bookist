@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"bakku.dev/bookist/internal/database"
 )
@@ -35,5 +36,18 @@ func AssertSQLCount(t testing.TB, db *sql.DB, want int, query string, args ...an
 	}
 	if got != want {
 		t.Fatalf("expected count %d, got %d", want, got)
+	}
+}
+
+// fixtureTimestamp is the created_at and updated_at of seeded rows. It uses the
+// stored layout so fixtures sort consistently with rows written by repositories.
+var fixtureTimestamp = database.FormatTime(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC))
+
+// assertTimestamp verifies value is in the layout every writer uses.
+func assertTimestamp(t testing.TB, column, value string) {
+	t.Helper()
+
+	if _, err := time.Parse(database.TimeLayout, value); err != nil {
+		t.Fatalf("expected %s in layout %q, got %q", column, database.TimeLayout, value)
 	}
 }

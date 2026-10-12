@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/optional"
@@ -87,6 +88,32 @@ func TestSQLiteRepositoryListReadsPersistedAuthors(t *testing.T) {
 	}
 	if listed[0].Name != "Jane Austen" {
 		t.Fatalf("expected Jane Austen, got %q", listed[0].Name)
+	}
+}
+
+func TestSQLiteRepositoryListOrdersChangesWithinOneSecondNewestFirst(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := authors.NewSQLiteRepository(db)
+	firstID := testsupport.InsertAuthorRow(t, db, "Jane Austen")
+	secondID := testsupport.InsertAuthorRow(t, db, "Emily Bronte")
+
+	for _, id := range []int64{firstID, secondID} {
+		_, err := repository.Update(ctx, id, authors.UpdateAuthorRequest{
+			Name: optional.Value[string]{Present: true, Value: new("Renamed")},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	listed, err := repository.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 2 || listed[0].ID != secondID || listed[1].ID != firstID {
+		t.Fatalf("expected most recently updated author %d first, got %#v", secondID, listed)
 	}
 }
 

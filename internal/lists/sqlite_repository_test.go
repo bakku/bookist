@@ -173,6 +173,32 @@ func TestSQLiteRepositoryListReadsPersistedLists(t *testing.T) {
 	}
 }
 
+func TestSQLiteRepositoryListOrdersChangesWithinOneSecondNewestFirst(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := lists.NewSQLiteRepository(db)
+	firstID := testsupport.InsertListRow(t, db, "Nightstand")
+	secondID := testsupport.InsertListRow(t, db, "Want to Buy")
+
+	for _, id := range []int64{firstID, secondID} {
+		_, err := repository.Update(ctx, id, lists.UpdateListRequest{
+			Description: optional.Value[string]{Present: true, Value: new("Changed")},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	listed, err := repository.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 2 || listed[0].ID != secondID || listed[1].ID != firstID {
+		t.Fatalf("expected most recently updated list %d first, got %#v", secondID, listed)
+	}
+}
+
 // ── Search ────────────────────────────────────────────────────────────────────
 
 func TestSQLiteRepositorySearchMatchesNamesCaseInsensitively(t *testing.T) {

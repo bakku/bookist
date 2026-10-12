@@ -4,13 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"testing"
-	"time"
 )
 
 func InsertAuthorRow(t testing.TB, db *sql.DB, name string) int64 {
 	t.Helper()
 
-	now := "2026-01-02T03:04:05Z"
+	now := fixtureTimestamp
 	var id int64
 	err := db.QueryRowContext(context.Background(), `
 		INSERT INTO authors (name, created_at, updated_at)
@@ -43,11 +42,7 @@ func AssertAuthorRow(t testing.TB, db *sql.DB, id int64, wantName string) {
 		t.Fatalf("expected persisted name %q, got %q", wantName, name)
 	}
 
-	if _, err := time.Parse(time.RFC3339, createdAt); err != nil {
-		t.Fatalf("expected RFC3339 created_at, got %q", createdAt)
-	}
+	assertTimestamp(t, "created_at", createdAt)
 
-	if _, err := time.Parse(time.RFC3339, updatedAt); err != nil {
-		t.Fatalf("expected RFC3339 updated_at, got %q", updatedAt)
-	}
+	assertTimestamp(t, "updated_at", updatedAt)
 }

@@ -3,13 +3,21 @@ package books
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"strings"
-	"time"
 
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/database"
 	"bakku.dev/bookist/internal/domain"
+)
+
+// bookDataColumns are the books columns written on insert; bookColumns adds the
+// generated id and is the column list for every read and RETURNING clause.
+const (
+	bookDataColumns = `title, isbn, language, publisher, edition, format, purchased_at, purchase_price,
+		pages, notes, summary, series_name, series_position, location, condition,
+		acquisition_source, published_year, published_month, published_day, cover_image_key,
+		created_at, updated_at`
+	bookColumns = `id, ` + bookDataColumns
 )
 
 type SQLiteRepository struct {
@@ -41,10 +49,7 @@ func (r *SQLiteRepository) List(ctx context.Context) ([]Book, error) {
 
 func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (Book, error) {
 	book, err := scanBook(r.db.QueryRowContext(ctx, `
-		SELECT id, title, isbn, language, publisher, edition, format,
-		       purchased_at, purchase_price, pages, notes, summary, series_name, series_position,
-		       location, condition, acquisition_source, published_year,
-		       published_month, published_day, cover_image_key, created_at, updated_at
+		SELECT `+bookColumns+`
 		FROM books
 		WHERE id = ?
 	`, id))
@@ -60,10 +65,7 @@ func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (Book, error) 
 func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]Book, error) {
 	folded := database.Fold(query)
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, title, isbn, language, publisher, edition, format, 
-		    purchased_at, purchase_price, pages, notes, summary, series_name, series_position,
-		    location, condition, acquisition_source, published_year,
-		    published_month, published_day, cover_image_key, created_at, updated_at
+		SELECT `+bookColumns+`
 		FROM books b
 		WHERE `+matchesSearch+`
 		ORDER BY updated_at DESC, id ASC
@@ -105,15 +107,14 @@ func (r *SQLiteRepository) ListExists(ctx context.Context, listID int64) (bool, 
 func (r *SQLiteRepository) SearchByListID(ctx context.Context, listID int64, query string) ([]Book, error) {
 	folded := database.Fold(query)
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT b.id, b.title, b.isbn, b.language, b.publisher, b.edition, b.format,
-		       b.purchased_at, b.purchase_price, b.pages, b.notes, b.summary, b.series_name,
-		       b.series_position, b.location, b.condition, b.acquisition_source,
-		       b.published_year, b.published_month, b.published_day,
-		       b.cover_image_key, b.created_at, b.updated_at
-		FROM books b
-		JOIN book_lists bl ON bl.book_id = b.id
-		WHERE bl.list_id = ? AND `+matchesSearch+`
-		ORDER BY bl.updated_at DESC, bl.id ASC
+		SELECT `+bookColumns+`
+		FROM (
+			SELECT b.*, bl.id AS membership_id, bl.updated_at AS membership_updated_at
+			FROM books b
+			JOIN book_lists bl ON bl.book_id = b.id
+			WHERE bl.list_id = ? AND `+matchesSearch+`
+		)
+		ORDER BY membership_updated_at DESC, membership_id ASC
 	`, listID, folded, folded, folded, folded)
 	if err != nil {
 		return nil, err
@@ -145,10 +146,8 @@ func (r *SQLiteRepository) SearchByListID(ctx context.Context, listID int64, que
 	return bookList, nil
 }
 
-func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) (Book, error) {
-	now := time.Now().UTC()
-	createdAt := now.Format(time.RFC3339)
-	updatedAt := createdAt
+func (r *SQLiteRepository) Create(ctx context.Context, params CreateParams) (Book, error) {
+	now := database.Now()
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -159,124 +158,21 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 		_ = tx.Rollback()
 	}()
 
-	isbn := sql.NullString{}
-	if input.ISBN != nil {
-		isbn = sql.NullString{String: *input.ISBN, Valid: true}
-	}
-
-	language := sql.NullString{}
-	if input.Language != nil {
-		language = sql.NullString{String: *input.Language, Valid: true}
-	}
-
-	publisher := sql.NullString{}
-	if input.Publisher != nil {
-		publisher = sql.NullString{String: *input.Publisher, Valid: true}
-	}
-
-	edition := sql.NullString{}
-	if input.Edition != nil {
-		edition = sql.NullString{String: *input.Edition, Valid: true}
-	}
-
-	var format sql.NullString
-	if input.Format != nil {
-		format = sql.NullString{String: string(*input.Format), Valid: true}
-	}
-
-	purchasedAt := sql.NullString{}
-	if input.PurchasedAt != nil {
-		purchasedAt = sql.NullString{String: *input.PurchasedAt, Valid: true}
-	}
-
-	purchasePrice := sql.NullString{}
-	if input.PurchasePrice != nil {
-		purchasePrice = sql.NullString{String: *input.PurchasePrice, Valid: true}
-	}
-
-	notes := sql.NullString{}
-	if input.Notes != nil {
-		notes = sql.NullString{String: *input.Notes, Valid: true}
-	}
-
-	summary := sql.NullString{}
-	if input.Summary != nil {
-		summary = sql.NullString{String: *input.Summary, Valid: true}
-	}
-
-	seriesName := sql.NullString{}
-	if input.SeriesName != nil {
-		seriesName = sql.NullString{String: *input.SeriesName, Valid: true}
-	}
-
-	seriesPosition := sql.NullFloat64{}
-	if input.SeriesPosition != nil {
-		seriesPosition = sql.NullFloat64{Float64: *input.SeriesPosition, Valid: true}
-	}
-
-	location := sql.NullString{}
-	if input.Location != nil {
-		location = sql.NullString{String: *input.Location, Valid: true}
-	}
-
-	condition := sql.NullString{}
-	if input.Condition != nil {
-		condition = sql.NullString{String: string(*input.Condition), Valid: true}
-	}
-
-	acquisitionSource := sql.NullString{}
-	if input.AcquisitionSource != nil {
-		acquisitionSource = sql.NullString{String: *input.AcquisitionSource, Valid: true}
-	}
-
-	pages := sql.NullInt64{}
-	if input.Pages != nil {
-		pages = sql.NullInt64{Int64: int64(*input.Pages), Valid: true}
-	}
-
-	publishedYear := sql.NullInt64{}
-	if input.PublishedYear != nil {
-		publishedYear = sql.NullInt64{Int64: int64(*input.PublishedYear), Valid: true}
-	}
-
-	publishedMonth := sql.NullInt64{}
-	if input.PublishedMonth != nil {
-		publishedMonth = sql.NullInt64{Int64: int64(*input.PublishedMonth), Valid: true}
-	}
-
-	publishedDay := sql.NullInt64{}
-	if input.PublishedDay != nil {
-		publishedDay = sql.NullInt64{Int64: int64(*input.PublishedDay), Valid: true}
-	}
-
-	coverImageKey := sql.NullString{}
-	if input.CoverImageKey != nil {
-		coverImageKey = sql.NullString{String: *input.CoverImageKey, Valid: true}
-	}
-
-	row := tx.QueryRowContext(ctx, `
-		INSERT INTO books (title, isbn, language, publisher, edition, format,
-		                   purchased_at, purchase_price, pages, notes, summary, series_name,
-		                   series_position, location, condition, acquisition_source,
-		                   published_year, published_month, published_day, cover_image_key,
-		                   created_at, updated_at)
+	book, err := scanBook(tx.QueryRowContext(ctx, `
+		INSERT INTO books (`+bookDataColumns+`)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		RETURNING id, title, isbn, language, publisher, edition, format, purchased_at,
-			purchase_price,
-			pages, notes, summary, series_name, series_position, location, condition,
-			acquisition_source, published_year, published_month, published_day, cover_image_key,
-			created_at, updated_at
-	`, input.Title, isbn, language, publisher, edition, format, purchasedAt, purchasePrice,
-		pages, notes, summary, seriesName, seriesPosition, location, condition,
-		acquisitionSource, publishedYear, publishedMonth, publishedDay, coverImageKey, createdAt, updatedAt)
-
-	book, err := scanBook(row)
+		RETURNING `+bookColumns+`
+	`, params.Title, params.ISBN, params.Language, params.Publisher, params.Edition, params.Format,
+		params.PurchasedAt, params.PurchasePrice, params.Pages, params.Notes, params.Summary,
+		params.SeriesName, params.SeriesPosition, params.Location, params.Condition,
+		params.AcquisitionSource, params.PublishedYear, params.PublishedMonth, params.PublishedDay,
+		params.CoverImageKey, now, now))
 	if err != nil {
 		return Book{}, err
 	}
 
-	for position, authorID := range input.AuthorIDs {
-		if err := insertBookAuthor(ctx, tx, book.ID, authorID, position, createdAt); err != nil {
+	for position, authorID := range params.AuthorIDs {
+		if err := insertBookAuthor(ctx, tx, book.ID, authorID, position, now); err != nil {
 			return Book{}, err
 		}
 	}
@@ -293,14 +189,14 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 	return book, nil
 }
 
-func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateBookRequest) (UpdateResult, error) {
+func (r *SQLiteRepository) Update(ctx context.Context, id int64, params UpdateParams) (UpdateResult, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return UpdateResult{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	var priorCover sql.NullString
+	var priorCover *string
 	if err := tx.QueryRowContext(ctx, `SELECT cover_image_key FROM books WHERE id = ?`, id).Scan(&priorCover); err != nil {
 		if err == sql.ErrNoRows {
 			return UpdateResult{}, domain.ErrBookNotFound
@@ -308,7 +204,7 @@ func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateBoo
 		return UpdateResult{}, err
 	}
 
-	updatedAt := time.Now().UTC().Format(time.RFC3339)
+	updatedAt := database.Now()
 	sets := []string{"updated_at = ?"}
 	args := []any{updatedAt}
 	add := func(column string, present bool, value any) {
@@ -317,50 +213,39 @@ func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateBoo
 			args = append(args, value)
 		}
 	}
-	add("title", input.Title.Present, input.Title.Value)
-	add("isbn", input.ISBN.Present, input.ISBN.Value)
-	add("language", input.Language.Present, input.Language.Value)
-	add("publisher", input.Publisher.Present, input.Publisher.Value)
-	add("edition", input.Edition.Present, input.Edition.Value)
-	var format *string
-	if input.Format.Value != nil {
-		format = new(string(*input.Format.Value))
-	}
-	add("format", input.Format.Present, format)
-	add("purchased_at", input.PurchasedAt.Present, input.PurchasedAt.Value)
-	add("purchase_price", input.PurchasePrice.Present, input.PurchasePrice.Value)
-	add("pages", input.Pages.Present, input.Pages.Value)
-	add("notes", input.Notes.Present, input.Notes.Value)
-	add("summary", input.Summary.Present, input.Summary.Value)
-	add("series_name", input.SeriesName.Present, input.SeriesName.Value)
-	add("series_position", input.SeriesPosition.Present, input.SeriesPosition.Value)
-	add("location", input.Location.Present, input.Location.Value)
-	var condition *string
-	if input.Condition.Value != nil {
-		condition = new(string(*input.Condition.Value))
-	}
-	add("condition", input.Condition.Present, condition)
-	add("acquisition_source", input.AcquisitionSource.Present, input.AcquisitionSource.Value)
-	add("published_year", input.PublishedYear.Present, input.PublishedYear.Value)
-	add("published_month", input.PublishedMonth.Present, input.PublishedMonth.Value)
-	add("published_day", input.PublishedDay.Present, input.PublishedDay.Value)
-	add("cover_image_key", input.CoverImageKey.Present, input.CoverImageKey.Value)
+	add("title", params.Title.Present, params.Title.Value)
+	add("isbn", params.ISBN.Present, params.ISBN.Value)
+	add("language", params.Language.Present, params.Language.Value)
+	add("publisher", params.Publisher.Present, params.Publisher.Value)
+	add("edition", params.Edition.Present, params.Edition.Value)
+	add("format", params.Format.Present, params.Format.Value)
+	add("purchased_at", params.PurchasedAt.Present, params.PurchasedAt.Value)
+	add("purchase_price", params.PurchasePrice.Present, params.PurchasePrice.Value)
+	add("pages", params.Pages.Present, params.Pages.Value)
+	add("notes", params.Notes.Present, params.Notes.Value)
+	add("summary", params.Summary.Present, params.Summary.Value)
+	add("series_name", params.SeriesName.Present, params.SeriesName.Value)
+	add("series_position", params.SeriesPosition.Present, params.SeriesPosition.Value)
+	add("location", params.Location.Present, params.Location.Value)
+	add("condition", params.Condition.Present, params.Condition.Value)
+	add("acquisition_source", params.AcquisitionSource.Present, params.AcquisitionSource.Value)
+	add("published_year", params.PublishedYear.Present, params.PublishedYear.Value)
+	add("published_month", params.PublishedMonth.Present, params.PublishedMonth.Value)
+	add("published_day", params.PublishedDay.Present, params.PublishedDay.Value)
+	add("cover_image_key", params.CoverImageKey.Present, params.CoverImageKey.Value)
 
 	args = append(args, id)
 	book, err := scanBook(tx.QueryRowContext(ctx, `
 		UPDATE books SET `+strings.Join(sets, ", ")+`
 		WHERE id = ?
-		RETURNING id, title, isbn, language, publisher, edition, format, purchased_at,
-			purchase_price, pages, notes, summary, series_name, series_position, location,
-			condition, acquisition_source, published_year, published_month, published_day,
-			cover_image_key, created_at, updated_at
+		RETURNING `+bookColumns+`
 	`, args...))
 	if err != nil {
 		return UpdateResult{}, err
 	}
 
-	if input.AuthorIDs.Present {
-		if err := replaceBookAuthors(ctx, tx, id, valueOrZero(input.AuthorIDs.Value), updatedAt); err != nil {
+	if params.AuthorIDs.Present {
+		if err := replaceBookAuthors(ctx, tx, id, valueOrZero(params.AuthorIDs.Value), updatedAt); err != nil {
 			return UpdateResult{}, err
 		}
 	}
@@ -375,8 +260,8 @@ func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateBoo
 	}
 
 	result := UpdateResult{Book: book}
-	if input.CoverImageKey.Present && priorCover.Valid {
-		result.PriorCoverImageKey = &priorCover.String
+	if params.CoverImageKey.Present {
+		result.PriorCoverImageKey = priorCover
 	}
 	return result, nil
 }
@@ -384,7 +269,7 @@ func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateBoo
 // Delete removes the book and returns the cover image key it had, if any, so
 // the caller can clean up the file from the same statement that deleted the row.
 func (r *SQLiteRepository) Delete(ctx context.Context, id int64) (*string, error) {
-	var coverImageKey sql.NullString
+	var coverImageKey *string
 	err := r.db.QueryRowContext(ctx, `DELETE FROM books WHERE id = ? RETURNING cover_image_key`, id).Scan(&coverImageKey)
 	if err == sql.ErrNoRows {
 		return nil, domain.ErrBookNotFound
@@ -392,10 +277,7 @@ func (r *SQLiteRepository) Delete(ctx context.Context, id int64) (*string, error
 	if err != nil {
 		return nil, err
 	}
-	if !coverImageKey.Valid {
-		return nil, nil
-	}
-	return &coverImageKey.String, nil
+	return coverImageKey, nil
 }
 
 // insertBookAuthor reports a missing author, including one deleted after
@@ -557,127 +439,13 @@ type bookScanner interface {
 
 func scanBook(scanner bookScanner) (Book, error) {
 	var book Book
-	var isbn sql.NullString
-	var language sql.NullString
-	var publisher sql.NullString
-	var edition sql.NullString
-	var format sql.NullString
-	var purchasedAt sql.NullString
-	var purchasePrice sql.NullString
-	var pages sql.NullInt64
-	var notes sql.NullString
-	var summary sql.NullString
-	var seriesName sql.NullString
-	var seriesPosition sql.NullFloat64
-	var location sql.NullString
-	var condition sql.NullString
-	var acquisitionSource sql.NullString
-	var publishedYear sql.NullInt64
-	var publishedMonth sql.NullInt64
-	var publishedDay sql.NullInt64
-	var coverImageKey sql.NullString
-	var createdAt string
-	var updatedAt string
-
-	if err := scanner.Scan(&book.ID, &book.Title, &isbn, &language, &publisher, &edition,
-		&format, &purchasedAt, &purchasePrice, &pages, &notes, &summary, &seriesName, &seriesPosition,
-		&location, &condition, &acquisitionSource, &publishedYear, &publishedMonth,
-		&publishedDay, &coverImageKey, &createdAt, &updatedAt); err != nil {
+	err := scanner.Scan(&book.ID, &book.Title, &book.ISBN, &book.Language, &book.Publisher, &book.Edition,
+		&book.Format, &book.PurchasedAt, &book.PurchasePrice, &book.Pages, &book.Notes, &book.Summary,
+		&book.SeriesName, &book.SeriesPosition, &book.Location, &book.Condition, &book.AcquisitionSource,
+		&book.PublishedYear, &book.PublishedMonth, &book.PublishedDay, &book.CoverImageKey,
+		database.Time(&book.CreatedAt), database.Time(&book.UpdatedAt))
+	if err != nil {
 		return Book{}, err
-	}
-
-	if isbn.Valid {
-		book.ISBN = &isbn.String
-	}
-
-	if language.Valid {
-		book.Language = &language.String
-	}
-
-	if publisher.Valid {
-		book.Publisher = &publisher.String
-	}
-
-	if edition.Valid {
-		book.Edition = &edition.String
-	}
-
-	if format.Valid {
-		f := Format(format.String)
-		book.Format = &f
-	}
-
-	if purchasedAt.Valid {
-		book.PurchasedAt = &purchasedAt.String
-	}
-
-	if purchasePrice.Valid {
-		book.PurchasePrice = &purchasePrice.String
-	}
-
-	if pages.Valid {
-		p := int(pages.Int64)
-		book.Pages = &p
-	}
-
-	if notes.Valid {
-		book.Notes = &notes.String
-	}
-
-	if summary.Valid {
-		book.Summary = &summary.String
-	}
-
-	if seriesName.Valid {
-		book.SeriesName = &seriesName.String
-	}
-
-	if seriesPosition.Valid {
-		book.SeriesPosition = &seriesPosition.Float64
-	}
-
-	if location.Valid {
-		book.Location = &location.String
-	}
-
-	if condition.Valid {
-		c := Condition(condition.String)
-		book.Condition = &c
-	}
-
-	if acquisitionSource.Valid {
-		book.AcquisitionSource = &acquisitionSource.String
-	}
-
-	if publishedYear.Valid {
-		y := int(publishedYear.Int64)
-		book.PublishedYear = &y
-	}
-
-	if publishedMonth.Valid {
-		m := int(publishedMonth.Int64)
-		book.PublishedMonth = &m
-	}
-
-	if publishedDay.Valid {
-		d := int(publishedDay.Int64)
-		book.PublishedDay = &d
-	}
-
-	if coverImageKey.Valid {
-		book.CoverImageKey = &coverImageKey.String
-	}
-
-	var err error
-
-	book.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
-	if err != nil {
-		return Book{}, fmt.Errorf("parse created_at: %w", err)
-	}
-
-	book.UpdatedAt, err = time.Parse(time.RFC3339, updatedAt)
-	if err != nil {
-		return Book{}, fmt.Errorf("parse updated_at: %w", err)
 	}
 
 	return book, nil

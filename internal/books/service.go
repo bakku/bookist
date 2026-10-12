@@ -142,18 +142,19 @@ func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, er
 	}
 	input.AuthorIDs = dedupedAuthorIDs
 
+	var coverImageKey *string
 	if input.Cover != nil {
 		key, err := s.coverStore.Save(*input.Cover)
 		if err != nil {
 			return Book{}, err
 		}
-		input.CoverImageKey = &key
+		coverImageKey = &key
 	}
 
-	book, err := s.repository.Create(ctx, input)
+	book, err := s.repository.Create(ctx, createParams(input, coverImageKey))
 	if err != nil {
-		if input.CoverImageKey != nil {
-			if cleanupErr := s.coverStore.Delete(*input.CoverImageKey); cleanupErr != nil {
+		if coverImageKey != nil {
+			if cleanupErr := s.coverStore.Delete(*coverImageKey); cleanupErr != nil {
 				return Book{}, errors.Join(err, fmt.Errorf("clean up cover: %w", cleanupErr))
 			}
 		}
@@ -220,20 +221,18 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateBookRequest)
 		input.AuthorIDs.Value = &deduped
 	}
 
+	coverImageKey := optional.Value[string]{Present: input.Cover.Present}
 	var newCoverKey *string
-	if input.Cover.Present {
-		input.CoverImageKey.Present = true
-		if input.Cover.Value != nil {
-			key, err := s.coverStore.Save(*input.Cover.Value)
-			if err != nil {
-				return Book{}, err
-			}
-			newCoverKey = &key
-			input.CoverImageKey.Value = newCoverKey
+	if input.Cover.Value != nil {
+		key, err := s.coverStore.Save(*input.Cover.Value)
+		if err != nil {
+			return Book{}, err
 		}
+		newCoverKey = &key
+		coverImageKey.Value = newCoverKey
 	}
 
-	result, err := s.repository.Update(ctx, id, input)
+	result, err := s.repository.Update(ctx, id, updateParams(input, coverImageKey))
 	if err != nil {
 		if newCoverKey != nil {
 			if cleanupErr := s.coverStore.Delete(*newCoverKey); cleanupErr != nil {
@@ -258,6 +257,32 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateBookRequest)
 
 	setCoverURL(&book)
 	return book, nil
+}
+
+func createParams(input CreateBookRequest, coverImageKey *string) CreateParams {
+	return CreateParams{
+		Title: input.Title, ISBN: input.ISBN, AuthorIDs: input.AuthorIDs, Language: input.Language,
+		Publisher: input.Publisher, Edition: input.Edition, Format: input.Format,
+		PurchasedAt: input.PurchasedAt, PurchasePrice: input.PurchasePrice, Pages: input.Pages,
+		Notes: input.Notes, Summary: input.Summary, SeriesName: input.SeriesName,
+		SeriesPosition: input.SeriesPosition, Location: input.Location, Condition: input.Condition,
+		AcquisitionSource: input.AcquisitionSource, PublishedYear: input.PublishedYear,
+		PublishedMonth: input.PublishedMonth, PublishedDay: input.PublishedDay,
+		CoverImageKey: coverImageKey,
+	}
+}
+
+func updateParams(input UpdateBookRequest, coverImageKey optional.Value[string]) UpdateParams {
+	return UpdateParams{
+		Title: input.Title, ISBN: input.ISBN, AuthorIDs: input.AuthorIDs, Language: input.Language,
+		Publisher: input.Publisher, Edition: input.Edition, Format: input.Format,
+		PurchasedAt: input.PurchasedAt, PurchasePrice: input.PurchasePrice, Pages: input.Pages,
+		Notes: input.Notes, Summary: input.Summary, SeriesName: input.SeriesName,
+		SeriesPosition: input.SeriesPosition, Location: input.Location, Condition: input.Condition,
+		AcquisitionSource: input.AcquisitionSource, PublishedYear: input.PublishedYear,
+		PublishedMonth: input.PublishedMonth, PublishedDay: input.PublishedDay,
+		CoverImageKey: coverImageKey,
+	}
 }
 
 func updateValue[T any](current *T, update optional.Value[T]) *T {

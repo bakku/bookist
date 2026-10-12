@@ -6,10 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"bakku.dev/bookist/internal/database"
 )
+
+const authorColumns = `id, name, created_at, updated_at`
 
 type SQLiteRepository struct {
 	db *sql.DB
@@ -20,32 +21,25 @@ func NewSQLiteRepository(db *sql.DB) *SQLiteRepository {
 }
 
 func (r *SQLiteRepository) Create(ctx context.Context, input CreateAuthorRequest) (Author, error) {
-	now := time.Now().UTC()
-	createdAt := now.Format(time.RFC3339)
-	updatedAt := createdAt
+	now := database.Now()
 
 	row := r.db.QueryRowContext(ctx, `
 		INSERT INTO authors (name, created_at, updated_at)
 		VALUES (?, ?, ?)
-		RETURNING id, name, created_at, updated_at
-	`, input.Name, createdAt, updatedAt)
+		RETURNING `+authorColumns+`
+	`, input.Name, now, now)
 
 	return ScanAuthor(row)
 }
 
 func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateAuthorRequest) (Author, error) {
-	var name any
-	if input.Name.Value != nil {
-		name = *input.Name.Value
-	}
-
 	row := r.db.QueryRowContext(ctx, `
 		UPDATE authors
 		SET name = CASE WHEN ? THEN ? ELSE name END,
 			updated_at = ?
 		WHERE id = ?
-		RETURNING id, name, created_at, updated_at
-	`, input.Name.Present, name, time.Now().UTC().Format(time.RFC3339), id)
+		RETURNING `+authorColumns+`
+	`, input.Name.Present, input.Name.Value, database.Now(), id)
 
 	author, err := ScanAuthor(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -60,7 +54,7 @@ func (r *SQLiteRepository) List(ctx context.Context) ([]Author, error) {
 
 func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]Author, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, name, created_at, updated_at
+		SELECT `+authorColumns+`
 		FROM authors
 		WHERE instr(bookist_fold(name), ?) > 0
 		ORDER BY updated_at DESC, id ASC
@@ -90,7 +84,7 @@ func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]Author, 
 
 func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (Author, error) {
 	author, err := ScanAuthor(r.db.QueryRowContext(ctx, `
-		SELECT id, name, created_at, updated_at
+		SELECT `+authorColumns+`
 		FROM authors
 		WHERE id = ?
 	`, id))
@@ -113,7 +107,7 @@ func (r *SQLiteRepository) GetByIDs(ctx context.Context, ids []int64) ([]Author,
 	}
 
 	query := fmt.Sprintf(`
-		SELECT id, name, created_at, updated_at
+		SELECT `+authorColumns+`
 		FROM authors
 		WHERE id IN (%s)
 	`, strings.Join(placeholders, ","))
@@ -167,23 +161,9 @@ type RowScanner interface {
 // ScanAuthor scans the columns id, name, created_at, updated_at, in that order.
 func ScanAuthor(scanner RowScanner) (Author, error) {
 	var author Author
-	var createdAt string
-	var updatedAt string
-
-	if err := scanner.Scan(&author.ID, &author.Name, &createdAt, &updatedAt); err != nil {
+	err := scanner.Scan(&author.ID, &author.Name, database.Time(&author.CreatedAt), database.Time(&author.UpdatedAt))
+	if err != nil {
 		return Author{}, err
-	}
-
-	var err error
-
-	author.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
-	if err != nil {
-		return Author{}, fmt.Errorf("parse created_at: %w", err)
-	}
-
-	author.UpdatedAt, err = time.Parse(time.RFC3339, updatedAt)
-	if err != nil {
-		return Author{}, fmt.Errorf("parse updated_at: %w", err)
 	}
 
 	return author, nil
