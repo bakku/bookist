@@ -450,7 +450,7 @@ func TestServiceCreateRejectsInvalidPurchasedAt(t *testing.T) {
 
 // ── Update ────────────────────────────────────────────────────────────────────
 
-func TestServiceUpdateRejectsEmptyAndBlankValues(t *testing.T) {
+func TestServiceUpdateRejectsEmptyRequestAndNullTitle(t *testing.T) {
 	service, db := testsupport.NewBookService(t)
 	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
 
@@ -462,12 +462,78 @@ func TestServiceUpdateRejectsEmptyAndBlankValues(t *testing.T) {
 	}); !errors.Is(err, books.ErrTitleRequired) {
 		t.Fatalf("expected ErrTitleRequired for null title, got %v", err)
 	}
+	testsupport.AssertBookRow(t, db, bookID, "Dune", nil)
+}
+
+func TestServiceUpdateRejectsBlankTitle(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+
 	if _, err := service.Update(context.Background(), bookID, books.UpdateBookRequest{
-		Publisher: updateValueOf(" "),
-	}); !errors.Is(err, books.ErrBlankOptionalString) {
-		t.Fatalf("expected ErrBlankOptionalString, got %v", err)
+		Title: updateValueOf("  "),
+	}); !errors.Is(err, books.ErrTitleRequired) {
+		t.Fatalf("expected ErrTitleRequired for blank title, got %v", err)
 	}
 	testsupport.AssertBookRow(t, db, bookID, "Dune", nil)
+}
+
+func TestServiceUpdateConvertsBlankStringFieldsToNull(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", new("9780441172719"))
+	if _, err := db.Exec(`
+		UPDATE books SET language = 'en', publisher = 'Ace', edition = 'First', purchased_at = '2026-01-02',
+		    purchase_price = '9.99', notes = 'Old', summary = 'Old', series_name = 'Dune', location = 'Shelf',
+		    acquisition_source = 'Gift'
+		WHERE id = ?
+	`, bookID); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := service.Update(context.Background(), bookID, books.UpdateBookRequest{
+		ISBN:              updateValueOf(" "),
+		Language:          updateValueOf(""),
+		Publisher:         updateValueOf(" "),
+		Edition:           updateValueOf("\t"),
+		PurchasedAt:       updateValueOf(" "),
+		PurchasePrice:     updateValueOf(""),
+		Notes:             updateValueOf("  "),
+		Summary:           updateValueOf(" "),
+		SeriesName:        updateValueOf(""),
+		Location:          updateValueOf(" "),
+		AcquisitionSource: updateValueOf(" "),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.ISBN != nil || updated.Language != nil || updated.Publisher != nil || updated.Edition != nil ||
+		updated.PurchasedAt != nil || updated.PurchasePrice != nil || updated.Notes != nil || updated.Summary != nil ||
+		updated.SeriesName != nil || updated.Location != nil || updated.AcquisitionSource != nil {
+		t.Fatalf("expected blank string fields to be nil, got %#v", updated)
+	}
+
+	testsupport.AssertBookRowFields(t, db, bookID, testsupport.BookRowAssertion{
+		Title: "Dune",
+	})
+}
+
+func TestServiceUpdateTrimsStringFields(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+
+	updated, err := service.Update(context.Background(), bookID, books.UpdateBookRequest{
+		Publisher: updateValueOf("  Ace  "),
+		Notes:     updateValueOf(" Great "),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Publisher == nil || *updated.Publisher != "Ace" || updated.Notes == nil || *updated.Notes != "Great" {
+		t.Fatalf("expected trimmed values, got %#v", updated)
+	}
+
+	testsupport.AssertBookRowFields(t, db, bookID, testsupport.BookRowAssertion{
+		Title: "Dune", Publisher: new("Ace"), Notes: new("Great"),
+	})
 }
 
 func TestServiceUpdateRejectsInvalidSharedBookFields(t *testing.T) {

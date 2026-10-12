@@ -3,6 +3,7 @@ package lists_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"bakku.dev/bookist/internal/domain"
@@ -64,6 +65,7 @@ func TestServiceCreateConvertsBlankDescriptionToNil(t *testing.T) {
 	if created.Description != nil {
 		t.Fatalf("expected nil description, got %q", *created.Description)
 	}
+	testsupport.AssertListRow(t, db, created.ID, "Want to Buy", nil)
 }
 
 func TestServiceCreateRejectsCaseInsensitiveDuplicate(t *testing.T) {
@@ -98,18 +100,49 @@ func TestServiceUpdateAppliesPartialTrimmedFields(t *testing.T) {
 	}
 }
 
-func TestServiceUpdateDescriptionRequiresExplicitNullToClear(t *testing.T) {
+func TestServiceUpdateConvertsBlankDescriptionToNull(t *testing.T) {
+	for _, blank := range []string{"", "  "} {
+		t.Run(fmt.Sprintf("%q", blank), func(t *testing.T) {
+			db := testsupport.OpenMigratedDB(t)
+			service := lists.NewService(lists.NewSQLiteRepository(db))
+			id := testsupport.InsertListRowWithDescription(t, db, "Nightstand", "Up next")
+
+			updated, err := service.Update(context.Background(), id, lists.UpdateListRequest{
+				Description: optional.Value[string]{Present: true, Value: &blank},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if updated.Description != nil {
+				t.Fatalf("expected description to be cleared, got %q", *updated.Description)
+			}
+			testsupport.AssertListRow(t, db, id, "Nightstand", nil)
+		})
+	}
+}
+
+func TestServiceUpdateTrimsDescription(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	service := lists.NewService(lists.NewSQLiteRepository(db))
 	id := testsupport.InsertListRowWithDescription(t, db, "Nightstand", "Up next")
-	blank := "  "
+	description := "  Books I want  "
 
-	_, err := service.Update(context.Background(), id, lists.UpdateListRequest{
-		Description: optional.Value[string]{Present: true, Value: &blank},
+	updated, err := service.Update(context.Background(), id, lists.UpdateListRequest{
+		Description: optional.Value[string]{Present: true, Value: &description},
 	})
-	if !errors.Is(err, lists.ErrDescriptionRequired) {
-		t.Fatalf("expected ErrDescriptionRequired, got %v", err)
+	if err != nil {
+		t.Fatal(err)
 	}
+	if updated.Description == nil || *updated.Description != "Books I want" {
+		t.Fatalf("expected trimmed description, got %#v", updated.Description)
+	}
+	testsupport.AssertListRow(t, db, id, "Nightstand", new("Books I want"))
+}
+
+func TestServiceUpdateClearsDescriptionWithExplicitNull(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	service := lists.NewService(lists.NewSQLiteRepository(db))
+	id := testsupport.InsertListRowWithDescription(t, db, "Nightstand", "Up next")
 
 	updated, err := service.Update(context.Background(), id, lists.UpdateListRequest{
 		Description: optional.Value[string]{Present: true},
@@ -120,6 +153,7 @@ func TestServiceUpdateDescriptionRequiresExplicitNullToClear(t *testing.T) {
 	if updated.Description != nil {
 		t.Fatalf("expected description to be cleared, got %q", *updated.Description)
 	}
+	testsupport.AssertListRow(t, db, id, "Nightstand", nil)
 }
 
 func TestServiceUpdateValidatesRequestAndNameUniqueness(t *testing.T) {

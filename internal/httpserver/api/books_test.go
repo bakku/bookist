@@ -276,7 +276,6 @@ func TestBookAPIUpdateRejectsInvalidRequests(t *testing.T) {
 		{name: "empty", path: "/api/books/1", body: `{}`, status: http.StatusBadRequest, code: "no_fields_to_update"},
 		{name: "unknown field", path: "/api/books/1", body: `{"unknown":true}`, status: http.StatusBadRequest, code: "invalid_json"},
 		{name: "second value", path: "/api/books/1", body: `{"title":"New"} {}`, status: http.StatusBadRequest, code: "invalid_json"},
-		{name: "blank optional", path: "/api/books/1", body: `{"publisher":" "}`, status: http.StatusBadRequest, code: "blank_optional_string"},
 		{name: "invalid pages", path: "/api/books/1", body: `{"pages":0}`, status: http.StatusBadRequest, code: "invalid_pages", field: "pages"},
 		{name: "not found", path: "/api/books/999999", body: `{"title":"New"}`, status: http.StatusNotFound, code: "book_not_found"},
 	} {

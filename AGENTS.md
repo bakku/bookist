@@ -31,6 +31,7 @@ Bookist is intended to be a Go application for managing a home library.
 - Collections default to `updated_at DESC, id ASC`; relationship-backed collections use the relationship row's timestamps and ID.
 - Exception: a book's authors are ordered by `book_authors.position` (unique per book, set from the order of `author_ids`), because author order is data rather than edit history. The books package is the only reader and writer of `book_authors`.
 - Enforce durable invariants in both services and SQLite constraints.
+- Blank or whitespace-only optional strings become `NULL` on both create and update (shared `validation.TrimToNil`); on update a blank value clears the field just like explicit `null`. Required fields (book title, list name, author name) stay required.
 - Rewriting the initial migration is acceptable while the schema is pre-release and disposable; once compatibility matters, migrations are append-only.
 
 ## API, Web, And CLI Direction

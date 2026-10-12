@@ -35,14 +35,7 @@ func (s *Service) Create(ctx context.Context, bookID int64, input CreateReadRequ
 	}
 	input.AbandonedAt = abandonedAt
 
-	if input.Notes != nil {
-		notes := strings.TrimSpace(*input.Notes)
-		if notes == "" {
-			input.Notes = nil
-		} else {
-			input.Notes = &notes
-		}
-	}
+	input.Notes = validation.TrimToNil(input.Notes)
 	if err := validateRead(input); err != nil {
 		return Read{}, err
 	}
@@ -70,29 +63,24 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateReadRequest)
 	}
 
 	if input.StartedAt.Present {
-		input.StartedAt.Value, err = normalizeUpdateString(input.StartedAt.Value)
+		input.StartedAt.Value, err = normalizeDate(input.StartedAt.Value, ErrInvalidStartedAt)
 		if err != nil {
 			return Read{}, err
 		}
 	}
 	if input.FinishedAt.Present {
-		input.FinishedAt.Value, err = normalizeUpdateString(input.FinishedAt.Value)
+		input.FinishedAt.Value, err = normalizeDate(input.FinishedAt.Value, ErrInvalidFinishedAt)
 		if err != nil {
 			return Read{}, err
 		}
 	}
 	if input.AbandonedAt.Present {
-		input.AbandonedAt.Value, err = normalizeUpdateString(input.AbandonedAt.Value)
+		input.AbandonedAt.Value, err = normalizeDate(input.AbandonedAt.Value, ErrInvalidAbandonedAt)
 		if err != nil {
 			return Read{}, err
 		}
 	}
-	if input.Notes.Present {
-		input.Notes.Value, err = normalizeUpdateString(input.Notes.Value)
-		if err != nil {
-			return Read{}, err
-		}
-	}
+	input.Notes.Value = validation.TrimToNil(input.Notes.Value)
 
 	merged := CreateReadRequest{
 		StartedAt: current.StartedAt, FinishedAt: current.FinishedAt, AbandonedAt: current.AbandonedAt,
@@ -138,17 +126,6 @@ func normalizeDate(value *string, invalidError error) (*string, error) {
 	}
 
 	return &date, nil
-}
-
-func normalizeUpdateString(value *string) (*string, error) {
-	if value == nil {
-		return nil, nil
-	}
-	normalized := strings.TrimSpace(*value)
-	if normalized == "" {
-		return nil, ErrBlankOptionalString
-	}
-	return &normalized, nil
 }
 
 func validateRead(input CreateReadRequest) error {

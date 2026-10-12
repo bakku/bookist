@@ -11,4 +11,3 @@ var ErrFinishedBeforeStarted = apperr.Invalid("finished_before_started", "finish
 var ErrAbandonedBeforeStarted = apperr.Invalid("abandoned_before_started", "abandoned_at must not be before started_at", "abandoned_at")
 var ErrInvalidRating = apperr.Invalid("invalid_rating", "rating must be between 1 and 5 in increments of 0.5", "rating")
 var ErrNoFieldsToUpdate = apperr.Invalid("no_fields_to_update", "no fields to update", "")
-var ErrBlankOptionalString = apperr.Invalid("blank_optional_string", "optional string fields must not be blank; use null to clear", "")
