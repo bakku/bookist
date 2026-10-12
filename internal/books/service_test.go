@@ -883,7 +883,7 @@ func TestServiceGetByIDHydratesAuthorsAndCoverURL(t *testing.T) {
 	service, db := testsupport.NewBookService(t)
 	repository := books.NewSQLiteRepository(db)
 	coverImageKey := "0123456789abcdef0123456789abcdef.png"
-	created, err := repository.Create(context.Background(), books.CreateBookRequest{Title: "Dune", CoverImageKey: &coverImageKey})
+	created, err := repository.Create(context.Background(), books.CreateParams{Title: "Dune", CoverImageKey: &coverImageKey})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -971,7 +971,7 @@ func TestServiceListReturnsPersistedBooks(t *testing.T) {
 	month := 6
 	day := 15
 
-	created, err := repository.Create(context.Background(), books.CreateBookRequest{
+	created, err := repository.Create(context.Background(), books.CreateParams{
 		Title:          "Kindred",
 		ISBN:           &isbn,
 		Language:       &lang,

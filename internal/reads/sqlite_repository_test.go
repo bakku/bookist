@@ -127,7 +127,7 @@ func TestSQLiteRepositoryGetByIDReturnsPersistedRead(t *testing.T) {
 	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
 		ID: 100, BookID: bookID, FinishedAt: new("2026-01-03"), Rating: new(5.0),
-		CreatedAt: "2026-01-04T00:00:00Z",
+		CreatedAt: "2026-01-04T00:00:00.000Z",
 	})
 
 	got, err := reads.NewSQLiteRepository(db).GetByID(context.Background(), 100)
@@ -158,15 +158,15 @@ func TestSQLiteRepositoryListByBookIDOrdersNewestFirst(t *testing.T) {
 	newID := int64(101)
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
 		ID: oldID, BookID: bookID, StartedAt: new("2025-01-01"), FinishedAt: new("2025-01-02"),
-		CreatedAt: "2026-01-01T00:00:00Z",
+		CreatedAt: "2026-01-01T00:00:00.000Z",
 	})
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
 		ID: newID, BookID: bookID, StartedAt: new("2026-01-01"), AbandonedAt: new("2026-01-02"),
-		CreatedAt: "2026-01-02T00:00:00Z",
+		CreatedAt: "2026-01-02T00:00:00.000Z",
 	})
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
 		ID: 102, BookID: otherBookID, StartedAt: new("2027-01-01"), FinishedAt: new("2027-01-02"),
-		CreatedAt: "2027-01-02T00:00:00Z",
+		CreatedAt: "2027-01-02T00:00:00.000Z",
 	})
 
 	listed, err := reads.NewSQLiteRepository(db).ListByBookID(context.Background(), bookID)
@@ -178,6 +178,35 @@ func TestSQLiteRepositoryListByBookIDOrdersNewestFirst(t *testing.T) {
 	}
 	if listed[0].AbandonedAt == nil || *listed[0].AbandonedAt != "2026-01-02" || listed[0].FinishedAt != nil {
 		t.Fatalf("expected abandoned read, got %#v", listed[0])
+	}
+}
+
+func TestSQLiteRepositoryListByBookIDOrdersChangesWithinOneSecondNewestFirst(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := reads.NewSQLiteRepository(db)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	firstID := int64(100)
+	secondID := int64(101)
+	testsupport.InsertReadRow(t, db, testsupport.ReadRow{ID: firstID, BookID: bookID, CreatedAt: "2026-01-01T00:00:00.000Z"})
+	testsupport.InsertReadRow(t, db, testsupport.ReadRow{ID: secondID, BookID: bookID, CreatedAt: "2026-01-01T00:00:00.000Z"})
+
+	for _, id := range []int64{firstID, secondID} {
+		_, err := repository.Update(ctx, id, reads.UpdateReadRequest{
+			Notes: optional.Value[string]{Present: true, Value: new("Revisited")},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	listed, err := repository.ListByBookID(ctx, bookID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 2 || listed[0].ID != secondID || listed[1].ID != firstID {
+		t.Fatalf("expected most recently updated read %d first, got %#v", secondID, listed)
 	}
 }
 
@@ -209,7 +238,7 @@ func TestSQLiteRepositoryUpdateOnlyChangesPresentFields(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
 	readID := int64(100)
-	createdAt := "2026-01-01T00:00:00Z"
+	createdAt := "2026-01-01T00:00:00.000Z"
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
 		ID: readID, BookID: bookID, StartedAt: new("2026-01-01"), FinishedAt: new("2026-01-02"),
 		Rating: new(4.5), Notes: new("Original"), CreatedAt: createdAt,
@@ -222,7 +251,7 @@ func TestSQLiteRepositoryUpdateOnlyChangesPresentFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.BookID != bookID || updated.CreatedAt.Format(time.RFC3339) != createdAt {
+	if updated.BookID != bookID || updated.CreatedAt.Format(database.TimeLayout) != createdAt {
 		t.Fatalf("book_id or created_at changed: %#v", updated)
 	}
 	if updated.FinishedAt != nil || updated.Notes == nil || *updated.Notes != "Revised" {
@@ -304,7 +333,7 @@ func TestSQLiteRepositoryUpdateTranslatesNamedCheckConstraints(t *testing.T) {
 			db := testsupport.OpenMigratedDB(t)
 			bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
 			const readID = int64(100)
-			const timestamp = "2026-01-01T00:00:00Z"
+			const timestamp = "2026-01-01T00:00:00.000Z"
 			testsupport.InsertReadRow(t, db, testsupport.ReadRow{
 				ID: readID, BookID: bookID, CreatedAt: timestamp,
 			})
@@ -347,7 +376,7 @@ func TestSQLiteRepositoryUpdateLeavesUnknownCheckConstraintUnexpected(t *testing
 			CONSTRAINT reads_unrecognized CHECK (notes <> 'blocked')
 		);
 		INSERT INTO reads (id, book_id, notes, created_at, updated_at)
-		VALUES (100, 1, 'original', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+		VALUES (100, 1, 'original', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
 	`)
 	if err != nil {
 		t.Fatal(err)
@@ -416,11 +445,11 @@ func TestSQLiteRepositoryDeletePreservesSiblingReadAndBooks(t *testing.T) {
 	siblingReadID := int64(101)
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
 		ID: deletedReadID, BookID: bookID, StartedAt: new("2026-01-01"),
-		CreatedAt: "2026-01-01T00:00:00Z",
+		CreatedAt: "2026-01-01T00:00:00.000Z",
 	})
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
 		ID: siblingReadID, BookID: bookID, StartedAt: new("2026-02-01"),
-		CreatedAt: "2026-02-01T00:00:00Z",
+		CreatedAt: "2026-02-01T00:00:00.000Z",
 	})
 
 	if err := reads.NewSQLiteRepository(db).Delete(context.Background(), deletedReadID); err != nil {

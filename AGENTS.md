@@ -28,6 +28,8 @@ Bookist is intended to be a Go application for managing a home library.
 - Use `github.com/pressly/goose/v3` for embedded SQL migrations. Migrations run through `goose.NewProvider` with `goose.WithSlog` (no goose global state), so output goes to the application logger. Serving runs migrations automatically at startup.
 - Keep the Bookist stylesheet and the Merriweather/Lato WOFF2 fonts as embedded static assets. Production requires only the compiled Go binary.
 - Every table, including relationship tables, uses an SQLite-generated `INTEGER PRIMARY KEY` represented as `int64` in Go, plus `created_at` and `updated_at` timestamps. ISBN remains nullable in Go and SQLite.
+- Timestamps are TEXT in the fixed-width UTC layout `database.TimeLayout` (millisecond precision). Writers, including test fixtures, must use `database.Now()`/`database.FormatTime`, and readers scan with `database.Time`. Mixed layouts sort incorrectly as text.
+- Repositories take their own parameter types (for example `books.CreateParams`) rather than the JSON request types; services translate and own side effects such as cover storage.
 - Collections default to `updated_at DESC, id ASC`; relationship-backed collections use the relationship row's timestamps and ID.
 - Exception: a book's authors are ordered by `book_authors.position` (unique per book, set from the order of `author_ids`), because author order is data rather than edit history. The books package is the only reader and writer of `book_authors`.
 - Enforce durable invariants in both services and SQLite constraints.

@@ -4,13 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"testing"
-	"time"
 )
 
 func InsertListRow(t testing.TB, db *sql.DB, name string) int64 {
 	t.Helper()
 
-	now := "2026-01-02T03:04:05Z"
+	now := fixtureTimestamp
 	var id int64
 	err := db.QueryRowContext(context.Background(), `
 		INSERT INTO lists (name, created_at, updated_at)
@@ -27,7 +26,7 @@ func InsertListRow(t testing.TB, db *sql.DB, name string) int64 {
 func InsertListRowWithDescription(t testing.TB, db *sql.DB, name, description string) int64 {
 	t.Helper()
 
-	now := "2026-01-02T03:04:05Z"
+	now := fixtureTimestamp
 	var id int64
 	err := db.QueryRowContext(context.Background(), `
 		INSERT INTO lists (name, description, created_at, updated_at)
@@ -70,18 +69,14 @@ func AssertListRow(t testing.TB, db *sql.DB, id int64, wantName string, wantDesc
 		t.Fatalf("expected persisted description %q, got %q", *wantDescription, description.String)
 	}
 
-	if _, err := time.Parse(time.RFC3339, createdAt); err != nil {
-		t.Fatalf("expected RFC3339 created_at, got %q", createdAt)
-	}
+	assertTimestamp(t, "created_at", createdAt)
 
-	if _, err := time.Parse(time.RFC3339, updatedAt); err != nil {
-		t.Fatalf("expected RFC3339 updated_at, got %q", updatedAt)
-	}
+	assertTimestamp(t, "updated_at", updatedAt)
 }
 
 func InsertBookListRow(t testing.TB, db *sql.DB, listID int64, bookID int64) {
 	t.Helper()
-	now := "2026-01-02T03:04:05Z"
+	now := fixtureTimestamp
 
 	_, err := db.ExecContext(context.Background(), `
 		INSERT INTO book_lists (list_id, book_id, created_at, updated_at)

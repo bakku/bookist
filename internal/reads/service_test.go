@@ -122,7 +122,7 @@ func TestServiceUpdateMergesNormalizesAndClearsFields(t *testing.T) {
 	readID := int64(100)
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
 		ID: readID, BookID: bookID, StartedAt: new("2026-01-01"), AbandonedAt: new("2026-01-03"),
-		Rating: new(4.5), Notes: new("Old notes"), CreatedAt: "2026-01-04T00:00:00Z",
+		Rating: new(4.5), Notes: new("Old notes"), CreatedAt: "2026-01-04T00:00:00.000Z",
 	})
 
 	updated, err := reads.NewService(reads.NewSQLiteRepository(db)).Update(context.Background(), readID, reads.UpdateReadRequest{
@@ -145,7 +145,7 @@ func TestServiceUpdateRejectsEmptyRequest(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
 	readID := int64(100)
-	testsupport.InsertReadRow(t, db, testsupport.ReadRow{ID: readID, BookID: bookID, CreatedAt: "2026-01-01T00:00:00Z"})
+	testsupport.InsertReadRow(t, db, testsupport.ReadRow{ID: readID, BookID: bookID, CreatedAt: "2026-01-01T00:00:00.000Z"})
 
 	_, err := reads.NewService(reads.NewSQLiteRepository(db)).Update(context.Background(), readID, reads.UpdateReadRequest{})
 	if !errors.Is(err, reads.ErrNoFieldsToUpdate) {
@@ -159,7 +159,7 @@ func TestServiceUpdateConvertsBlankOptionalStringsToNull(t *testing.T) {
 	readID := int64(100)
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
 		ID: readID, BookID: bookID, StartedAt: new("2026-01-01"), AbandonedAt: new("2026-01-03"),
-		Rating: new(4.5), Notes: new("Old notes"), CreatedAt: "2026-01-04T00:00:00Z",
+		Rating: new(4.5), Notes: new("Old notes"), CreatedAt: "2026-01-04T00:00:00.000Z",
 	})
 
 	updated, err := reads.NewService(reads.NewSQLiteRepository(db)).Update(context.Background(), readID, reads.UpdateReadRequest{
@@ -208,7 +208,7 @@ func TestServiceUpdateValidatesMergedRead(t *testing.T) {
 			bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
 			test.row.ID = 100
 			test.row.BookID = bookID
-			test.row.CreatedAt = "2026-01-01T00:00:00Z"
+			test.row.CreatedAt = "2026-01-01T00:00:00.000Z"
 			testsupport.InsertReadRow(t, db, test.row)
 
 			_, err := reads.NewService(reads.NewSQLiteRepository(db)).Update(context.Background(), test.row.ID, test.input)
@@ -228,7 +228,7 @@ func TestServiceListByBookIDReturnsReads(t *testing.T) {
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
 		ID: readID, BookID: bookID, StartedAt: new("2026-01-01"),
 		AbandonedAt: new("2026-01-03"), Rating: new(4.5), Notes: new("Excellent"),
-		CreatedAt: "2026-01-04T00:00:00Z",
+		CreatedAt: "2026-01-04T00:00:00.000Z",
 	})
 	service := reads.NewService(reads.NewSQLiteRepository(db))
 
@@ -252,7 +252,7 @@ func TestServiceDeleteRemovesRead(t *testing.T) {
 	readID := int64(100)
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
 		ID: readID, BookID: bookID, StartedAt: new("2026-01-01"),
-		CreatedAt: "2026-01-01T00:00:00Z",
+		CreatedAt: "2026-01-01T00:00:00.000Z",
 	})
 
 	if err := reads.NewService(reads.NewSQLiteRepository(db)).Delete(context.Background(), readID); err != nil {

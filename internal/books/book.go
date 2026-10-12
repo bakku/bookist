@@ -74,7 +74,6 @@ type CreateBookRequest struct {
 	PublishedMonth    *int       `json:"published_month"`
 	PublishedDay      *int       `json:"published_day"`
 	Cover             *[]byte    `json:"cover"`
-	CoverImageKey     *string    `json:"-"`
 }
 
 type UpdateBookRequest struct {
@@ -99,7 +98,6 @@ type UpdateBookRequest struct {
 	PublishedMonth    optional.Value[int]       `json:"published_month,omitzero"`
 	PublishedDay      optional.Value[int]       `json:"published_day,omitzero"`
 	Cover             optional.Value[[]byte]    `json:"cover,omitzero"`
-	CoverImageKey     optional.Value[string]    `json:"-"`
 }
 
 func (r UpdateBookRequest) hasFields() bool {

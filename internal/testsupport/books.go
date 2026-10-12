@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"testing"
-	"time"
 
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
@@ -26,7 +25,7 @@ func NewBookService(t testing.TB) (*books.Service, *sql.DB) {
 func InsertBookRow(t testing.TB, db *sql.DB, title string, isbn *string) int64 {
 	t.Helper()
 
-	now := "2026-01-02T03:04:05Z"
+	now := fixtureTimestamp
 	isbnValue := sql.NullString{}
 	if isbn != nil {
 		isbnValue = sql.NullString{String: *isbn, Valid: true}
@@ -93,12 +92,8 @@ func AssertBookRow(t testing.TB, db *sql.DB, id int64, wantTitle string, wantISB
 	if wantISBN != nil && (!isbn.Valid || isbn.String != *wantISBN) {
 		t.Fatalf("expected persisted ISBN %q, got %#v", *wantISBN, isbn)
 	}
-	if _, err := time.Parse(time.RFC3339, createdAt); err != nil {
-		t.Fatalf("expected RFC3339 created_at, got %q", createdAt)
-	}
-	if _, err := time.Parse(time.RFC3339, updatedAt); err != nil {
-		t.Fatalf("expected RFC3339 updated_at, got %q", updatedAt)
-	}
+	assertTimestamp(t, "created_at", createdAt)
+	assertTimestamp(t, "updated_at", updatedAt)
 }
 
 func AssertBookRowFields(t testing.TB, db *sql.DB, id int64, want BookRowAssertion) {
@@ -166,13 +161,9 @@ func AssertBookRowFields(t testing.TB, db *sql.DB, id int64, want BookRowAsserti
 	assertNullInt(t, "published_day", publishedDay, want.PublishedDay)
 	assertNullString(t, "cover_image_key", coverImageKey, want.CoverImageKey)
 
-	if _, err := time.Parse(time.RFC3339, createdAt); err != nil {
-		t.Fatalf("expected RFC3339 created_at, got %q", createdAt)
-	}
+	assertTimestamp(t, "created_at", createdAt)
 
-	if _, err := time.Parse(time.RFC3339, updatedAt); err != nil {
-		t.Fatalf("expected RFC3339 updated_at, got %q", updatedAt)
-	}
+	assertTimestamp(t, "updated_at", updatedAt)
 }
 
 func assertNullFloat(t testing.TB, name string, got sql.NullFloat64, want *float64) {
@@ -214,7 +205,7 @@ func assertNullInt(t testing.TB, name string, got sql.NullInt64, want *int) {
 // InsertBookAuthorRow links an author after the book's existing authors.
 func InsertBookAuthorRow(t testing.TB, db *sql.DB, bookID int64, authorID int64) {
 	t.Helper()
-	now := "2026-01-02T03:04:05Z"
+	now := fixtureTimestamp
 
 	_, err := db.ExecContext(context.Background(), `
 		INSERT INTO book_authors (book_id, author_id, position, created_at, updated_at)
@@ -229,7 +220,7 @@ func InsertBookAuthorRow(t testing.TB, db *sql.DB, bookID int64, authorID int64)
 // insertion order.
 func InsertBookAuthorRowAt(t testing.TB, db *sql.DB, bookID int64, authorID int64, position int) {
 	t.Helper()
-	now := "2026-01-02T03:04:05Z"
+	now := fixtureTimestamp
 
 	_, err := db.ExecContext(context.Background(), `
 		INSERT INTO book_authors (book_id, author_id, position, created_at, updated_at)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"testing"
+	"time"
 
 	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
@@ -42,7 +43,7 @@ func TestSQLiteRepositoryCreatePersistsAllFields(t *testing.T) {
 	day := 15
 	coverImageKey := "0123456789abcdef0123456789abcdef.png"
 
-	created, err := repository.Create(ctx, books.CreateBookRequest{
+	created, err := repository.Create(ctx, books.CreateParams{
 		Title:             "The Go Programming Language",
 		ISBN:              &isbn,
 		Language:          &lang,
@@ -106,7 +107,7 @@ func TestSQLiteRepositoryCreatePersistsNullDefaults(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	repository := books.NewSQLiteRepository(db)
 
-	created, err := repository.Create(ctx, books.CreateBookRequest{Title: "Minimal Book"})
+	created, err := repository.Create(ctx, books.CreateParams{Title: "Minimal Book"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +124,7 @@ func TestSQLiteRepositoryCreateWithAuthorIDsPersistsBookAuthors(t *testing.T) {
 
 	authorID := testsupport.InsertAuthorRow(t, db, "Test Author")
 
-	created, err := repository.Create(ctx, books.CreateBookRequest{
+	created, err := repository.Create(ctx, books.CreateParams{
 		Title:     "Book With Authors",
 		AuthorIDs: []int64{authorID},
 	})
@@ -140,7 +141,7 @@ func TestSQLiteRepositoryCreateWithNoAuthorIDsPersistsBookOnly(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	repository := books.NewSQLiteRepository(db)
 
-	created, err := repository.Create(ctx, books.CreateBookRequest{Title: "Solo Book"})
+	created, err := repository.Create(ctx, books.CreateParams{Title: "Solo Book"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +155,7 @@ func TestSQLiteRepositoryCreateReturnsErrAuthorNotFoundForMissingAuthor(t *testi
 	repository := books.NewSQLiteRepository(db)
 	authorID := testsupport.InsertAuthorRow(t, db, "Frank Herbert")
 
-	_, err := repository.Create(context.Background(), books.CreateBookRequest{
+	_, err := repository.Create(context.Background(), books.CreateParams{
 		Title:     "Dune",
 		AuthorIDs: []int64{authorID, 999999},
 	})
@@ -174,7 +175,7 @@ func TestSQLiteRepositoryCreatePersistsAuthorOrder(t *testing.T) {
 	author2 := testsupport.InsertAuthorRow(t, db, "Author Two")
 	author3 := testsupport.InsertAuthorRow(t, db, "Author Three")
 
-	created, err := repository.Create(ctx, books.CreateBookRequest{
+	created, err := repository.Create(ctx, books.CreateParams{
 		Title:     "Good Omens",
 		AuthorIDs: []int64{author3, author1, author2},
 	})
@@ -192,7 +193,7 @@ func TestSQLiteRepositoryGetByIDReturnsPersistedBook(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	repository := books.NewSQLiteRepository(db)
 	coverImageKey := "0123456789abcdef0123456789abcdef.png"
-	created, err := repository.Create(context.Background(), books.CreateBookRequest{
+	created, err := repository.Create(context.Background(), books.CreateParams{
 		Title: "Dune", CoverImageKey: &coverImageKey,
 	})
 	if err != nil {
@@ -254,7 +255,7 @@ func TestSQLiteRepositoryUpdatePersistsScalarsAndReconcilesAuthors(t *testing.T)
 	author3 := testsupport.InsertAuthorRow(t, db, "Author Three")
 	oldISBN := "old-isbn"
 	oldCover := "11111111111111111111111111111111.png"
-	created, err := repository.Create(context.Background(), books.CreateBookRequest{
+	created, err := repository.Create(context.Background(), books.CreateParams{
 		Title: "Dune", ISBN: &oldISBN, AuthorIDs: []int64{author1, author2}, CoverImageKey: &oldCover,
 	})
 	if err != nil {
@@ -278,7 +279,7 @@ func TestSQLiteRepositoryUpdatePersistsScalarsAndReconcilesAuthors(t *testing.T)
 	}
 	newCover := "22222222222222222222222222222222.png"
 
-	result, err := repository.Update(context.Background(), created.ID, books.UpdateBookRequest{
+	result, err := repository.Update(context.Background(), created.ID, books.UpdateParams{
 		ISBN:          optionalNull[string](),
 		AuthorIDs:     updateValueOf([]int64{author2, author3}),
 		CoverImageKey: updateValueOf(newCover),
@@ -351,7 +352,7 @@ func TestSQLiteRepositoryUpdateRollsBackBookAndRelationshipsAfterAuthorInsertFai
 		t.Fatal(err)
 	}
 
-	_, err := repository.Update(context.Background(), bookID, books.UpdateBookRequest{
+	_, err := repository.Update(context.Background(), bookID, books.UpdateParams{
 		Title:     updateValueOf("Dune Messiah"),
 		AuthorIDs: updateValueOf([]int64{replacementAuthorID}),
 	})
@@ -389,7 +390,7 @@ func TestSQLiteRepositoryUpdateReturnsErrAuthorNotFoundForMissingAuthor(t *testi
 	authorID := testsupport.InsertAuthorRow(t, db, "Frank Herbert")
 	testsupport.InsertBookAuthorRow(t, db, bookID, authorID)
 
-	_, err := repository.Update(context.Background(), bookID, books.UpdateBookRequest{
+	_, err := repository.Update(context.Background(), bookID, books.UpdateParams{
 		Title:     updateValueOf("Dune Messiah"),
 		AuthorIDs: updateValueOf([]int64{999999}),
 	})
@@ -421,7 +422,7 @@ func TestSQLiteRepositoryUpdateReordersAuthorsWithoutChangingMembership(t *testi
 		t.Fatal(err)
 	}
 
-	result, err := repository.Update(context.Background(), bookID, books.UpdateBookRequest{
+	result, err := repository.Update(context.Background(), bookID, books.UpdateParams{
 		AuthorIDs: updateValueOf([]int64{author3, author1, author2}),
 	})
 	if err != nil {
@@ -455,7 +456,7 @@ func TestSQLiteRepositoryUpdateRemovesAndReaddsAuthorInRequestedOrder(t *testing
 		{name: "clear", authorIDs: []int64{}},
 		{name: "restore reversed", authorIDs: []int64{pratchett, gaiman}},
 	} {
-		result, err := repository.Update(context.Background(), bookID, books.UpdateBookRequest{
+		result, err := repository.Update(context.Background(), bookID, books.UpdateParams{
 			AuthorIDs: updateValueOf(step.authorIDs),
 		})
 		if err != nil {
@@ -472,7 +473,7 @@ func TestSQLiteRepositoryUpdateKeepsAuthorsWhenOmitted(t *testing.T) {
 	repository := books.NewSQLiteRepository(db)
 	bookID, wantAuthorIDs := seedBookWithReversedAuthors(t, db, "Good Omens")
 
-	result, err := repository.Update(context.Background(), bookID, books.UpdateBookRequest{
+	result, err := repository.Update(context.Background(), bookID, books.UpdateParams{
 		Title: updateValueOf("Good Omens, Revised"),
 	})
 	if err != nil {
@@ -575,7 +576,7 @@ func TestSQLiteRepositoryDeleteCascadesBookRelationships(t *testing.T) {
 	listID := testsupport.InsertListRow(t, db, "Favorites")
 	testsupport.InsertBookAuthorRow(t, db, bookID, authorID)
 	testsupport.InsertBookListRow(t, db, listID, bookID)
-	testsupport.InsertReadRow(t, db, testsupport.ReadRow{ID: 1, BookID: bookID, CreatedAt: "2026-01-01T00:00:00Z"})
+	testsupport.InsertReadRow(t, db, testsupport.ReadRow{ID: 1, BookID: bookID, CreatedAt: "2026-01-01T00:00:00.000Z"})
 
 	if _, err := repository.Delete(context.Background(), bookID); err != nil {
 		t.Fatal(err)
@@ -630,7 +631,7 @@ func TestSQLiteRepositoryListReadsPersistedBooks(t *testing.T) {
 	month := 6
 	day := 15
 
-	created, err := repository.Create(ctx, books.CreateBookRequest{
+	created, err := repository.Create(ctx, books.CreateParams{
 		Title:             "The Go Programming Language",
 		ISBN:              &isbn,
 		Language:          &lang,
@@ -743,6 +744,32 @@ func TestSQLiteRepositoryListReadsPersistedBooks(t *testing.T) {
 
 	if got.PublishedDay == nil || *got.PublishedDay != day {
 		t.Fatalf("expected PublishedDay %d, got %#v", day, got.PublishedDay)
+	}
+}
+
+func TestSQLiteRepositoryListOrdersChangesWithinOneSecondNewestFirst(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	firstID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	secondID := testsupport.InsertBookRow(t, db, "Emma", nil)
+
+	for _, id := range []int64{firstID, secondID} {
+		_, err := repository.Update(ctx, id, books.UpdateParams{
+			Notes: optional.Value[string]{Present: true, Value: new("Reread")},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	listed, err := repository.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 2 || listed[0].ID != secondID || listed[1].ID != firstID {
+		t.Fatalf("expected most recently updated book %d first, got %#v", secondID, listed)
 	}
 }
 

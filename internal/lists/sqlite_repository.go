@@ -4,12 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
-	"time"
 
 	"bakku.dev/bookist/internal/database"
 	"bakku.dev/bookist/internal/domain"
 )
+
+const listColumns = `id, name, description, created_at, updated_at`
 
 type SQLiteRepository struct {
 	db *sql.DB
@@ -20,20 +20,13 @@ func NewSQLiteRepository(db *sql.DB) *SQLiteRepository {
 }
 
 func (r *SQLiteRepository) Create(ctx context.Context, input CreateListRequest) (List, error) {
-	now := time.Now().UTC()
-	createdAt := now.Format(time.RFC3339)
-	updatedAt := createdAt
-
-	var description sql.NullString
-	if input.Description != nil {
-		description = sql.NullString{String: *input.Description, Valid: true}
-	}
+	now := database.Now()
 
 	row := r.db.QueryRowContext(ctx, `
 		INSERT INTO lists (name, description, created_at, updated_at)
 		VALUES (?, ?, ?, ?)
-		RETURNING id, name, description, created_at, updated_at
-	`, input.Name, description, createdAt, updatedAt)
+		RETURNING `+listColumns+`
+	`, input.Name, input.Description, now, now)
 
 	list, err := scanList(row)
 	if database.IsUniqueViolation(err) {
@@ -43,23 +36,14 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateListRequest) 
 }
 
 func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateListRequest) (List, error) {
-	var name any
-	if input.Name.Value != nil {
-		name = *input.Name.Value
-	}
-	var description any
-	if input.Description.Value != nil {
-		description = *input.Description.Value
-	}
-
 	row := r.db.QueryRowContext(ctx, `
 		UPDATE lists
 		SET name = CASE WHEN ? THEN ? ELSE name END,
 			description = CASE WHEN ? THEN ? ELSE description END,
 			updated_at = ?
 		WHERE id = ?
-		RETURNING id, name, description, created_at, updated_at
-	`, input.Name.Present, name, input.Description.Present, description, time.Now().UTC().Format(time.RFC3339), id)
+		RETURNING `+listColumns+`
+	`, input.Name.Present, input.Name.Value, input.Description.Present, input.Description.Value, database.Now(), id)
 
 	list, err := scanList(row)
 	if database.IsUniqueViolation(err) {
@@ -89,7 +73,7 @@ func (r *SQLiteRepository) List(ctx context.Context) ([]List, error) {
 
 func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]List, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, name, description, created_at, updated_at
+		SELECT `+listColumns+`
 		FROM lists
 		WHERE instr(bookist_fold(name), ?) > 0
 		ORDER BY updated_at DESC, id ASC
@@ -121,7 +105,7 @@ func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]List, er
 
 func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (List, error) {
 	row := r.db.QueryRowContext(ctx, `
-		SELECT id, name, description, created_at, updated_at
+		SELECT `+listColumns+`
 		FROM lists
 		WHERE id = ?
 	`, id)
@@ -155,7 +139,7 @@ func (r *SQLiteRepository) Delete(ctx context.Context, id int64) error {
 }
 
 func (r *SQLiteRepository) AddBookToList(ctx context.Context, listID, bookID int64) error {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := database.Now()
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO book_lists (list_id, book_id, created_at, updated_at)
 		VALUES (?, ?, ?, ?)
@@ -225,27 +209,9 @@ type listScanner interface {
 
 func scanList(scanner listScanner) (List, error) {
 	var list List
-	var description sql.NullString
-	var createdAt string
-	var updatedAt string
-
-	if err := scanner.Scan(&list.ID, &list.Name, &description, &createdAt, &updatedAt); err != nil {
+	err := scanner.Scan(&list.ID, &list.Name, &list.Description, database.Time(&list.CreatedAt), database.Time(&list.UpdatedAt))
+	if err != nil {
 		return List{}, err
-	}
-
-	if description.Valid {
-		list.Description = &description.String
-	}
-
-	var err error
-	list.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
-	if err != nil {
-		return List{}, fmt.Errorf("parse created_at: %w", err)
-	}
-
-	list.UpdatedAt, err = time.Parse(time.RFC3339, updatedAt)
-	if err != nil {
-		return List{}, fmt.Errorf("parse updated_at: %w", err)
 	}
 
 	return list, nil
