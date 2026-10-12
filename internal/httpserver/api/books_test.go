@@ -3,6 +3,7 @@ package api_test
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"bakku.dev/bookist/internal/books"
@@ -222,6 +224,24 @@ func TestBookAPICreateRejectsInvalidFormat(t *testing.T) {
 	testsupport.AssertSQLCount(t, app.db, 0, `SELECT COUNT(*) FROM books`)
 }
 
+func TestBookAPICreateReturnsAuthorsInRequestedOrder(t *testing.T) {
+	app := newTestApp(t)
+	gaiman, pratchett := seedGaimanAndPratchett(t, app.db)
+
+	resp := postBody(t, app.handler, "/api/books", "application/json",
+		fmt.Sprintf(`{"title":"Good Omens","author_ids":[%d,%d]}`, pratchett, gaiman))
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusCreated, resp.Code, resp.Body.String())
+	}
+	var created books.Book
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+
+	assertAPIAuthorOrder(t, created, pratchett, gaiman)
+	testsupport.AssertBookAuthors(t, app.db, created.ID, pratchett, gaiman)
+}
+
 // ── Update ────────────────────────────────────────────────────────────────────
 
 func TestBookAPIUpdateAndClear(t *testing.T) {
@@ -301,6 +321,53 @@ func TestBookAPIUpdateRequiresJSONContentType(t *testing.T) {
 	resp := httptest.NewRecorder()
 	app.handler.ServeHTTP(resp, req)
 	assertAPIError(t, resp, http.StatusUnsupportedMediaType, "unsupported_media_type", "")
+}
+
+func TestBookAPIUpdateReordersAuthors(t *testing.T) {
+	app := newTestApp(t)
+	gaiman, pratchett := seedGaimanAndPratchett(t, app.db)
+	bookID := testsupport.InsertBookRow(t, app.db, "Good Omens", nil)
+	testsupport.InsertBookAuthorRow(t, app.db, bookID, gaiman)
+	testsupport.InsertBookAuthorRow(t, app.db, bookID, pratchett)
+
+	resp := patchJSON(t, app.handler, fmt.Sprintf("/api/books/%d", bookID),
+		fmt.Sprintf(`{"author_ids":[%d,%d]}`, pratchett, gaiman))
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, resp.Code, resp.Body.String())
+	}
+	var updated books.Book
+	if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
+		t.Fatal(err)
+	}
+
+	assertAPIAuthorOrder(t, updated, pratchett, gaiman)
+	testsupport.AssertBookAuthors(t, app.db, bookID, pratchett, gaiman)
+}
+
+func TestBookAPIUpdateKeepsRequestedOrderWhenAuthorIsRemovedAndReadded(t *testing.T) {
+	app := newTestApp(t)
+	gaiman, pratchett := seedGaimanAndPratchett(t, app.db)
+	bookID := testsupport.InsertBookRow(t, app.db, "Good Omens", nil)
+	testsupport.InsertBookAuthorRow(t, app.db, bookID, pratchett)
+	testsupport.InsertBookAuthorRow(t, app.db, bookID, gaiman)
+
+	resp := patchJSON(t, app.handler, fmt.Sprintf("/api/books/%d", bookID), fmt.Sprintf(`{"author_ids":[%d]}`, pratchett))
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, resp.Code, resp.Body.String())
+	}
+	testsupport.AssertBookAuthors(t, app.db, bookID, pratchett)
+
+	resp = patchJSON(t, app.handler, fmt.Sprintf("/api/books/%d", bookID), fmt.Sprintf(`{"author_ids":[%d,%d]}`, pratchett, gaiman))
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, resp.Code, resp.Body.String())
+	}
+	var updated books.Book
+	if err := json.NewDecoder(resp.Body).Decode(&updated); err != nil {
+		t.Fatal(err)
+	}
+
+	assertAPIAuthorOrder(t, updated, pratchett, gaiman)
+	testsupport.AssertBookAuthors(t, app.db, bookID, pratchett, gaiman)
 }
 
 // ── List ──────────────────────────────────────────────────────────────────────
@@ -452,6 +519,31 @@ func TestBookAPIListReturnsEmptyArray(t *testing.T) {
 	assertEmptyJSONArray(t, app.handler, "/api/books")
 }
 
+func TestBookAPIListReturnsAuthorsInPositionOrder(t *testing.T) {
+	app := newTestApp(t)
+	gaiman, pratchett := seedGaimanAndPratchett(t, app.db)
+	bookID := testsupport.InsertBookRow(t, app.db, "Good Omens", nil)
+	testsupport.InsertBookAuthorRowAt(t, app.db, bookID, gaiman, 1)
+	testsupport.InsertBookAuthorRowAt(t, app.db, bookID, pratchett, 0)
+
+	for _, path := range []string{"/api/books", "/api/books?q=gaiman"} {
+		resp := httptest.NewRecorder()
+		app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, path, nil))
+		if resp.Code != http.StatusOK {
+			t.Fatalf("%s: expected status %d, got %d: %s", path, http.StatusOK, resp.Code, resp.Body.String())
+		}
+		var listed []books.Book
+		if err := json.NewDecoder(resp.Body).Decode(&listed); err != nil {
+			t.Fatal(err)
+		}
+
+		if len(listed) != 1 {
+			t.Fatalf("%s: expected 1 book, got %#v", path, listed)
+		}
+		assertAPIAuthorOrder(t, listed[0], pratchett, gaiman)
+	}
+}
+
 // ── Get ───────────────────────────────────────────────────────────────────────
 
 func TestBookAPIGet(t *testing.T) {
@@ -554,6 +646,46 @@ func TestBookAPIGetRejectsInvalidRequests(t *testing.T) {
 			app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, test.path, nil))
 			assertAPIError(t, resp, test.status, test.code, test.field)
 		})
+	}
+}
+
+func TestBookAPIGetReturnsAuthorsInPositionOrder(t *testing.T) {
+	app := newTestApp(t)
+	gaiman, pratchett := seedGaimanAndPratchett(t, app.db)
+	bookID := testsupport.InsertBookRow(t, app.db, "Good Omens", nil)
+	testsupport.InsertBookAuthorRowAt(t, app.db, bookID, gaiman, 1)
+	testsupport.InsertBookAuthorRowAt(t, app.db, bookID, pratchett, 0)
+
+	resp := httptest.NewRecorder()
+	app.handler.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/books/%d", bookID), nil))
+	if resp.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusOK, resp.Code, resp.Body.String())
+	}
+	var got books.Book
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+
+	assertAPIAuthorOrder(t, got, pratchett, gaiman)
+}
+
+// seedGaimanAndPratchett inserts Gaiman first so his ID is the lower one;
+// responses must follow author position, never author or relationship IDs.
+func seedGaimanAndPratchett(t *testing.T, db *sql.DB) (gaiman, pratchett int64) {
+	t.Helper()
+
+	return testsupport.InsertAuthorRow(t, db, "Neil Gaiman"), testsupport.InsertAuthorRow(t, db, "Terry Pratchett")
+}
+
+func assertAPIAuthorOrder(t *testing.T, book books.Book, want ...int64) {
+	t.Helper()
+
+	got := make([]int64, len(book.Authors))
+	for i, author := range book.Authors {
+		got[i] = author.ID
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("expected author IDs %v, got %v", want, got)
 	}
 }
 

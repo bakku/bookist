@@ -9,6 +9,5 @@ type Repository interface {
 	Search(ctx context.Context, query string) ([]Author, error)
 	GetByID(ctx context.Context, id int64) (Author, error)
 	GetByIDs(ctx context.Context, ids []int64) ([]Author, error)
-	ListByBookIDs(ctx context.Context, bookIDs []int64) (map[int64][]Author, error)
 	Delete(ctx context.Context, id int64) error
 }

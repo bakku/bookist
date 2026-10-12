@@ -211,26 +211,45 @@ func assertNullInt(t testing.TB, name string, got sql.NullInt64, want *int) {
 	}
 }
 
+// InsertBookAuthorRow links an author after the book's existing authors.
 func InsertBookAuthorRow(t testing.TB, db *sql.DB, bookID int64, authorID int64) {
 	t.Helper()
 	now := "2026-01-02T03:04:05Z"
 
 	_, err := db.ExecContext(context.Background(), `
-		INSERT INTO book_authors (book_id, author_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?)
-	`, bookID, authorID, now, now)
+		INSERT INTO book_authors (book_id, author_id, position, created_at, updated_at)
+		VALUES (?, ?, (SELECT COALESCE(MAX(position) + 1, 0) FROM book_authors WHERE book_id = ?), ?, ?)
+	`, bookID, authorID, bookID, now, now)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
+// InsertBookAuthorRowAt links an author at an explicit position, independent of
+// insertion order.
+func InsertBookAuthorRowAt(t testing.TB, db *sql.DB, bookID int64, authorID int64, position int) {
+	t.Helper()
+	now := "2026-01-02T03:04:05Z"
+
+	_, err := db.ExecContext(context.Background(), `
+		INSERT INTO book_authors (book_id, author_id, position, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+	`, bookID, authorID, position, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// AssertBookAuthors verifies the persisted author IDs in position order and
+// that positions are contiguous from zero.
 func AssertBookAuthors(t testing.TB, db *sql.DB, bookID int64, wantAuthorIDs ...int64) {
 	t.Helper()
 
 	rows, err := db.QueryContext(context.Background(), `
-		SELECT author_id
+		SELECT author_id, position
 		FROM book_authors
 		WHERE book_id = ?
+		ORDER BY position ASC
 	`, bookID)
 	if err != nil {
 		t.Fatal(err)
@@ -240,8 +259,12 @@ func AssertBookAuthors(t testing.TB, db *sql.DB, bookID int64, wantAuthorIDs ...
 	var gotIDs []int64
 	for rows.Next() {
 		var id int64
-		if err := rows.Scan(&id); err != nil {
+		var position int
+		if err := rows.Scan(&id, &position); err != nil {
 			t.Fatal(err)
+		}
+		if position != len(gotIDs) {
+			t.Fatalf("expected author_id %d at position %d, got position %d", id, len(gotIDs), position)
 		}
 		gotIDs = append(gotIDs, id)
 	}
@@ -252,16 +275,9 @@ func AssertBookAuthors(t testing.TB, db *sql.DB, bookID int64, wantAuthorIDs ...
 	if len(gotIDs) != len(wantAuthorIDs) {
 		t.Fatalf("expected %d book_authors rows, got %d", len(wantAuthorIDs), len(gotIDs))
 	}
-	gotSet := make(map[int64]bool, len(gotIDs))
-	for _, id := range gotIDs {
-		if gotSet[id] {
-			t.Fatalf("duplicate author_id %d in book_authors", id)
-		}
-		gotSet[id] = true
-	}
-	for _, want := range wantAuthorIDs {
-		if !gotSet[want] {
-			t.Fatalf("expected author_id %d not found in book_authors", want)
+	for i, want := range wantAuthorIDs {
+		if gotIDs[i] != want {
+			t.Fatalf("expected book_authors author_ids %v in position order, got %v", wantAuthorIDs, gotIDs)
 		}
 	}
 }

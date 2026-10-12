@@ -29,6 +29,7 @@ Bookist is intended to be a Go application for managing a home library.
 - Keep the Bookist stylesheet and the Merriweather/Lato WOFF2 fonts as embedded static assets. Production requires only the compiled Go binary.
 - Every table, including relationship tables, uses an SQLite-generated `INTEGER PRIMARY KEY` represented as `int64` in Go, plus `created_at` and `updated_at` timestamps. ISBN remains nullable in Go and SQLite.
 - Collections default to `updated_at DESC, id ASC`; relationship-backed collections use the relationship row's timestamps and ID.
+- Exception: a book's authors are ordered by `book_authors.position` (unique per book, set from the order of `author_ids`), because author order is data rather than edit history. The books package is the only reader and writer of `book_authors`.
 - Enforce durable invariants in both services and SQLite constraints.
 - Rewriting the initial migration is acceptable while the schema is pre-release and disposable; once compatibility matters, migrations are append-only.
 

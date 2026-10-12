@@ -30,7 +30,7 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateAuthorRequest
 		RETURNING id, name, created_at, updated_at
 	`, input.Name, createdAt, updatedAt)
 
-	return scanAuthor(row)
+	return ScanAuthor(row)
 }
 
 func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateAuthorRequest) (Author, error) {
@@ -47,7 +47,7 @@ func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateAut
 		RETURNING id, name, created_at, updated_at
 	`, input.Name.Present, name, time.Now().UTC().Format(time.RFC3339), id)
 
-	author, err := scanAuthor(row)
+	author, err := ScanAuthor(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Author{}, ErrAuthorNotFound
 	}
@@ -75,7 +75,7 @@ func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]Author, 
 
 	authors := make([]Author, 0)
 	for rows.Next() {
-		author, err := scanAuthor(rows)
+		author, err := ScanAuthor(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -89,7 +89,7 @@ func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]Author, 
 }
 
 func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (Author, error) {
-	author, err := scanAuthor(r.db.QueryRowContext(ctx, `
+	author, err := ScanAuthor(r.db.QueryRowContext(ctx, `
 		SELECT id, name, created_at, updated_at
 		FROM authors
 		WHERE id = ?
@@ -129,7 +129,7 @@ func (r *SQLiteRepository) GetByIDs(ctx context.Context, ids []int64) ([]Author,
 
 	var authors []Author
 	for rows.Next() {
-		author, err := scanAuthor(rows)
+		author, err := ScanAuthor(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -140,67 +140,6 @@ func (r *SQLiteRepository) GetByIDs(ctx context.Context, ids []int64) ([]Author,
 	}
 
 	return authors, nil
-}
-
-func (r *SQLiteRepository) ListByBookIDs(ctx context.Context, bookIDs []int64) (map[int64][]Author, error) {
-	if len(bookIDs) == 0 {
-		return map[int64][]Author{}, nil
-	}
-
-	placeholders := make([]string, len(bookIDs))
-	args := make([]any, len(bookIDs))
-	for i, id := range bookIDs {
-		placeholders[i] = "?"
-		args[i] = id
-	}
-
-	query := fmt.Sprintf(`
-		SELECT ba.book_id, a.id, a.name, a.created_at, a.updated_at
-		FROM book_authors ba
-		JOIN authors a ON a.id = ba.author_id
-		WHERE ba.book_id IN (%s)
-		ORDER BY ba.updated_at DESC, ba.id ASC
-	`, strings.Join(placeholders, ","))
-
-	rows, err := r.db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-
-	defer func() {
-		_ = rows.Close()
-	}()
-
-	result := make(map[int64][]Author)
-	for rows.Next() {
-		var bookID int64
-		var author Author
-		var name, createdAt, updatedAt string
-
-		if err := rows.Scan(&bookID, &author.ID, &name, &createdAt, &updatedAt); err != nil {
-			return nil, err
-		}
-
-		author.Name = name
-
-		author.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
-		if err != nil {
-			return nil, fmt.Errorf("parse created_at: %w", err)
-		}
-
-		author.UpdatedAt, err = time.Parse(time.RFC3339, updatedAt)
-		if err != nil {
-			return nil, fmt.Errorf("parse updated_at: %w", err)
-		}
-
-		result[bookID] = append(result[bookID], author)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return result, nil
 }
 
 func (r *SQLiteRepository) Delete(ctx context.Context, id int64) error {
@@ -220,11 +159,13 @@ func (r *SQLiteRepository) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
-type authorScanner interface {
+// RowScanner is satisfied by *sql.Row and *sql.Rows.
+type RowScanner interface {
 	Scan(dest ...any) error
 }
 
-func scanAuthor(scanner authorScanner) (Author, error) {
+// ScanAuthor scans the columns id, name, created_at, updated_at, in that order.
+func ScanAuthor(scanner RowScanner) (Author, error) {
 	var author Author
 	var createdAt string
 	var updatedAt string

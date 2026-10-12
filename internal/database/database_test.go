@@ -264,16 +264,26 @@ func TestInitialSchemaEnforcesRelationshipMetadataAndUniqueness(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
 	authorID := testsupport.InsertAuthorRow(t, db, "Frank Herbert")
+	otherAuthorID := testsupport.InsertAuthorRow(t, db, "Brian Herbert")
 	now := "2026-01-02T03:04:05Z"
 
 	if _, err := db.Exec(`INSERT INTO book_authors (book_id, author_id) VALUES (?, ?)`, bookID, authorID); err == nil {
 		t.Fatal("expected relationship metadata to be required")
 	}
-	if _, err := db.Exec(`INSERT INTO book_authors (book_id, author_id, created_at, updated_at) VALUES (?, ?, ?, ?)`, bookID, authorID, now, now); err != nil {
+	if _, err := db.Exec(`INSERT INTO book_authors (book_id, author_id, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`, bookID, authorID, 0, now, now); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT INTO book_authors (book_id, author_id, created_at, updated_at) VALUES (?, ?, ?, ?)`, bookID, authorID, now, now); err == nil {
+	if _, err := db.Exec(`INSERT INTO book_authors (book_id, author_id, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`, bookID, authorID, 1, now, now); err == nil {
 		t.Fatal("expected relationship foreign-key pair to be unique")
+	}
+	if _, err := db.Exec(`INSERT INTO book_authors (book_id, author_id, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`, bookID, otherAuthorID, 0, now, now); err == nil {
+		t.Fatal("expected author position to be unique per book")
+	}
+	if _, err := db.Exec(`INSERT INTO book_authors (book_id, author_id, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`, bookID, otherAuthorID, -1, now, now); err == nil {
+		t.Fatal("expected negative author position to violate constraint")
+	}
+	if _, err := db.Exec(`INSERT INTO book_authors (book_id, author_id, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`, bookID, otherAuthorID, "first", now, now); err == nil {
+		t.Fatal("expected non-integer author position to violate constraint")
 	}
 }
 

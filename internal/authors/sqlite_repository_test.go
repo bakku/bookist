@@ -215,52 +215,6 @@ func TestSQLiteRepositoryGetByIDsReturnsMatchingAuthors(t *testing.T) {
 	}
 }
 
-// ── ListByBookIDs ──────────────────────────────────────────────────────────────
-
-func TestSQLiteRepositoryListByBookIDsEmptyInputReturnsEmptyMap(t *testing.T) {
-	ctx := context.Background()
-	db := testsupport.OpenMigratedDB(t)
-	repository := authors.NewSQLiteRepository(db)
-
-	result, err := repository.ListByBookIDs(ctx, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result == nil {
-		t.Fatal("expected non-nil map")
-	}
-	if len(result) != 0 {
-		t.Fatalf("expected empty map, got %d entries", len(result))
-	}
-}
-
-func TestSQLiteRepositoryListByBookIDsReturnsAuthorsGroupedByBook(t *testing.T) {
-	ctx := context.Background()
-	db := testsupport.OpenMigratedDB(t)
-	repository := authors.NewSQLiteRepository(db)
-
-	bookID1 := testsupport.InsertBookRow(t, db, "Book One", nil)
-	bookID2 := testsupport.InsertBookRow(t, db, "Book Two", nil)
-	authorID := testsupport.InsertAuthorRow(t, db, "Shared Author")
-	testsupport.InsertBookAuthorRow(t, db, bookID1, authorID)
-	testsupport.InsertBookAuthorRow(t, db, bookID2, authorID)
-
-	result, err := repository.ListByBookIDs(ctx, []int64{bookID1, bookID2})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(result[bookID1]) != 1 {
-		t.Fatalf("expected 1 author for book1, got %d", len(result[bookID1]))
-	}
-	if result[bookID1][0].Name != "Shared Author" {
-		t.Fatalf("expected Shared Author, got %q", result[bookID1][0].Name)
-	}
-	if len(result[bookID2]) != 1 {
-		t.Fatalf("expected 1 author for book2, got %d", len(result[bookID2]))
-	}
-}
-
 // ── Delete ────────────────────────────────────────────────────────────────────
 
 func TestSQLiteRepositoryDeletePersistsDeletion(t *testing.T) {

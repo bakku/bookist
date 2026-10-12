@@ -278,6 +278,24 @@ func TestServiceCreateWithValidAuthorIDsReturnsHydratedAuthors(t *testing.T) {
 	testsupport.AssertBookAuthors(t, db, created.ID, author)
 }
 
+func TestServiceCreateReturnsAuthorsInRequestedOrderAndDropsRepeats(t *testing.T) {
+	service, db := testsupport.NewBookService(t)
+	author1 := testsupport.InsertAuthorRow(t, db, "Author One")
+	author2 := testsupport.InsertAuthorRow(t, db, "Author Two")
+
+	created, err := service.Create(context.Background(), books.CreateBookRequest{
+		Title:     "Good Omens",
+		AuthorIDs: []int64{author2, author1, author2},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(created.Authors) != 2 || created.Authors[0].ID != author2 || created.Authors[1].ID != author1 {
+		t.Fatalf("expected requested author order [%d %d], got %#v", author2, author1, created.Authors)
+	}
+	testsupport.AssertBookAuthors(t, db, created.ID, author2, author1)
+}
+
 func TestServiceCreateAcceptsValidFormat(t *testing.T) {
 	service, db := testsupport.NewBookService(t)
 
@@ -528,25 +546,23 @@ func TestServiceUpdateReplacesAndHydratesAuthors(t *testing.T) {
 	testsupport.AssertBookAuthors(t, db, bookID)
 }
 
-func TestServiceUpdateReturnsAuthorsInPersistedRelationshipOrder(t *testing.T) {
+func TestServiceUpdateReturnsAuthorsInRequestedOrder(t *testing.T) {
 	service, db := testsupport.NewBookService(t)
 	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
 	retainedAuthorID := testsupport.InsertAuthorRow(t, db, "Author One")
 	newAuthorID := testsupport.InsertAuthorRow(t, db, "Author Two")
 	testsupport.InsertBookAuthorRow(t, db, bookID, retainedAuthorID)
-	if _, err := db.Exec(`UPDATE book_authors SET created_at = '2000-01-01T00:00:00Z', updated_at = '2000-01-01T00:00:00Z' WHERE book_id = ?`, bookID); err != nil {
-		t.Fatal(err)
-	}
 
 	updated, err := service.Update(context.Background(), bookID, books.UpdateBookRequest{
-		AuthorIDs: updateValueOf([]int64{retainedAuthorID, newAuthorID}),
+		AuthorIDs: updateValueOf([]int64{newAuthorID, retainedAuthorID}),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(updated.Authors) != 2 || updated.Authors[0].ID != newAuthorID || updated.Authors[1].ID != retainedAuthorID {
-		t.Fatalf("expected newly added author before retained author, got %#v", updated.Authors)
+		t.Fatalf("expected requested author order, got %#v", updated.Authors)
 	}
+	testsupport.AssertBookAuthors(t, db, bookID, newAuthorID, retainedAuthorID)
 
 	listed, err := service.List(context.Background())
 	if err != nil {

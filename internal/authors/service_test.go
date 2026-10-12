@@ -172,32 +172,6 @@ func TestServiceGetByIDsReturnsSpecifiedAuthors(t *testing.T) {
 	}
 }
 
-// ── ListByBookIDs ─────────────────────────────────────────────────────────────
-
-func TestServiceListByBookIDsReturnsAuthorsGroupedByBook(t *testing.T) {
-	db := testsupport.OpenMigratedDB(t)
-	service := authors.NewService(authors.NewSQLiteRepository(db))
-	bookID1 := testsupport.InsertBookRow(t, db, "Pride and Prejudice", nil)
-	bookID2 := testsupport.InsertBookRow(t, db, "Kindred", nil)
-	janeID := testsupport.InsertAuthorRow(t, db, "Jane Austen")
-	octaviaID := testsupport.InsertAuthorRow(t, db, "Octavia Butler")
-	testsupport.InsertBookAuthorRow(t, db, bookID1, janeID)
-	testsupport.InsertBookAuthorRow(t, db, bookID2, octaviaID)
-
-	result, err := service.ListByBookIDs(context.Background(), []int64{bookID1, bookID2})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(result[bookID1]) != 1 || result[bookID1][0].Name != "Jane Austen" {
-		t.Fatalf("expected Jane Austen for Pride and Prejudice, got %#v", result[bookID1])
-	}
-
-	if len(result[bookID2]) != 1 || result[bookID2][0].Name != "Octavia Butler" {
-		t.Fatalf("expected Octavia Butler for Kindred, got %#v", result[bookID2])
-	}
-}
-
 // ── Delete ────────────────────────────────────────────────────────────────────
 
 func TestServiceDeletePersistsDeletion(t *testing.T) {
