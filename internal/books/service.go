@@ -55,7 +55,7 @@ func (s *Service) List(ctx context.Context) ([]Book, error) {
 		return nil, err
 	}
 
-	return s.withAuthorsAndCover(ctx, books)
+	return withCoverURLs(books), nil
 }
 
 func (s *Service) Search(ctx context.Context, query string) ([]Book, error) {
@@ -64,7 +64,7 @@ func (s *Service) Search(ctx context.Context, query string) ([]Book, error) {
 		return nil, err
 	}
 
-	return s.withAuthorsAndCover(ctx, books)
+	return withCoverURLs(books), nil
 }
 
 func (s *Service) ListByListID(ctx context.Context, listID int64) ([]Book, error) {
@@ -73,7 +73,7 @@ func (s *Service) ListByListID(ctx context.Context, listID int64) ([]Book, error
 		return nil, err
 	}
 
-	return s.withAuthorsAndCover(ctx, books)
+	return withCoverURLs(books), nil
 }
 
 func (s *Service) SearchByListID(ctx context.Context, listID int64, query string) ([]Book, error) {
@@ -90,7 +90,7 @@ func (s *Service) SearchByListID(ctx context.Context, listID int64, query string
 		return nil, err
 	}
 
-	return s.withAuthorsAndCover(ctx, books)
+	return withCoverURLs(books), nil
 }
 
 func (s *Service) GetByID(ctx context.Context, id int64) (Book, error) {
@@ -99,12 +99,9 @@ func (s *Service) GetByID(ctx context.Context, id int64) (Book, error) {
 		return Book{}, err
 	}
 
-	hydrated, err := s.withAuthorsAndCover(ctx, []Book{book})
-	if err != nil {
-		return Book{}, err
-	}
+	setCoverURL(&book)
 
-	return hydrated[0], nil
+	return book, nil
 }
 
 func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, error) {
@@ -224,7 +221,7 @@ func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, er
 		return Book{}, err
 	}
 
-	dedupedAuthorIDs, found, err := s.validateAuthorIDs(ctx, input.AuthorIDs)
+	dedupedAuthorIDs, err := s.validateAuthorIDs(ctx, input.AuthorIDs)
 	if err != nil {
 		return Book{}, err
 	}
@@ -246,12 +243,6 @@ func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, er
 			}
 		}
 		return Book{}, err
-	}
-
-	if len(input.AuthorIDs) > 0 {
-		book.Authors = found
-	} else {
-		book.Authors = []authors.Author{}
 	}
 
 	setCoverURL(&book)
@@ -312,7 +303,7 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateBookRequest)
 	}
 
 	if input.AuthorIDs.Present {
-		deduped, _, err := s.validateAuthorIDs(ctx, valueOrZero(input.AuthorIDs.Value))
+		deduped, err := s.validateAuthorIDs(ctx, valueOrZero(input.AuthorIDs.Value))
 		if err != nil {
 			return Book{}, err
 		}
@@ -430,12 +421,14 @@ func validateBookState(state bookValidationState) error {
 	return nil
 }
 
-func (s *Service) validateAuthorIDs(ctx context.Context, authorIDs []int64) ([]int64, []authors.Author, error) {
+// validateAuthorIDs drops repeated IDs, keeping each author's first position,
+// and reports ErrAuthorNotFound unless every author exists.
+func (s *Service) validateAuthorIDs(ctx context.Context, authorIDs []int64) ([]int64, error) {
 	deduped := make([]int64, 0, len(authorIDs))
 	seen := make(map[int64]bool, len(authorIDs))
 	for _, authorID := range authorIDs {
 		if authorID <= 0 {
-			return nil, nil, ErrAuthorNotFound
+			return nil, ErrAuthorNotFound
 		}
 		if !seen[authorID] {
 			seen[authorID] = true
@@ -444,11 +437,11 @@ func (s *Service) validateAuthorIDs(ctx context.Context, authorIDs []int64) ([]i
 	}
 
 	if len(deduped) == 0 {
-		return deduped, nil, nil
+		return deduped, nil
 	}
 	found, err := s.authorRepo.GetByIDs(ctx, deduped)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	foundIDs := make(map[int64]bool, len(found))
 	for _, author := range found {
@@ -456,10 +449,10 @@ func (s *Service) validateAuthorIDs(ctx context.Context, authorIDs []int64) ([]i
 	}
 	for _, authorID := range deduped {
 		if !foundIDs[authorID] {
-			return nil, nil, ErrAuthorNotFound
+			return nil, ErrAuthorNotFound
 		}
 	}
-	return deduped, found, nil
+	return deduped, nil
 }
 
 func (s *Service) Delete(ctx context.Context, id int64) error {
@@ -481,32 +474,12 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (s *Service) withAuthorsAndCover(ctx context.Context, books []Book) ([]Book, error) {
-	if len(books) == 0 {
-		return books, nil
-	}
-
-	ids := make([]int64, len(books))
-	for i, b := range books {
-		ids[i] = b.ID
-	}
-
-	authorsByBook, err := s.authorRepo.ListByBookIDs(ctx, ids)
-	if err != nil {
-		return nil, err
-	}
-
-	for i, b := range books {
-		if aa, ok := authorsByBook[b.ID]; ok {
-			books[i].Authors = aa
-		} else {
-			books[i].Authors = []authors.Author{}
-		}
-
+func withCoverURLs(books []Book) []Book {
+	for i := range books {
 		setCoverURL(&books[i])
 	}
 
-	return books, nil
+	return books
 }
 
 func setCoverURL(book *Book) {

@@ -51,7 +51,10 @@ func (r *SQLiteRepository) GetByID(ctx context.Context, id int64) (Book, error) 
 	if err == sql.ErrNoRows {
 		return Book{}, domain.ErrBookNotFound
 	}
-	return book, err
+	if err != nil {
+		return Book{}, err
+	}
+	return loadBookAuthors(ctx, r.db, book)
 }
 
 func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]Book, error) {
@@ -79,6 +82,10 @@ func (r *SQLiteRepository) Search(ctx context.Context, query string) ([]Book, er
 		books = append(books, book)
 	}
 	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if err := loadAuthors(ctx, r.db, books); err != nil {
 		return nil, err
 	}
 
@@ -128,6 +135,10 @@ func (r *SQLiteRepository) SearchByListID(ctx context.Context, listID int64, que
 	}
 
 	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if err := loadAuthors(ctx, r.db, bookList); err != nil {
 		return nil, err
 	}
 
@@ -264,17 +275,20 @@ func (r *SQLiteRepository) Create(ctx context.Context, input CreateBookRequest) 
 		return Book{}, err
 	}
 
-	for _, authorID := range input.AuthorIDs {
-		if err := insertBookAuthor(ctx, tx, book.ID, authorID, createdAt); err != nil {
+	for position, authorID := range input.AuthorIDs {
+		if err := insertBookAuthor(ctx, tx, book.ID, authorID, position, createdAt); err != nil {
 			return Book{}, err
 		}
+	}
+
+	book, err = loadBookAuthors(ctx, tx, book)
+	if err != nil {
+		return Book{}, err
 	}
 
 	if err := tx.Commit(); err != nil {
 		return Book{}, err
 	}
-
-	book.Authors = []authors.Author{}
 
 	return book, nil
 }
@@ -346,88 +360,13 @@ func (r *SQLiteRepository) Update(ctx context.Context, id int64, input UpdateBoo
 	}
 
 	if input.AuthorIDs.Present {
-		desired := make(map[int64]bool)
-		if input.AuthorIDs.Value != nil {
-			for _, authorID := range *input.AuthorIDs.Value {
-				desired[authorID] = true
-			}
-		}
-
-		rows, err := tx.QueryContext(ctx, `SELECT author_id FROM book_authors WHERE book_id = ?`, id)
-		if err != nil {
+		if err := replaceBookAuthors(ctx, tx, id, valueOrZero(input.AuthorIDs.Value), updatedAt); err != nil {
 			return UpdateResult{}, err
-		}
-		existing := make(map[int64]bool)
-		for rows.Next() {
-			var authorID int64
-			if err := rows.Scan(&authorID); err != nil {
-				_ = rows.Close()
-				return UpdateResult{}, err
-			}
-			existing[authorID] = true
-		}
-		if err := rows.Close(); err != nil {
-			return UpdateResult{}, err
-		}
-		if err := rows.Err(); err != nil {
-			return UpdateResult{}, err
-		}
-
-		for authorID := range existing {
-			if !desired[authorID] {
-				if _, err := tx.ExecContext(ctx, `DELETE FROM book_authors WHERE book_id = ? AND author_id = ?`, id, authorID); err != nil {
-					return UpdateResult{}, err
-				}
-			}
-		}
-		inserted := make(map[int64]bool)
-		if input.AuthorIDs.Value != nil {
-			for _, authorID := range *input.AuthorIDs.Value {
-				if existing[authorID] || inserted[authorID] {
-					continue
-				}
-				if err := insertBookAuthor(ctx, tx, id, authorID, updatedAt); err != nil {
-					return UpdateResult{}, err
-				}
-				inserted[authorID] = true
-			}
 		}
 	}
 
-	authorRows, err := tx.QueryContext(ctx, `
-		SELECT a.id, a.name, a.created_at, a.updated_at
-		FROM book_authors ba
-		JOIN authors a ON a.id = ba.author_id
-		WHERE ba.book_id = ?
-		ORDER BY ba.updated_at DESC, ba.id ASC
-	`, id)
+	book, err = loadBookAuthors(ctx, tx, book)
 	if err != nil {
-		return UpdateResult{}, err
-	}
-	book.Authors = make([]authors.Author, 0)
-	for authorRows.Next() {
-		var author authors.Author
-		var createdAt, updatedAt string
-		if err := authorRows.Scan(&author.ID, &author.Name, &createdAt, &updatedAt); err != nil {
-			_ = authorRows.Close()
-			return UpdateResult{}, err
-		}
-		author.CreatedAt, err = time.Parse(time.RFC3339, createdAt)
-		if err != nil {
-			_ = authorRows.Close()
-			return UpdateResult{}, fmt.Errorf("parse author created_at: %w", err)
-		}
-		author.UpdatedAt, err = time.Parse(time.RFC3339, updatedAt)
-		if err != nil {
-			_ = authorRows.Close()
-			return UpdateResult{}, fmt.Errorf("parse author updated_at: %w", err)
-		}
-		book.Authors = append(book.Authors, author)
-	}
-	if err := authorRows.Close(); err != nil {
-		return UpdateResult{}, err
-	}
-	if err := authorRows.Err(); err != nil {
 		return UpdateResult{}, err
 	}
 
@@ -459,15 +398,155 @@ func (r *SQLiteRepository) Delete(ctx context.Context, id int64) error {
 
 // insertBookAuthor reports a missing author, including one deleted after
 // service validation, as ErrAuthorNotFound.
-func insertBookAuthor(ctx context.Context, tx *sql.Tx, bookID, authorID int64, timestamp string) error {
+func insertBookAuthor(ctx context.Context, tx *sql.Tx, bookID, authorID int64, position int, timestamp string) error {
 	_, err := tx.ExecContext(ctx, `
-		INSERT INTO book_authors (book_id, author_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?)
-	`, bookID, authorID, timestamp, timestamp)
+		INSERT INTO book_authors (book_id, author_id, position, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+	`, bookID, authorID, position, timestamp, timestamp)
 	if database.IsForeignKeyViolation(err) {
 		return ErrAuthorNotFound
 	}
 	return err
+}
+
+// replaceBookAuthors makes authorIDs, which must not contain duplicates, the
+// book's authors in that order. Rows for retained authors are kept so their ID
+// and created_at survive; only rows whose position changes get a new updated_at.
+func replaceBookAuthors(ctx context.Context, tx *sql.Tx, bookID int64, authorIDs []int64, timestamp string) error {
+	rows, err := tx.QueryContext(ctx, `SELECT author_id, position FROM book_authors WHERE book_id = ?`, bookID)
+	if err != nil {
+		return err
+	}
+	existing := make(map[int64]int)
+	maxPosition := -1
+	for rows.Next() {
+		var authorID int64
+		var position int
+		if err := rows.Scan(&authorID, &position); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		existing[authorID] = position
+		maxPosition = max(maxPosition, position)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	desired := make(map[int64]bool, len(authorIDs))
+	for _, authorID := range authorIDs {
+		desired[authorID] = true
+	}
+	for authorID := range existing {
+		if !desired[authorID] {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM book_authors WHERE book_id = ? AND author_id = ?`, bookID, authorID); err != nil {
+				return err
+			}
+		}
+	}
+
+	// UNIQUE (book_id, position) is checked per row, so moving retained rows
+	// straight to their new positions could collide with rows not yet moved.
+	// Park them above every old and new position first.
+	if _, err := tx.ExecContext(ctx, `UPDATE book_authors SET position = position + ? WHERE book_id = ?`,
+		maxPosition+1+len(authorIDs), bookID); err != nil {
+		return err
+	}
+
+	for position, authorID := range authorIDs {
+		oldPosition, retained := existing[authorID]
+		if !retained {
+			if err := insertBookAuthor(ctx, tx, bookID, authorID, position, timestamp); err != nil {
+				return err
+			}
+			continue
+		}
+
+		updatedAt := "updated_at"
+		args := []any{position}
+		if oldPosition != position {
+			updatedAt = "?"
+			args = append(args, timestamp)
+		}
+		args = append(args, bookID, authorID)
+		if _, err := tx.ExecContext(ctx, `UPDATE book_authors SET position = ?, updated_at = `+updatedAt+` WHERE book_id = ? AND author_id = ?`, args...); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+type authorQuerier interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+// bookAuthorScanner prefixes an author row scan with its book ID.
+type bookAuthorScanner struct {
+	bookID *int64
+	rows   *sql.Rows
+}
+
+func (s bookAuthorScanner) Scan(dest ...any) error {
+	return s.rows.Scan(append([]any{s.bookID}, dest...)...)
+}
+
+// loadBookAuthors returns book with its authors loaded.
+func loadBookAuthors(ctx context.Context, q authorQuerier, book Book) (Book, error) {
+	loaded := []Book{book}
+	if err := loadAuthors(ctx, q, loaded); err != nil {
+		return Book{}, err
+	}
+	return loaded[0], nil
+}
+
+// loadAuthors sets Authors on every book, ordered by book_authors.position.
+// This is deliberately not the updated_at DESC collection order: author order
+// is part of the book's data, not edit history. Books without authors get an
+// empty, non-nil slice.
+func loadAuthors(ctx context.Context, q authorQuerier, books []Book) error {
+	if len(books) == 0 {
+		return nil
+	}
+
+	placeholders := make([]string, len(books))
+	args := make([]any, len(books))
+	indexByID := make(map[int64]int, len(books))
+	for i := range books {
+		placeholders[i] = "?"
+		args[i] = books[i].ID
+		indexByID[books[i].ID] = i
+		books[i].Authors = []authors.Author{}
+	}
+
+	rows, err := q.QueryContext(ctx, `
+		SELECT ba.book_id, a.id, a.name, a.created_at, a.updated_at
+		FROM book_authors ba
+		JOIN authors a ON a.id = ba.author_id
+		WHERE ba.book_id IN (`+strings.Join(placeholders, ",")+`)
+		ORDER BY ba.book_id ASC, ba.position ASC
+	`, args...)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	for rows.Next() {
+		var bookID int64
+		author, err := authors.ScanAuthor(bookAuthorScanner{bookID: &bookID, rows: rows})
+		if err != nil {
+			return err
+		}
+		i := indexByID[bookID]
+		books[i].Authors = append(books[i].Authors, author)
+	}
+
+	return rows.Err()
 }
 
 type bookScanner interface {

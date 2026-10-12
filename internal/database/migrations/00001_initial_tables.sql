@@ -62,9 +62,11 @@ CREATE TABLE book_authors (
     id INTEGER PRIMARY KEY,
     book_id INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
     author_id INTEGER NOT NULL REFERENCES authors(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL CHECK (typeof(position) = 'integer' AND position >= 0),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    UNIQUE (book_id, author_id)
+    UNIQUE (book_id, author_id),
+    UNIQUE (book_id, position)
 );
 CREATE TABLE lists (
     id INTEGER PRIMARY KEY,

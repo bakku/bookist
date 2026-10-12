@@ -2,10 +2,13 @@ package books_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 
+	"bakku.dev/bookist/internal/authors"
 	"bakku.dev/bookist/internal/books"
 	"bakku.dev/bookist/internal/domain"
 	"bakku.dev/bookist/internal/optional"
@@ -163,6 +166,26 @@ func TestSQLiteRepositoryCreateReturnsErrAuthorNotFoundForMissingAuthor(t *testi
 	testsupport.AssertSQLCount(t, db, 0, `SELECT COUNT(*) FROM book_authors`)
 }
 
+func TestSQLiteRepositoryCreatePersistsAuthorOrder(t *testing.T) {
+	ctx := context.Background()
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	author1 := testsupport.InsertAuthorRow(t, db, "Author One")
+	author2 := testsupport.InsertAuthorRow(t, db, "Author Two")
+	author3 := testsupport.InsertAuthorRow(t, db, "Author Three")
+
+	created, err := repository.Create(ctx, books.CreateBookRequest{
+		Title:     "Good Omens",
+		AuthorIDs: []int64{author3, author1, author2},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testsupport.AssertBookAuthors(t, db, created.ID, author3, author1, author2)
+	assertAuthorOrder(t, created.Authors, author3, author1, author2)
+}
+
 // ── GetByID ───────────────────────────────────────────────────────────────────
 
 func TestSQLiteRepositoryGetByIDReturnsPersistedBook(t *testing.T) {
@@ -190,6 +213,34 @@ func TestSQLiteRepositoryGetByIDReturnsErrBookNotFound(t *testing.T) {
 	_, err := books.NewSQLiteRepository(db).GetByID(context.Background(), 999999)
 	if !errors.Is(err, domain.ErrBookNotFound) {
 		t.Fatalf("expected ErrBookNotFound, got %v", err)
+	}
+}
+
+func TestSQLiteRepositoryGetByIDReturnsAuthorsInPositionOrder(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	bookID, wantAuthorIDs := seedBookWithReversedAuthors(t, db, "Good Omens")
+
+	got, err := repository.GetByID(context.Background(), bookID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertAuthorOrder(t, got.Authors, wantAuthorIDs...)
+}
+
+func TestSQLiteRepositoryGetByIDReturnsEmptyAuthorsForBookWithoutAuthors(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+
+	got, err := repository.GetByID(context.Background(), bookID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Authors == nil || len(got.Authors) != 0 {
+		t.Fatalf("expected empty non-nil authors, got %#v", got.Authors)
 	}
 }
 
@@ -247,8 +298,8 @@ func TestSQLiteRepositoryUpdatePersistsScalarsAndReconcilesAuthors(t *testing.T)
 		t.Fatalf("expected created_at preserved and updated_at advanced: created=%v updated=%v", created, updated)
 	}
 	testsupport.AssertBookAuthors(t, db, created.ID, author2, author3)
-	if len(updated.Authors) != 2 || updated.Authors[0].ID != author3 || updated.Authors[1].ID != author2 {
-		t.Fatalf("expected canonical relationship order [%d %d], got %#v", author3, author2, updated.Authors)
+	if len(updated.Authors) != 2 || updated.Authors[0].ID != author2 || updated.Authors[1].ID != author3 {
+		t.Fatalf("expected relationship order [%d %d], got %#v", author2, author3, updated.Authors)
 	}
 
 	var gotID int64
@@ -257,8 +308,11 @@ func TestSQLiteRepositoryUpdatePersistsScalarsAndReconcilesAuthors(t *testing.T)
 		Scan(&gotID, &gotCreatedAt, &gotUpdatedAt); err != nil {
 		t.Fatal(err)
 	}
-	if gotID != relationshipID || gotCreatedAt != relationshipCreatedAt || gotUpdatedAt != relationshipUpdatedAt {
-		t.Fatalf("expected unchanged relationship row to be preserved")
+	if gotID != relationshipID || gotCreatedAt != relationshipCreatedAt {
+		t.Fatalf("expected retained relationship row to keep its ID and created_at")
+	}
+	if gotUpdatedAt == relationshipUpdatedAt {
+		t.Fatalf("expected moved relationship row to advance updated_at")
 	}
 }
 
@@ -347,8 +401,119 @@ func TestSQLiteRepositoryUpdateReturnsErrAuthorNotFoundForMissingAuthor(t *testi
 	testsupport.AssertBookAuthors(t, db, bookID, authorID)
 }
 
+func TestSQLiteRepositoryUpdateReordersAuthorsWithoutChangingMembership(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	bookID := testsupport.InsertBookRow(t, db, "Good Omens", nil)
+	author1 := testsupport.InsertAuthorRow(t, db, "Author One")
+	author2 := testsupport.InsertAuthorRow(t, db, "Author Two")
+	author3 := testsupport.InsertAuthorRow(t, db, "Author Three")
+	testsupport.InsertBookAuthorRow(t, db, bookID, author1)
+	testsupport.InsertBookAuthorRow(t, db, bookID, author2)
+	testsupport.InsertBookAuthorRow(t, db, bookID, author3)
+	var relationshipIDs [3]int64
+	if err := db.QueryRow(`
+		SELECT
+			(SELECT id FROM book_authors WHERE book_id = ?1 AND author_id = ?2),
+			(SELECT id FROM book_authors WHERE book_id = ?1 AND author_id = ?3),
+			(SELECT id FROM book_authors WHERE book_id = ?1 AND author_id = ?4)
+	`, bookID, author1, author2, author3).Scan(&relationshipIDs[0], &relationshipIDs[1], &relationshipIDs[2]); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := repository.Update(context.Background(), bookID, books.UpdateBookRequest{
+		AuthorIDs: updateValueOf([]int64{author3, author1, author2}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testsupport.AssertBookAuthors(t, db, bookID, author3, author1, author2)
+	assertAuthorOrder(t, result.Book.Authors, author3, author1, author2)
+	testsupport.AssertSQLCount(t, db, 3, `SELECT COUNT(*) FROM book_authors WHERE id IN (?, ?, ?)`,
+		relationshipIDs[0], relationshipIDs[1], relationshipIDs[2])
+}
+
+func TestSQLiteRepositoryUpdateRemovesAndReaddsAuthorInRequestedOrder(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	bookID := testsupport.InsertBookRow(t, db, "Good Omens", nil)
+	pratchett := testsupport.InsertAuthorRow(t, db, "Terry Pratchett")
+	gaiman := testsupport.InsertAuthorRow(t, db, "Neil Gaiman")
+	testsupport.InsertBookAuthorRow(t, db, bookID, pratchett)
+	testsupport.InsertBookAuthorRow(t, db, bookID, gaiman)
+
+	for _, step := range []struct {
+		name      string
+		authorIDs []int64
+	}{
+		{name: "remove", authorIDs: []int64{pratchett}},
+		{name: "re-add after", authorIDs: []int64{pratchett, gaiman}},
+		{name: "re-add before", authorIDs: []int64{gaiman, pratchett}},
+		{name: "remove first", authorIDs: []int64{pratchett}},
+		{name: "re-add first", authorIDs: []int64{gaiman, pratchett}},
+		{name: "clear", authorIDs: []int64{}},
+		{name: "restore reversed", authorIDs: []int64{pratchett, gaiman}},
+	} {
+		result, err := repository.Update(context.Background(), bookID, books.UpdateBookRequest{
+			AuthorIDs: updateValueOf(step.authorIDs),
+		})
+		if err != nil {
+			t.Fatalf("%s: %v", step.name, err)
+		}
+
+		testsupport.AssertBookAuthors(t, db, bookID, step.authorIDs...)
+		assertAuthorOrder(t, result.Book.Authors, step.authorIDs...)
+	}
+}
+
+func TestSQLiteRepositoryUpdateKeepsAuthorsWhenOmitted(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	bookID, wantAuthorIDs := seedBookWithReversedAuthors(t, db, "Good Omens")
+
+	result, err := repository.Update(context.Background(), bookID, books.UpdateBookRequest{
+		Title: updateValueOf("Good Omens, Revised"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testsupport.AssertBookAuthors(t, db, bookID, wantAuthorIDs...)
+	assertAuthorOrder(t, result.Book.Authors, wantAuthorIDs...)
+}
+
 func optionalNull[T any]() optional.Value[T] {
 	return optional.Value[T]{Present: true}
+}
+
+// seedBookWithReversedAuthors links three authors whose positions differ from
+// both their insertion order and their IDs, and returns the author IDs in
+// position order.
+func seedBookWithReversedAuthors(t *testing.T, db *sql.DB, title string) (int64, []int64) {
+	t.Helper()
+
+	bookID := testsupport.InsertBookRow(t, db, title, nil)
+	author1 := testsupport.InsertAuthorRow(t, db, title+" Author One")
+	author2 := testsupport.InsertAuthorRow(t, db, title+" Author Two")
+	author3 := testsupport.InsertAuthorRow(t, db, title+" Author Three")
+	testsupport.InsertBookAuthorRowAt(t, db, bookID, author1, 2)
+	testsupport.InsertBookAuthorRowAt(t, db, bookID, author2, 0)
+	testsupport.InsertBookAuthorRowAt(t, db, bookID, author3, 1)
+
+	return bookID, []int64{author2, author3, author1}
+}
+
+func assertAuthorOrder(t *testing.T, got []authors.Author, want ...int64) {
+	t.Helper()
+
+	gotIDs := make([]int64, len(got))
+	for i, author := range got {
+		gotIDs[i] = author.ID
+	}
+	if !slices.Equal(gotIDs, want) {
+		t.Fatalf("expected author IDs %v, got %v", want, gotIDs)
+	}
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────
@@ -542,6 +707,32 @@ func TestSQLiteRepositoryListReadsPersistedBooks(t *testing.T) {
 	}
 }
 
+func TestSQLiteRepositoryListReturnsAuthorsInPositionOrder(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	firstBookID, firstAuthorIDs := seedBookWithReversedAuthors(t, db, "Good Omens")
+	secondBookID, secondAuthorIDs := seedBookWithReversedAuthors(t, db, "Dune")
+
+	listed, err := repository.List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(listed) != 2 {
+		t.Fatalf("expected 2 books, got %#v", listed)
+	}
+	for _, book := range listed {
+		switch book.ID {
+		case firstBookID:
+			assertAuthorOrder(t, book.Authors, firstAuthorIDs...)
+		case secondBookID:
+			assertAuthorOrder(t, book.Authors, secondAuthorIDs...)
+		default:
+			t.Fatalf("unexpected book %#v", book)
+		}
+	}
+}
+
 // ── Search ────────────────────────────────────────────────────────────────────
 
 func TestSQLiteRepositorySearchMatchesTitlesCaseInsensitively(t *testing.T) {
@@ -689,6 +880,24 @@ func TestSQLiteRepositorySearchTreatsSQLWildcardsLiterally(t *testing.T) {
 	}
 }
 
+func TestSQLiteRepositorySearchReturnsAuthorsInPositionOrder(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	bookID, wantAuthorIDs := seedBookWithReversedAuthors(t, db, "Good Omens")
+	seedBookWithReversedAuthors(t, db, "Dune")
+
+	// Matching one linked author must still return all of the book's authors.
+	matched, err := repository.Search(context.Background(), "good omens author two")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(matched) != 1 || matched[0].ID != bookID {
+		t.Fatalf("expected only book %d, got %#v", bookID, matched)
+	}
+	assertAuthorOrder(t, matched[0].Authors, wantAuthorIDs...)
+}
+
 // ── ListByListID ──────────────────────────────────────────────────────────────
 
 func TestSQLiteRepositoryListByListIDReturnsBooksInList(t *testing.T) {
@@ -832,4 +1041,22 @@ func TestSQLiteRepositorySearchByListIDMatchesNonASCIIAndAuthors(t *testing.T) {
 	if len(matched) != 1 || matched[0].ID != authorBookID {
 		t.Fatalf("expected only book %d, got %#v", authorBookID, matched)
 	}
+}
+
+func TestSQLiteRepositoryListByListIDReturnsAuthorsInPositionOrder(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	repository := books.NewSQLiteRepository(db)
+	bookID, wantAuthorIDs := seedBookWithReversedAuthors(t, db, "Good Omens")
+	listID := testsupport.InsertListRow(t, db, "Favorites")
+	testsupport.InsertBookListRow(t, db, listID, bookID)
+
+	listed, err := repository.ListByListID(context.Background(), listID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(listed) != 1 || listed[0].ID != bookID {
+		t.Fatalf("expected only book %d, got %#v", bookID, listed)
+	}
+	assertAuthorOrder(t, listed[0].Authors, wantAuthorIDs...)
 }

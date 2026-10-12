@@ -55,10 +55,6 @@ func (s *Service) GetByIDs(ctx context.Context, ids []int64) ([]Author, error) {
 	return s.repository.GetByIDs(ctx, ids)
 }
 
-func (s *Service) ListByBookIDs(ctx context.Context, bookIDs []int64) (map[int64][]Author, error) {
-	return s.repository.ListByBookIDs(ctx, bookIDs)
-}
-
 func (s *Service) Delete(ctx context.Context, id int64) error {
 	return s.repository.Delete(ctx, id)
 }
