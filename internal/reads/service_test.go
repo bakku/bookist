@@ -53,6 +53,7 @@ func TestServiceCreateNormalizesEmptyOptionalStringsToNull(t *testing.T) {
 	if created.StartedAt != nil || created.FinishedAt != nil || created.AbandonedAt != nil || created.Notes != nil {
 		t.Fatalf("expected empty optional values to become nil, got %#v", created)
 	}
+	testsupport.AssertReadRow(t, db, created.ID, testsupport.ReadRowAssertion{BookID: bookID})
 }
 
 func TestServiceCreateRejectsInvalidInput(t *testing.T) {
@@ -140,31 +141,40 @@ func TestServiceUpdateMergesNormalizesAndClearsFields(t *testing.T) {
 	}
 }
 
-func TestServiceUpdateRejectsEmptyAndBlankValues(t *testing.T) {
+func TestServiceUpdateRejectsEmptyRequest(t *testing.T) {
 	db := testsupport.OpenMigratedDB(t)
 	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
 	readID := int64(100)
 	testsupport.InsertReadRow(t, db, testsupport.ReadRow{ID: readID, BookID: bookID, CreatedAt: "2026-01-01T00:00:00Z"})
-	service := reads.NewService(reads.NewSQLiteRepository(db))
 
-	for _, test := range []struct {
-		name  string
-		input reads.UpdateReadRequest
-		want  error
-	}{
-		{name: "no fields", input: reads.UpdateReadRequest{}, want: reads.ErrNoFieldsToUpdate},
-		{name: "blank started date", input: reads.UpdateReadRequest{StartedAt: present("  ")}, want: reads.ErrBlankOptionalString},
-		{name: "blank finished date", input: reads.UpdateReadRequest{FinishedAt: present("")}, want: reads.ErrBlankOptionalString},
-		{name: "blank abandoned date", input: reads.UpdateReadRequest{AbandonedAt: present(" ")}, want: reads.ErrBlankOptionalString},
-		{name: "blank notes", input: reads.UpdateReadRequest{Notes: present("  ")}, want: reads.ErrBlankOptionalString},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			_, err := service.Update(context.Background(), readID, test.input)
-			if !errors.Is(err, test.want) {
-				t.Fatalf("expected %v, got %v", test.want, err)
-			}
-		})
+	_, err := reads.NewService(reads.NewSQLiteRepository(db)).Update(context.Background(), readID, reads.UpdateReadRequest{})
+	if !errors.Is(err, reads.ErrNoFieldsToUpdate) {
+		t.Fatalf("expected ErrNoFieldsToUpdate, got %v", err)
 	}
+}
+
+func TestServiceUpdateConvertsBlankOptionalStringsToNull(t *testing.T) {
+	db := testsupport.OpenMigratedDB(t)
+	bookID := testsupport.InsertBookRow(t, db, "Dune", nil)
+	readID := int64(100)
+	testsupport.InsertReadRow(t, db, testsupport.ReadRow{
+		ID: readID, BookID: bookID, StartedAt: new("2026-01-01"), AbandonedAt: new("2026-01-03"),
+		Rating: new(4.5), Notes: new("Old notes"), CreatedAt: "2026-01-04T00:00:00Z",
+	})
+
+	updated, err := reads.NewService(reads.NewSQLiteRepository(db)).Update(context.Background(), readID, reads.UpdateReadRequest{
+		StartedAt:   present("  "),
+		FinishedAt:  present(""),
+		AbandonedAt: present(" "),
+		Notes:       present("  "),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.StartedAt != nil || updated.FinishedAt != nil || updated.AbandonedAt != nil || updated.Notes != nil {
+		t.Fatalf("expected blank optional values to become nil, got %#v", updated)
+	}
+	testsupport.AssertReadRow(t, db, readID, testsupport.ReadRowAssertion{BookID: bookID, Rating: new(4.5)})
 }
 
 func TestServiceUpdateValidatesMergedRead(t *testing.T) {

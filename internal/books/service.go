@@ -110,108 +110,23 @@ func (s *Service) Create(ctx context.Context, input CreateBookRequest) (Book, er
 		return Book{}, ErrTitleRequired
 	}
 
-	if input.ISBN != nil {
-		isbn := strings.TrimSpace(*input.ISBN)
-		if isbn == "" {
-			input.ISBN = nil
-		} else {
-			input.ISBN = &isbn
-		}
-	}
-
-	if input.Language != nil {
-		v := strings.TrimSpace(*input.Language)
-		if v == "" {
-			input.Language = nil
-		} else {
-			input.Language = &v
-		}
-	}
-
-	if input.Publisher != nil {
-		v := strings.TrimSpace(*input.Publisher)
-		if v == "" {
-			input.Publisher = nil
-		} else {
-			input.Publisher = &v
-		}
-	}
-
-	if input.Edition != nil {
-		v := strings.TrimSpace(*input.Edition)
-		if v == "" {
-			input.Edition = nil
-		} else {
-			input.Edition = &v
-		}
-	}
+	input.ISBN = validation.TrimToNil(input.ISBN)
+	input.Language = validation.TrimToNil(input.Language)
+	input.Publisher = validation.TrimToNil(input.Publisher)
+	input.Edition = validation.TrimToNil(input.Edition)
 
 	input.Format = normalizeBookFormat(input.Format)
 
-	if input.PurchasedAt != nil {
-		v := strings.TrimSpace(*input.PurchasedAt)
-		if v == "" {
-			input.PurchasedAt = nil
-		} else {
-			input.PurchasedAt = &v
-		}
-	}
-
-	if input.PurchasePrice != nil {
-		v := strings.TrimSpace(*input.PurchasePrice)
-		if v == "" {
-			input.PurchasePrice = nil
-		} else {
-			input.PurchasePrice = &v
-		}
-	}
-
-	if input.Notes != nil {
-		v := strings.TrimSpace(*input.Notes)
-		if v == "" {
-			input.Notes = nil
-		} else {
-			input.Notes = &v
-		}
-	}
-
-	if input.Summary != nil {
-		v := strings.TrimSpace(*input.Summary)
-		if v == "" {
-			input.Summary = nil
-		} else {
-			input.Summary = &v
-		}
-	}
-
-	if input.SeriesName != nil {
-		v := strings.TrimSpace(*input.SeriesName)
-		if v == "" {
-			input.SeriesName = nil
-		} else {
-			input.SeriesName = &v
-		}
-	}
-
-	if input.Location != nil {
-		v := strings.TrimSpace(*input.Location)
-		if v == "" {
-			input.Location = nil
-		} else {
-			input.Location = &v
-		}
-	}
+	input.PurchasedAt = validation.TrimToNil(input.PurchasedAt)
+	input.PurchasePrice = validation.TrimToNil(input.PurchasePrice)
+	input.Notes = validation.TrimToNil(input.Notes)
+	input.Summary = validation.TrimToNil(input.Summary)
+	input.SeriesName = validation.TrimToNil(input.SeriesName)
+	input.Location = validation.TrimToNil(input.Location)
 
 	input.Condition = normalizeBookCondition(input.Condition)
 
-	if input.AcquisitionSource != nil {
-		v := strings.TrimSpace(*input.AcquisitionSource)
-		if v == "" {
-			input.AcquisitionSource = nil
-		} else {
-			input.AcquisitionSource = &v
-		}
-	}
+	input.AcquisitionSource = validation.TrimToNil(input.AcquisitionSource)
 
 	if err := validateBookState(bookValidationState{
 		format: input.Format, purchasedAt: input.PurchasedAt, pages: input.Pages,
@@ -274,12 +189,7 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateBookRequest)
 		&input.PurchasePrice, &input.Notes, &input.Summary, &input.SeriesName, &input.Location,
 		&input.AcquisitionSource,
 	} {
-		if value.Present && value.Value != nil {
-			*value.Value = strings.TrimSpace(*value.Value)
-			if *value.Value == "" {
-				return Book{}, ErrBlankOptionalString
-			}
-		}
+		value.Value = validation.TrimToNil(value.Value)
 	}
 
 	if input.Format.Present && input.Format.Value != nil {

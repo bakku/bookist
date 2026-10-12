@@ -3,6 +3,8 @@ package lists
 import (
 	"context"
 	"strings"
+
+	"bakku.dev/bookist/internal/validation"
 )
 
 type Service struct {
@@ -29,15 +31,7 @@ func (s *Service) Create(ctx context.Context, input CreateListRequest) (List, er
 		return List{}, ErrNameConflict
 	}
 
-	if input.Description != nil {
-		desc := strings.TrimSpace(*input.Description)
-
-		if desc == "" {
-			input.Description = nil
-		} else {
-			input.Description = &desc
-		}
-	}
+	input.Description = validation.TrimToNil(input.Description)
 
 	return s.repository.Create(ctx, input)
 }
@@ -69,13 +63,7 @@ func (s *Service) Update(ctx context.Context, id int64, input UpdateListRequest)
 		}
 	}
 
-	if input.Description.Present && input.Description.Value != nil {
-		description := strings.TrimSpace(*input.Description.Value)
-		if description == "" {
-			return List{}, ErrDescriptionRequired
-		}
-		input.Description.Value = &description
-	}
+	input.Description.Value = validation.TrimToNil(input.Description.Value)
 
 	return s.repository.Update(ctx, id, input)
 }

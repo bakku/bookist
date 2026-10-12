@@ -13,4 +13,3 @@ var ErrInvalidPublishedYear = apperr.Invalid("invalid_published_year", "publishe
 var ErrInvalidPublishedMonth = apperr.Invalid("invalid_published_month", "published_month must be between 1 and 12 and requires published_year", "published_month")
 var ErrInvalidPublishedDay = apperr.Invalid("invalid_published_day", "published_day must form a valid date and requires published_year and published_month", "published_day")
 var ErrNoFieldsToUpdate = apperr.Invalid("no_fields_to_update", "no fields to update", "")
-var ErrBlankOptionalString = apperr.Invalid("blank_optional_string", "optional string fields must not be blank; use null to clear", "")

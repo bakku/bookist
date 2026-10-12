@@ -118,7 +118,6 @@ func TestListAPIUpdateRejectsInvalidRequests(t *testing.T) {
 		{name: "invalid ID", path: "/api/lists/0", body: `{"name":"New"}`, status: http.StatusBadRequest, code: "invalid_id", field: "id"},
 		{name: "empty", path: "/api/lists/1", body: `{}`, status: http.StatusBadRequest, code: "no_fields_to_update"},
 		{name: "unknown field", path: "/api/lists/1", body: `{"books":[]}`, status: http.StatusBadRequest, code: "invalid_json"},
-		{name: "blank description", path: "/api/lists/1", body: `{"description":" "}`, status: http.StatusBadRequest, code: "description_required", field: "description"},
 		{name: "not found", path: "/api/lists/999999", body: `{"name":"New"}`, status: http.StatusNotFound, code: "list_not_found"},
 	} {
 		t.Run(test.name, func(t *testing.T) {

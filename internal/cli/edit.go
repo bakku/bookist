@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-const partialUpdateHelp = "Omitted fields are unchanged; supplied values replace fields; --clear FIELD clears nullable fields. Blank strings are rejected rather than cleared."
+const partialUpdateHelp = "Omitted fields are unchanged; supplied values replace fields; --clear FIELD clears nullable fields. An empty or whitespace-only value for a nullable text field clears it, same as --clear."
 
 // clearTarget is an optional update field that --clear can reset to null.
 type clearTarget interface {

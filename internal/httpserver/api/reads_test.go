@@ -161,7 +161,6 @@ func TestReadAPIUpdateRejectsInvalidRequests(t *testing.T) {
 		{name: "invalid ID", path: "/api/reads/zero", body: `{"rating":4}`, status: http.StatusBadRequest, code: "invalid_id", field: "id"},
 		{name: "empty", path: "/api/reads/100", body: `{}`, status: http.StatusBadRequest, code: "no_fields_to_update"},
 		{name: "unknown field", path: "/api/reads/100", body: `{"book_id":2}`, status: http.StatusBadRequest, code: "invalid_json"},
-		{name: "blank optional", path: "/api/reads/100", body: `{"notes":" "}`, status: http.StatusBadRequest, code: "blank_optional_string"},
 		{name: "invalid rating", path: "/api/reads/100", body: `{"rating":4.2}`, status: http.StatusBadRequest, code: "invalid_rating", field: "rating"},
 		{name: "not found", path: "/api/reads/999999", body: `{"rating":4}`, status: http.StatusNotFound, code: "read_not_found"},
 	} {
